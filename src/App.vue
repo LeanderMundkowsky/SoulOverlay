@@ -1,0 +1,182 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import SearchBar from "./components/overlay/SearchBar.vue";
+import CommodityPanel from "./components/overlay/CommodityPanel.vue";
+import StatusBar from "./components/overlay/StatusBar.vue";
+import SettingsPanel from "./components/settings/SettingsPanel.vue";
+import { useGameStore } from "./stores/game";
+import { useSettingsStore } from "./stores/settings";
+import { useLogWatcher } from "./composables/useLogWatcher";
+
+const gameStore = useGameStore();
+const settingsStore = useSettingsStore();
+const showSettings = ref(false);
+const scDetected = ref(false);
+const selectedCommodity = ref<{ id: string; name: string } | null>(null);
+
+// Initialize log watcher composable
+useLogWatcher();
+
+// Load settings on mount
+onMounted(async () => {
+  await settingsStore.loadSettings();
+
+  // Listen for ESC key to hide overlay
+  document.addEventListener("keydown", handleKeyDown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("keydown", handleKeyDown);
+});
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    if (showSettings.value) {
+      showSettings.value = false;
+    } else {
+      invoke("hide_overlay_cmd");
+    }
+  }
+}
+
+// Listen for SC window events
+let unlistenFound: (() => void) | null = null;
+let unlistenLost: (() => void) | null = null;
+let unlistenOpenSettings: (() => void) | null = null;
+
+onMounted(async () => {
+  unlistenFound = await listen("sc-window-found", () => {
+    scDetected.value = true;
+    gameStore.scConnected = true;
+  });
+
+  unlistenLost = await listen("sc-window-lost", () => {
+    scDetected.value = false;
+    gameStore.scConnected = false;
+  });
+
+  unlistenOpenSettings = await listen("open-settings", () => {
+    showSettings.value = true;
+  });
+});
+
+onUnmounted(() => {
+  unlistenFound?.();
+  unlistenLost?.();
+  unlistenOpenSettings?.();
+});
+
+function onCommoditySelected(commodity: { id: string; name: string }) {
+  selectedCommodity.value = commodity;
+}
+
+function closeCommodityPanel() {
+  selectedCommodity.value = null;
+}
+</script>
+
+<template>
+  <div
+    class="w-full h-full"
+    :style="{ opacity: settingsStore.settings.overlay_opacity }"
+  >
+    <!-- Main overlay background -->
+    <div class="w-full h-full bg-black/60 flex flex-col">
+      <!-- Top bar -->
+      <div class="flex items-center justify-between px-6 py-3 bg-black/40 border-b border-white/10">
+        <div class="flex items-center gap-3">
+          <h1 class="text-white font-bold text-lg tracking-wide">SoulOverlay</h1>
+          <div
+            class="flex items-center gap-1.5 text-xs"
+            :class="scDetected ? 'text-green-400' : 'text-yellow-400'"
+          >
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="scDetected ? 'bg-green-400' : 'bg-yellow-400'"
+            ></span>
+            {{ scDetected ? "Star Citizen Connected" : "Waiting for Star Citizen..." }}
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="showSettings = !showSettings"
+            class="text-white/60 hover:text-white transition-colors p-2 rounded hover:bg-white/10"
+            title="Settings"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+            </svg>
+          </button>
+          <button
+            @click="invoke('hide_overlay_cmd')"
+            class="text-white/60 hover:text-white transition-colors p-2 rounded hover:bg-white/10"
+            title="Close overlay (ESC)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Content area -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Settings panel (slide over) -->
+        <Transition name="slide">
+          <SettingsPanel
+            v-if="showSettings"
+            @close="showSettings = false"
+            class="absolute right-0 top-[52px] bottom-[44px] w-96 z-50"
+          />
+        </Transition>
+
+        <!-- Main content -->
+        <div class="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
+          <!-- First-run notice -->
+          <div
+            v-if="!scDetected"
+            class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-yellow-200 text-sm"
+          >
+            <p class="font-semibold mb-1">Star Citizen not detected</p>
+            <p class="text-yellow-200/70">
+              Make sure Star Citizen is running in <strong>Borderless Windowed</strong> mode.
+              The overlay will automatically detect the game window.
+            </p>
+          </div>
+
+          <!-- Search -->
+          <SearchBar @select="onCommoditySelected" />
+
+          <!-- Commodity prices -->
+          <CommodityPanel
+            v-if="selectedCommodity"
+            :commodity-id="selectedCommodity.id"
+            :commodity-name="selectedCommodity.name"
+            @close="closeCommodityPanel"
+          />
+
+          <!-- Spacer -->
+          <div class="flex-1"></div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <StatusBar />
+    </div>
+  </div>
+</template>
+
+<style>
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.2s ease;
+}
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(100%);
+}
+</style>
