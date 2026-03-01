@@ -198,6 +198,13 @@ pub fn register_hotkey(
     let mods: u8 = (require_ctrl as u8) | ((require_alt as u8) << 1) | ((require_shift as u8) << 2);
     TARGET_MODS.store(mods, std::sync::atomic::Ordering::SeqCst);
 
+    // Reset tracked modifier state — the old hook may have seen a key-down
+    // for a modifier that was part of the previous hotkey combo, and the
+    // corresponding key-up was lost during re-registration.
+    MOD_CTRL.store(false, std::sync::atomic::Ordering::SeqCst);
+    MOD_ALT.store(false, std::sync::atomic::Ordering::SeqCst);
+    MOD_SHIFT.store(false, std::sync::atomic::Ordering::SeqCst);
+
     // Store state in the global slot so the bare-fn callback can access it.
     // If the OnceLock is already set we replace the inner value.
     let state = Arc::new(Mutex::new(HookState {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useSettingsStore, type Settings } from "@/stores/settings";
 
 const emit = defineEmits<{
@@ -20,9 +20,19 @@ const saving = ref(false);
 const saveError = ref<string | null>(null);
 const saveSuccess = ref(false);
 
+// Keybind capture state
+const capturing = ref(false);
+const captureRef = ref<HTMLButtonElement | null>(null);
+
 onMounted(() => {
-  // Copy current settings to form
   form.value = { ...settingsStore.settings };
+});
+
+// Stop capturing if the component unmounts while recording
+onUnmounted(() => {
+  if (capturing.value) {
+    stopCapture();
+  }
 });
 
 async function handleSave() {
@@ -51,6 +61,90 @@ function resetDefaults() {
     overlay_opacity: 1.0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Keybind capture
+// ---------------------------------------------------------------------------
+
+/** Map KeyboardEvent to the token string that Rust's parse_hotkey expects.
+ *  Uses e.code (physical key) instead of e.key, because e.key produces
+ *  locale-dependent characters when modifiers like Alt are held (e.g.
+ *  Alt+Shift+S → "Í" on some layouts instead of "S"). */
+function keyToToken(e: KeyboardEvent): string | null {
+  const code = e.code;
+
+  // Letters: "KeyA" .. "KeyZ" → "A" .. "Z"
+  const letterMatch = code.match(/^Key([A-Z])$/);
+  if (letterMatch) return letterMatch[1];
+
+  // Digits: "Digit0" .. "Digit9" → "0" .. "9"
+  const digitMatch = code.match(/^Digit([0-9])$/);
+  if (digitMatch) return digitMatch[1];
+
+  // Function keys: "F1" .. "F12"
+  const fMatch = code.match(/^F(\d+)$/);
+  if (fMatch) return `F${fMatch[1]}`;
+
+  // Named keys — map code values to parse_hotkey tokens
+  const map: Record<string, string> = {
+    Space: "Space",
+    Tab: "Tab",
+    Escape: "Escape",
+    Insert: "Insert",
+    Delete: "Delete",
+    Home: "Home",
+    End: "End",
+    PageUp: "PageUp",
+    PageDown: "PageDown",
+    ArrowUp: "Up",
+    ArrowDown: "Down",
+    ArrowLeft: "Left",
+    ArrowRight: "Right",
+  };
+
+  return map[code] ?? null;
+}
+
+function handleCaptureKeyDown(e: KeyboardEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+
+  // Ignore lone modifier presses — wait for the actual key
+  if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+
+  const token = keyToToken(e);
+  if (!token) return; // Unrecognised key, ignore
+
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push("Ctrl");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+  parts.push(token);
+
+  form.value.hotkey = parts.join("+");
+  stopCapture();
+}
+
+function handleCaptureBlur() {
+  // If the user clicks away, stop capturing without changing the value
+  stopCapture();
+}
+
+function startCapture() {
+  capturing.value = true;
+  // Use a document-level capture-phase listener so we intercept the keydown
+  // before the webview processes Alt-based accelerators or system keys.
+  document.addEventListener("keydown", handleCaptureKeyDown, true);
+  requestAnimationFrame(() => {
+    captureRef.value?.focus();
+  });
+}
+
+function stopCapture() {
+  capturing.value = false;
+  document.removeEventListener("keydown", handleCaptureKeyDown, true);
+}
 </script>
 
 <template>
@@ -76,13 +170,18 @@ function resetDefaults() {
         <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
           Toggle Hotkey
         </label>
-        <input
-          v-model="form.hotkey"
-          type="text"
-          placeholder="Alt+Shift+S"
-          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
-        />
-        <p class="text-white/30 text-xs mt-1">Format: Ctrl+Alt+Shift+Key (e.g., Alt+Shift+S)</p>
+        <button
+          ref="captureRef"
+          @click="startCapture"
+          @blur="handleCaptureBlur"
+          class="w-full bg-white/5 border rounded-lg px-3 py-2 text-sm text-left transition-colors focus:outline-none"
+          :class="capturing
+            ? 'border-blue-500 text-blue-400 animate-pulse'
+            : 'border-white/10 text-white hover:border-white/20'"
+        >
+          {{ capturing ? "Press a key combo..." : form.hotkey || "Click to set hotkey" }}
+        </button>
+        <p class="text-white/30 text-xs mt-1">Click the field, then press your desired key combination</p>
       </div>
 
       <!-- UEX API Key -->

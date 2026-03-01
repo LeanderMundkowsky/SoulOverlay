@@ -62,8 +62,40 @@ function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
     return false;
   }
 
-  // Match the key part against e.key (case-insensitive)
-  return e.key.toLowerCase() === key;
+  // Use e.code (physical key) to avoid locale-dependent e.key values
+  // when modifiers are held (e.g. Alt+Shift+S → "Í" on some layouts).
+  const eventKey = codeToToken(e.code);
+  return eventKey === key;
+}
+
+/** Map KeyboardEvent.code to the lowercase token format used in hotkey strings. */
+function codeToToken(code: string): string {
+  // "KeyA" → "a", "Digit0" → "0", "F4" → "f4"
+  const letterMatch = code.match(/^Key([A-Z])$/);
+  if (letterMatch) return letterMatch[1].toLowerCase();
+
+  const digitMatch = code.match(/^Digit([0-9])$/);
+  if (digitMatch) return digitMatch[1];
+
+  const fMatch = code.match(/^F(\d+)$/);
+  if (fMatch) return `f${fMatch[1]}`;
+
+  const map: Record<string, string> = {
+    Space: "space",
+    Tab: "tab",
+    Escape: "escape",
+    Insert: "insert",
+    Delete: "delete",
+    Home: "home",
+    End: "end",
+    PageUp: "pageup",
+    PageDown: "pagedown",
+    ArrowUp: "up",
+    ArrowDown: "down",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+  };
+  return map[code] ?? code.toLowerCase();
 }
 
 // Listen for SC window events
