@@ -38,6 +38,13 @@ defineExpose({ focusInput });
       message="Make sure Star Citizen is running in Borderless Windowed mode."
     />
 
+    <!-- Stale cache data notice -->
+    <AlertBanner
+      v-if="searchBarRef?.stale"
+      variant="info"
+      message="Showing cached data. Refreshing in the background..."
+    />
+
     <!-- Search card -->
     <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
       <SearchBar ref="searchBarRef" @select="onResultSelected" />

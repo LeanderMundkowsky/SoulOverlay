@@ -1,7 +1,9 @@
 # SoulOverlay — Agent Context
 
 SoulOverlay is a Tauri 2 + Vue 3 overlay for Star Citizen that shows UEX commodity
-prices. It runs on Windows x86_64 as a transparent, always-on-top window.
+prices. It runs on Windows x86_64 as a transparent, always-on-top window. Data from
+the UEX Corp API is cached in a local SQLite database with per-collection TTLs and
+served from an in-memory mirror for instant search.
 
 ## Build Commands
 
@@ -31,6 +33,7 @@ Fix all type errors. Never use `any` or `@ts-ignore`. Verify manually by running
 ## Logging
 
 Logs: `%APPDATA%\SoulOverlay\soul-overlay.log` (overwritten each launch) + stderr.
+Database: `%APPDATA%\SoulOverlay\soul_overlay.db` (SQLite, WAL mode, persists across launches).
 Format: `[timestamp][LEVEL][module] message`. Set `RUST_LOG=debug` for verbose output.
 
 ## Project Structure
@@ -39,14 +42,14 @@ Format: `[timestamp][LEVEL][module] message`. Set `RUST_LOG=debug` for verbose o
 src/                                 # Vue 3 + TypeScript frontend
 ├── assets/main.css                  # Tailwind directives + global font
 ├── components/
-│   ├── icons/                       # 13 SVG icon wrappers (template-only, use currentColor)
+│   ├── icons/                       # 14 SVG icon wrappers (template-only, use currentColor)
 │   ├── layout/                      # StatusBar, TabBar
 │   ├── overlay/                     # SearchBar, SearchResultRow, CommodityPanel
 │   ├── panels/                      # SettingsPanel, DebugPanel
-│   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField
+│   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
 │   ├── tabs/                        # SearchTab, InventoryTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch
-├── composables/                     # useUex, useLogWatcher, useOverlayEvents, useHotkeyMatch
+├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch
 ├── stores/                          # game.ts, settings.ts (Pinia setup stores)
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts
@@ -54,18 +57,22 @@ src-tauri/src/                       # Rust backend
 ├── lib.rs                           # Module declarations + Tauri builder + run()
 ├── main.rs                          # Entry point — calls lib::run()
 ├── state.rs                         # AppState struct (all Mutex-wrapped fields)
-├── app_setup.rs                     # .setup() initialization sequence
+├── app_setup.rs                     # .setup() initialization sequence + background prefetch
 ├── settings.rs                      # Settings struct (pure serde data)
+├── database.rs                      # SQLite connection init, WAL mode, schema migrations
+├── cache_store.rs                   # CacheStore: per-collection TTL, in-memory HashMap + SQLite persistence
 ├── logging.rs                       # fern dual-logger setup (stderr + file)
 ├── platform.rs                      # HWND <-> isize helpers (breaks circular deps)
 ├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry
 ├── game_tracker.rs                  # SC window polling thread, SharedGameState
 ├── log_watcher.rs                   # game.log tail + regex parse + Tauri event emit
-├── uex_client.rs                    # UEX HTTP client, TTL cache, cached_fetch<T>
+├── uex_client.rs                    # UEX HTTP client, fetch_all_* + search_* functions
 ├── tray.rs                          # System tray icon + menu
 ├── commands/                        # All #[tauri::command] functions
 │   ├── mod.rs                       # pub mod for each submodule
-│   ├── uex.rs                       # uex_search, uex_prices
+│   ├── api.rs                       # api_search, api_commodity_prices + ApiResponse<T> envelope
+│   ├── uex.rs                       # uex_search, uex_search_all, uex_prices (legacy)
+│   ├── cache.rs                     # cache_status, cache_refresh, cache_refresh_all + prefetch_all
 │   ├── settings.rs                  # get_settings, save_settings
 │   ├── overlay.rs                   # show_overlay_cmd, hide_overlay_cmd
 │   └── debug.rs                     # get_debug_info, get_game_state + DebugInfo/GameState types
@@ -124,6 +131,46 @@ Never apply CSS `opacity` to the overlay root div — only to the background lay
 
 **Pinia**: Setup Store pattern exclusively. Export interfaces from store files.
 No `$patch`, no Options mutations. Persistence via `tauri-plugin-store`.
+
+## Cache / Database Architecture
+
+**Storage stack**: SQLite (`rusqlite` with `bundled` feature) for persistence, in-memory
+`HashMap<String, MemoryEntry>` for instant reads. Data is serialized to MessagePack
+(`rmp-serde`) blobs in the `cache_entries` table. Schema migrations via `rusqlite_migration`.
+
+**CacheStore** (`cache_store.rs`) is the central cache. It lives on `AppState.cache`
+(not behind a `Mutex` — it manages its own internal locks). Key methods:
+- `put<T>(key, collection, data)` — serialize + write to both memory and SQLite
+- `get<T>(key) -> CacheResult<T>` — returns `Fresh(T)`, `Stale(T)`, or `Missing`
+- `invalidate(key)` / `invalidate_collection(c)` / `invalidate_all()`
+- `status() -> Vec<CollectionStatus>` — for the settings UI
+
+**Collection enum** defines known data types with per-collection TTLs:
+
+| Collection         | TTL      | Storage key pattern       | Prefetched on startup |
+|--------------------|----------|---------------------------|-----------------------|
+| `Commodities`      | 10 min   | `commodities`             | Yes                   |
+| `CommodityPrices`  | 10 min   | `commodity_prices:{id}`   | No (per-commodity)    |
+| `Vehicles`         | 24 hours | `vehicles`                | Yes                   |
+| `Items`            | 24 hours | `items`                   | Yes                   |
+| `Locations`        | 24 hours | `locations`               | Yes                   |
+
+**Data flow**:
+1. On startup, `CacheStore::new()` loads all SQLite rows into memory
+2. `app_setup` spawns a background task (`prefetch_all`) that fetches any expired collections
+3. Search commands (`api_search`, etc.) read from the in-memory mirror — `Fresh` data is
+   returned directly, `Stale` data is returned with `stale: true` in the `ApiResponse`
+   envelope, `Missing` data triggers a direct API fallback
+4. Price lookups use per-commodity keys (`commodity_prices:42`), fetched on demand and cached
+
+**ApiResponse envelope** (returned by all `commands/api.rs` endpoints):
+```json
+{ "ok": true,  "data": [...], "error": null,  "stale": false }
+{ "ok": true,  "data": [...], "error": null,  "stale": true  }
+{ "ok": false, "data": null,  "error": "...", "stale": false }
+```
+
+The `stale` flag lets the frontend show a "refreshing..." banner while serving cached data.
 
 ## Rust Style
 

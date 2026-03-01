@@ -10,7 +10,7 @@ const emit = defineEmits<{
 }>();
 
 const query = ref("");
-const { loading, error, results, search } = useUex();
+const { loading, error, results, stale, search } = useUex();
 const activeIndex = ref(-1);
 const inputEl = ref<HTMLInputElement | null>(null);
 const rowRefs = ref<InstanceType<typeof SearchResultRow>[]>([]);
@@ -96,7 +96,7 @@ function focusInput() {
   inputEl.value?.focus();
 }
 
-defineExpose({ focusInput });
+defineExpose({ focusInput, stale });
 </script>
 
 <template>

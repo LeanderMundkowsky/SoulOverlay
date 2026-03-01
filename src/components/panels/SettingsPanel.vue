@@ -6,6 +6,7 @@ import ToggleSwitch from "@/components/ui/ToggleSwitch.vue";
 import SettingsField from "@/components/settings/SettingsField.vue";
 import HotkeyCapture from "@/components/settings/HotkeyCapture.vue";
 import OpacitySlider from "@/components/settings/OpacitySlider.vue";
+import CacheSettingsPanel from "@/components/settings/CacheSettingsPanel.vue";
 import { useSettingsStore, type Settings } from "@/stores/settings";
 
 const emit = defineEmits<{
@@ -120,6 +121,12 @@ function resetDefaults() {
         label="Reset on open"
         description="Switch to Search tab and focus input when overlay opens"
       />
+
+      <!-- Divider -->
+      <div class="border-t border-white/10"></div>
+
+      <!-- Cache Management -->
+      <CacheSettingsPanel />
 
       <!-- Feedback -->
       <AlertBanner v-if="saveError" variant="error" :message="saveError" />

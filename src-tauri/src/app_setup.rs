@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tauri::{App, Manager};
 use tauri_plugin_store::StoreExt;
 
+use crate::commands;
 use crate::game_tracker;
 use crate::hotkey;
 use crate::log_watcher;
@@ -102,6 +103,16 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
             error!("Failed to start log watcher: {}", e);
         }
     }
+
+    // Spawn background prefetch of cached collections.
+    // Uses a separate tokio task so it doesn't block the UI startup.
+    let prefetch_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        info!("Starting background cache prefetch...");
+        let state = prefetch_handle.state::<AppState>();
+        commands::cache::prefetch_all(&state).await;
+        info!("Background cache prefetch complete");
+    });
 
     Ok(())
 }

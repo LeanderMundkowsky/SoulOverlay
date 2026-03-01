@@ -1,96 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::future::Future;
-use std::sync::Mutex;
-use std::time::Instant;
-
-/// In-memory cache entry
-struct CacheEntry {
-    data: serde_json::Value,
-    inserted_at: Instant,
-}
-
-/// Simple TTL cache for UEX API responses
-pub struct UexCache {
-    entries: HashMap<String, CacheEntry>,
-    ttl_secs: u64,
-}
-
-impl UexCache {
-    pub fn new(ttl_secs: u64) -> Self {
-        Self {
-            entries: HashMap::new(),
-            ttl_secs,
-        }
-    }
-
-    pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
-        self.entries.get(key).and_then(|entry| {
-            if entry.inserted_at.elapsed().as_secs() < self.ttl_secs {
-                Some(&entry.data)
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn insert(&mut self, key: String, data: serde_json::Value) {
-        self.entries.insert(
-            key,
-            CacheEntry {
-                data,
-                inserted_at: Instant::now(),
-            },
-        );
-    }
-
-    /// Remove expired entries
-    pub fn cleanup(&mut self) {
-        self.entries
-            .retain(|_, entry| entry.inserted_at.elapsed().as_secs() < self.ttl_secs);
-    }
-
-    /// Number of entries currently in the cache (including expired).
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-}
-
-/// Fetch-through cache: returns cached data if valid, otherwise calls `fetch_fn`,
-/// stores the result, and returns it.
-pub async fn cached_fetch<T, F, Fut>(
-    cache: &Mutex<UexCache>,
-    cache_key: &str,
-    fetch_fn: F,
-) -> Result<T, String>
-where
-    T: Serialize + for<'de> Deserialize<'de>,
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<T, String>>,
-{
-    // Check cache
-    {
-        let c = cache.lock().unwrap();
-        if let Some(cached) = c.get(cache_key) {
-            if let Ok(results) = serde_json::from_value(cached.clone()) {
-                return Ok(results);
-            }
-        }
-    }
-
-    let results = fetch_fn().await?;
-
-    // Store in cache
-    {
-        let mut c = cache.lock().unwrap();
-        if let Ok(json) = serde_json::to_value(&results) {
-            c.insert(cache_key.to_string(), json);
-        }
-        c.cleanup();
-    }
-
-    Ok(results)
-}
 
 /// A search result from UEX API
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +126,14 @@ async fn uex_get(url: &str, query: &[(&str, &str)], api_key: &str) -> Result<ser
         .map_err(|e| format!("Failed to parse UEX response: {}", e))
 }
 
+/// Extract an array of items from the `data` field of a UEX API response.
+fn extract_data_array(body: &serde_json::Value) -> Vec<&serde_json::Value> {
+    body.get("data")
+        .and_then(|d| d.as_array())
+        .map(|a| a.iter().collect())
+        .unwrap_or_default()
+}
+
 /// Extract results from a UEX API response body, applying a name filter client-side.
 fn extract_results(body: &serde_json::Value, query_lower: &str, kind_override: Option<&str>) -> Vec<UexResult> {
     body.get("data")
@@ -237,7 +153,127 @@ fn extract_results(body: &serde_json::Value, query_lower: &str, kind_override: O
         .unwrap_or_default()
 }
 
-/// Search UEX for commodities by query string
+// ── Fetch-all functions (full collection download for cache) ───────────────
+
+/// Fetch ALL commodities from UEX. Returns parsed `UexResult` list.
+pub async fn fetch_all_commodities(api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/commodities", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let results = extract_data_array(&body)
+        .into_iter()
+        .map(|item| {
+            let mut r = UexResult::from_json(item);
+            r.kind = "commodity".to_string();
+            r
+        })
+        .collect();
+    Ok(results)
+}
+
+/// Fetch ALL vehicles from UEX. Returns parsed `UexResult` list.
+pub async fn fetch_all_vehicles(api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/vehicles", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let results = extract_data_array(&body)
+        .into_iter()
+        .map(|item| {
+            let id = item
+                .get("id")
+                .and_then(|v| v.as_u64())
+                .map(|v| v.to_string())
+                .or_else(|| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_default();
+
+            let name = item
+                .get("name_full")
+                .or_else(|| item.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            let slug = item
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let kind = if item.get("is_ground_vehicle").and_then(|v| v.as_u64()).unwrap_or(0) == 1 {
+                "ground vehicle"
+            } else {
+                "vehicle"
+            };
+
+            UexResult { id, name, kind: kind.to_string(), slug }
+        })
+        .collect();
+    Ok(results)
+}
+
+/// Fetch ALL items from UEX. Returns parsed `UexResult` list.
+pub async fn fetch_all_items(api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/items", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let results = extract_data_array(&body)
+        .into_iter()
+        .map(|item| {
+            let mut r = UexResult::from_json(item);
+            r.kind = "item".to_string();
+            r
+        })
+        .collect();
+    Ok(results)
+}
+
+/// Fetch ALL locations (terminals) from UEX. Returns parsed `UexResult` list.
+pub async fn fetch_all_locations(api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/terminals", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let results = extract_data_array(&body)
+        .into_iter()
+        .map(|item| {
+            let id = item
+                .get("id")
+                .and_then(|v| v.as_u64())
+                .map(|v| v.to_string())
+                .or_else(|| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_default();
+
+            let name = item
+                .get("displayname")
+                .or_else(|| item.get("fullname"))
+                .or_else(|| item.get("name"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .or_else(|| item.get("name").and_then(|v| v.as_str()))
+                .unwrap_or("Unknown")
+                .to_string();
+
+            let slug = item
+                .get("code")
+                .or_else(|| item.get("slug"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            UexResult { id, name, kind: "location".to_string(), slug }
+        })
+        .collect();
+    Ok(results)
+}
+
+// ── Search functions (query-based, used by commands) ───────────────────────
+
+/// Search commodities from a cached collection by filtering in-memory.
+pub fn search_in_collection(collection: &[UexResult], query: &str) -> Vec<UexResult> {
+    let query_lower = query.to_lowercase();
+    collection
+        .iter()
+        .filter(|r| r.name.to_lowercase().contains(&query_lower))
+        .cloned()
+        .collect()
+}
+
+/// Search UEX for commodities by query string (direct API call, no cache).
 pub async fn search_commodities(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
     let url = format!("{}/commodities", UEX_BASE_URL);
     let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
@@ -245,7 +281,7 @@ pub async fn search_commodities(query: &str, api_key: &str) -> Result<Vec<UexRes
     Ok(extract_results(&body, &query_lower, Some("commodity")))
 }
 
-/// Search UEX for vehicles (ships + ground vehicles) by query string
+/// Search UEX for vehicles (ships + ground vehicles) by query string (direct API call, no cache).
 pub async fn search_vehicles(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
     let url = format!("{}/vehicles", UEX_BASE_URL);
     let body = uex_get(&url, &[], api_key).await?;
@@ -293,7 +329,7 @@ pub async fn search_vehicles(query: &str, api_key: &str) -> Result<Vec<UexResult
     Ok(results)
 }
 
-/// Search UEX for items by query string
+/// Search UEX for items by query string (direct API call, no cache).
 pub async fn search_items(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
     let url = format!("{}/items", UEX_BASE_URL);
     let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
@@ -301,7 +337,7 @@ pub async fn search_items(query: &str, api_key: &str) -> Result<Vec<UexResult>, 
     Ok(extract_results(&body, &query_lower, Some("item")))
 }
 
-/// Search UEX for locations (terminals) by query string
+/// Search UEX for locations (terminals) by query string (direct API call, no cache).
 pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
     let url = format!("{}/terminals", UEX_BASE_URL);
     let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
@@ -320,7 +356,6 @@ pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResul
                         .or_else(|| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
                         .unwrap_or_default();
 
-                    // Prefer displayname → fullname → name
                     let name = item
                         .get("displayname")
                         .or_else(|| item.get("fullname"))
@@ -348,28 +383,7 @@ pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResul
     Ok(results)
 }
 
-/// Search UEX across all entity types (commodities, vehicles, items, locations).
-/// Runs all four queries in parallel and merges results, grouped by kind.
-pub async fn search_all(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
-    let (commodities, vehicles, items, locations) = tokio::join!(
-        search_commodities(query, api_key),
-        search_vehicles(query, api_key),
-        search_items(query, api_key),
-        search_locations(query, api_key),
-    );
-
-    let mut results = Vec::new();
-    // Collect each category; ignore individual failures so a broken endpoint
-    // doesn't block the others.
-    if let Ok(mut v) = commodities { results.append(&mut v); }
-    if let Ok(mut v) = vehicles    { results.append(&mut v); }
-    if let Ok(mut v) = items       { results.append(&mut v); }
-    if let Ok(mut v) = locations   { results.append(&mut v); }
-
-    Ok(results)
-}
-
-/// Get prices for a specific commodity from UEX
+/// Get prices for a specific commodity from UEX (direct API call, no cache).
 pub async fn get_prices(commodity_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
     let url = format!("{}/commodities_prices", UEX_BASE_URL);
     let body = uex_get(&url, &[("id_commodity", commodity_id)], api_key).await?;

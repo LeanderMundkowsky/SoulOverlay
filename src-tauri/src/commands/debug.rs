@@ -43,7 +43,7 @@ pub struct DebugInfo {
 pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, String> {
     let gs = state.game_state.lock().unwrap();
     let settings = state.current_settings.lock().unwrap().clone();
-    let cache_entries = state.uex_cache.lock().unwrap().len();
+    let cache_entries = state.cache.len();
     let log_watcher_active = state.log_watcher.lock().unwrap().is_some();
 
     Ok(DebugInfo {

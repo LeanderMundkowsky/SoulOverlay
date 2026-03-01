@@ -1,5 +1,7 @@
 mod app_setup;
+mod cache_store;
 mod commands;
+mod database;
 mod game_tracker;
 mod hotkey;
 mod log_watcher;
@@ -11,13 +13,23 @@ mod tray;
 mod uex_client;
 mod window;
 
-use log::info;
+use log::{error, info};
 use settings::Settings;
 use state::AppState;
 use std::sync::Mutex;
 
 pub fn run() {
     logging::setup();
+
+    // Initialize SQLite database
+    let db_conn = match database::init() {
+        Ok(conn) => conn,
+        Err(e) => {
+            error!("Failed to initialize database: {}", e);
+            eprintln!("[FATAL] Database initialization failed: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let game_state = std::sync::Arc::new(std::sync::Mutex::new(
         game_tracker::GameTrackerState::default(),
@@ -27,7 +39,7 @@ pub fn run() {
         game_tracker: Mutex::new(None),
         game_state: game_state.clone(),
         log_watcher: Mutex::new(None),
-        uex_cache: Mutex::new(uex_client::UexCache::new(60)),
+        cache: cache_store::CacheStore::new(db_conn),
         current_settings: Mutex::new(Settings::default()),
         hotkey_handle: Mutex::new(None),
     };
@@ -44,6 +56,15 @@ pub fn run() {
         }))
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            commands::api::api_search,
+            commands::api::api_search_commodities,
+            commands::api::api_search_vehicles,
+            commands::api::api_search_items,
+            commands::api::api_search_locations,
+            commands::api::api_commodity_prices,
+            commands::cache::cache_status,
+            commands::cache::cache_refresh,
+            commands::cache::cache_refresh_all,
             commands::uex::uex_search,
             commands::uex::uex_search_all,
             commands::uex::uex_prices,
