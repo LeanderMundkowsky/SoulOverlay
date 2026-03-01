@@ -104,10 +104,10 @@ watch(
     </div>
 
     <!-- Table -->
-    <div v-else-if="sortedPrices.length > 0" class="overflow-x-auto">
+    <div v-else-if="sortedPrices.length > 0" class="overflow-x-auto overflow-y-auto max-h-64">
       <table class="w-full text-sm">
         <thead>
-          <tr class="text-white/50 text-xs uppercase tracking-wider">
+          <tr class="text-white/50 text-xs uppercase tracking-wider sticky top-0 bg-gray-900">
             <th
               @click="toggleSort('location')"
               class="text-left px-4 py-2 cursor-pointer hover:text-white/80 transition-colors"

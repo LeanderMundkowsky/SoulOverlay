@@ -83,10 +83,11 @@ pub async fn search(query: &str, api_key: &str) -> Result<Vec<UexResult>, String
     let client = reqwest::Client::new();
     let url = format!("{}/commodities", UEX_BASE_URL);
 
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .query(&[("name_filter", query)])
+    let mut req = client.get(&url).query(&[("name_filter", query)]);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| format!("UEX request failed: {}", e))?;
@@ -151,10 +152,11 @@ pub async fn get_prices(commodity_id: &str, api_key: &str) -> Result<Vec<PriceEn
     let client = reqwest::Client::new();
     let url = format!("{}/commodities_prices", UEX_BASE_URL);
 
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .query(&[("id_commodity", commodity_id)])
+    let mut req = client.get(&url).query(&[("id_commodity", commodity_id)]);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| format!("UEX request failed: {}", e))?;

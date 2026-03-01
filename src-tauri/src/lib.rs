@@ -20,6 +20,8 @@ pub struct AppState {
     pub log_watcher: Mutex<Option<log_watcher::LogWatcher>>,
     pub uex_cache: Mutex<uex_client::UexCache>,
     pub current_settings: Mutex<Settings>,
+    /// Holds the LL keyboard hook handle. Dropping it stops the hook thread.
+    pub hotkey_handle: Mutex<Option<hotkey::HookHandle>>,
 }
 
 // -- Tauri Commands --
@@ -115,9 +117,15 @@ async fn save_settings(
     // Side effects: re-register hotkey if changed
     if old_settings.hotkey != new_settings.hotkey {
         let game_state = state.game_state.clone();
-        let _ = hotkey::unregister_hotkey(&app, &old_settings.hotkey);
-        if let Err(e) = hotkey::register_hotkey(&app, &new_settings.hotkey, game_state) {
-            error!("Failed to register new hotkey: {}", e);
+        let new_handle = hotkey::register_hotkey(&app, &new_settings.hotkey, game_state);
+        match new_handle {
+            Ok(handle) => {
+                // Drop the old handle (stops the old hook thread) and store the new one.
+                *state.hotkey_handle.lock().unwrap() = Some(handle);
+            }
+            Err(e) => {
+                error!("Failed to register new hotkey: {}", e);
+            }
         }
     }
 
@@ -179,10 +187,10 @@ pub fn run() {
         log_watcher: Mutex::new(None),
         uex_cache: Mutex::new(uex_client::UexCache::new(60)),
         current_settings: Mutex::new(Settings::default()),
+        hotkey_handle: Mutex::new(None),
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // On second instance, show the overlay
@@ -252,11 +260,16 @@ pub fn run() {
                 *state.game_tracker.lock().unwrap() = Some(tracker);
             }
 
-            // Register global hotkey
+            // Register global hotkey (LL keyboard hook)
             let state = handle.state::<AppState>();
             let gs_for_hotkey = state.game_state.clone();
-            if let Err(e) = hotkey::register_hotkey(&handle, &settings.hotkey, gs_for_hotkey) {
-                error!("Failed to register hotkey: {}", e);
+            match hotkey::register_hotkey(&handle, &settings.hotkey, gs_for_hotkey) {
+                Ok(handle_hook) => {
+                    *state.hotkey_handle.lock().unwrap() = Some(handle_hook);
+                }
+                Err(e) => {
+                    error!("Failed to register hotkey: {}", e);
+                }
             }
 
             // Start log watcher
