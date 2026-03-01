@@ -24,22 +24,21 @@ cargo xwin build --release --target x86_64-pc-windows-msvc
 
 ## Build Commands
 
-| Task | Command | Where to run |
-|---|---|---|
-| Full Windows build (recommended) | `pwsh.exe -Command "npm run tauri build"` | WSL2 |
-| Cross-compile from WSL2 | `npm run tauri build -- --target x86_64-pc-windows-msvc` | WSL2 |
-| Frontend only (type-check + bundle) | `npm run build` | WSL2 |
-| TypeScript type-check only | `npx vue-tsc --noEmit` | WSL2 |
-| Dev server (needs display/WSLg) | `npm run tauri dev` | WSL2 |
-| Cargo check (Linux target, fast) | `cargo check --all-targets --workspace` | WSL2 (`src-tauri/`) |
-| Cargo check (Windows target) | `cargo xwin build --target x86_64-pc-windows-msvc` | WSL2 (`src-tauri/`) |
+| Task                                | Command                                                  | Where to run        |
+|-------------------------------------|----------------------------------------------------------|---------------------|
+| Full Windows build (recommended)    | `pwsh.exe -Command "npm run tauri build"`                | WSL2                |
+| Cross-compile from WSL2             | `npm run tauri build -- --target x86_64-pc-windows-msvc` | WSL2                |
+| Frontend only (type-check + bundle) | `npm run build`                                          | WSL2                |
+| TypeScript type-check only          | `npx vue-tsc --noEmit`                                   | WSL2                |
+| Dev server (needs display/WSLg)     | `npm run tauri dev`                                      | WSL2                |
+| Cargo check (Linux target, fast)    | `cargo check --all-targets --workspace`                  | WSL2 (`src-tauri/`) |
+| Cargo check (Windows target)        | `cargo xwin build --target x86_64-pc-windows-msvc`       | WSL2 (`src-tauri/`) |
 
 **Important**: `cargo xwin build` alone does NOT rebuild the Vue frontend. Always use
 `npm run tauri build` (or `npm run build` first) to ensure the frontend is bundled into
 the binary. The Vue frontend is embedded in the Rust binary at build time.
 
 **Output locations**:
-- Portable exe: `src-tauri/target/release/bundle/portable/SoulOverlay_*_portable.exe`
 - NSIS installer: `src-tauri/target/release/bundle/nsis/SoulOverlay_*_setup.exe`
 
 ---
