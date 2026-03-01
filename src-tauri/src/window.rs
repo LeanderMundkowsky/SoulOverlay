@@ -15,8 +15,9 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SET_WINDOW_POS_FLAGS,
-    SW_HIDE, SW_SHOW, WS_EX_TOOLWINDOW,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST,
+    SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
+    WS_BORDER, WS_DLGFRAME, WS_EX_CLIENTEDGE, WS_EX_TOOLWINDOW, WS_EX_WINDOWEDGE, WS_THICKFRAME,
 };
 
 /// Cached overlay HWND as isize so any thread can call Win32 show/hide directly.
@@ -137,7 +138,35 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     unsafe {
         // Add WS_EX_TOOLWINDOW to extended style (hides from taskbar and Alt+Tab)
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_TOOLWINDOW.0 as isize);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            (ex_style | WS_EX_TOOLWINDOW.0 as isize)
+                & !(WS_EX_WINDOWEDGE.0 as isize)
+                & !(WS_EX_CLIENTEDGE.0 as isize),
+        );
+
+        // Strip border-related base styles so no 1px frame is rendered.
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_STYLE,
+            style
+                & !(WS_BORDER.0 as isize)
+                & !(WS_THICKFRAME.0 as isize)
+                & !(WS_DLGFRAME.0 as isize),
+        );
+
+        // Force the frame change to take effect immediately.
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+        );
 
         // Install our subclass WNDPROC to handle hotkey toggle messages.
         let old_proc = SetWindowLongPtrW(

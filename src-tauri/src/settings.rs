@@ -26,7 +26,7 @@ fn default_true() -> bool {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            hotkey: "Alt+Shift+S".to_string(),
+            hotkey: "F6".to_string(),
             uex_api_key: String::new(),
             log_path: None,
             overlay_opacity: 0.6,

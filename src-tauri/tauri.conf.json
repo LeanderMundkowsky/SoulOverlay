@@ -21,6 +21,7 @@
         "visible": false,
         "resizable": false,
         "fullscreen": false,
+        "shadow": false,
         "width": 1920,
         "height": 1080
       }
