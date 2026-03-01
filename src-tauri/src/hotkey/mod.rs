@@ -4,6 +4,8 @@
 /// or exclusive-foreground application (like Star Citizen) has focus.
 /// A low-level keyboard hook is injected at the OS level and fires regardless of
 /// which window is in the foreground, matching how Steam/Discord overlays work.
+mod keymap;
+
 use log::{info, warn};
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
@@ -72,9 +74,6 @@ struct HookState {
 /// (virtual_key_code, requires_ctrl, requires_alt, requires_shift) tuple.
 /// Returns None if the string is empty or the key token is unrecognised.
 fn parse_hotkey(hotkey: &str) -> Option<(u32, bool, bool, bool)> {
-    #[cfg(windows)]
-    use windows::Win32::UI::Input::KeyboardAndMouse::*;
-
     let mut ctrl = false;
     let mut alt = false;
     let mut shift = false;
@@ -85,85 +84,13 @@ fn parse_hotkey(hotkey: &str) -> Option<(u32, bool, bool, bool)> {
             "ctrl" | "control" => ctrl = true,
             "alt" => alt = true,
             "shift" => shift = true,
-            token => {
-                #[cfg(windows)]
-                {
-                    let code: u32 = match token {
-                        "a" => VK_A.0 as u32,
-                        "b" => VK_B.0 as u32,
-                        "c" => VK_C.0 as u32,
-                        "d" => VK_D.0 as u32,
-                        "e" => VK_E.0 as u32,
-                        "f" => VK_F.0 as u32,
-                        "g" => VK_G.0 as u32,
-                        "h" => VK_H.0 as u32,
-                        "i" => VK_I.0 as u32,
-                        "j" => VK_J.0 as u32,
-                        "k" => VK_K.0 as u32,
-                        "l" => VK_L.0 as u32,
-                        "m" => VK_M.0 as u32,
-                        "n" => VK_N.0 as u32,
-                        "o" => VK_O.0 as u32,
-                        "p" => VK_P.0 as u32,
-                        "q" => VK_Q.0 as u32,
-                        "r" => VK_R.0 as u32,
-                        "s" => VK_S.0 as u32,
-                        "t" => VK_T.0 as u32,
-                        "u" => VK_U.0 as u32,
-                        "v" => VK_V.0 as u32,
-                        "w" => VK_W.0 as u32,
-                        "x" => VK_X.0 as u32,
-                        "y" => VK_Y.0 as u32,
-                        "z" => VK_Z.0 as u32,
-                        "0" => VK_0.0 as u32,
-                        "1" => VK_1.0 as u32,
-                        "2" => VK_2.0 as u32,
-                        "3" => VK_3.0 as u32,
-                        "4" => VK_4.0 as u32,
-                        "5" => VK_5.0 as u32,
-                        "6" => VK_6.0 as u32,
-                        "7" => VK_7.0 as u32,
-                        "8" => VK_8.0 as u32,
-                        "9" => VK_9.0 as u32,
-                        "f1" => VK_F1.0 as u32,
-                        "f2" => VK_F2.0 as u32,
-                        "f3" => VK_F3.0 as u32,
-                        "f4" => VK_F4.0 as u32,
-                        "f5" => VK_F5.0 as u32,
-                        "f6" => VK_F6.0 as u32,
-                        "f7" => VK_F7.0 as u32,
-                        "f8" => VK_F8.0 as u32,
-                        "f9" => VK_F9.0 as u32,
-                        "f10" => VK_F10.0 as u32,
-                        "f11" => VK_F11.0 as u32,
-                        "f12" => VK_F12.0 as u32,
-                        "space" => VK_SPACE.0 as u32,
-                        "tab" => VK_TAB.0 as u32,
-                        "escape" | "esc" => VK_ESCAPE.0 as u32,
-                        "insert" => VK_INSERT.0 as u32,
-                        "delete" => VK_DELETE.0 as u32,
-                        "home" => VK_HOME.0 as u32,
-                        "end" => VK_END.0 as u32,
-                        "pageup" => VK_PRIOR.0 as u32,
-                        "pagedown" => VK_NEXT.0 as u32,
-                        "up" => VK_UP.0 as u32,
-                        "down" => VK_DOWN.0 as u32,
-                        "left" => VK_LEFT.0 as u32,
-                        "right" => VK_RIGHT.0 as u32,
-                        _ => {
-                            warn!("Unrecognised key token '{}' in hotkey '{}'", token, hotkey);
-                            return None;
-                        }
-                    };
-                    vk = Some(code);
+            token => match keymap::token_to_vk(token) {
+                Some(code) => vk = Some(code),
+                None => {
+                    warn!("Unrecognised key token '{}' in hotkey '{}'", token, hotkey);
+                    return None;
                 }
-                #[cfg(not(windows))]
-                {
-                    // On non-Windows we just need something non-None so the parse succeeds.
-                    let _ = token;
-                    vk = Some(0);
-                }
-            }
+            },
         }
     }
 
@@ -342,13 +269,6 @@ pub fn register_hotkey(
     Ok(HookHandle { thread_id })
 }
 
-#[cfg(windows)]
-pub fn unregister_hotkey(handle: HookHandle) {
-    // Dropping the handle posts WM_QUIT to the hook thread.
-    drop(handle);
-    info!("Unregistered LL keyboard hook");
-}
-
 // ---------------------------------------------------------------------------
 // Non-Windows stubs
 // ---------------------------------------------------------------------------
@@ -361,11 +281,6 @@ pub fn register_hotkey(
 ) -> Result<HookHandle, String> {
     info!("register_hotkey: no-op on non-Windows (hotkey: {})", hotkey);
     Ok(HookHandle { thread_id: 0 })
-}
-
-#[cfg(not(windows))]
-pub fn unregister_hotkey(_handle: HookHandle) {
-    info!("unregister_hotkey: no-op on non-Windows");
 }
 
 /// Notify the hotkey module that the overlay was hidden by means other than

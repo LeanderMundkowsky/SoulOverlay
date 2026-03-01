@@ -6,18 +6,26 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, OnceLock,
 };
 use tauri::{AppHandle, Emitter};
 
-/// Events emitted from log parsing
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "type")]
-pub enum LogEvent {
-    Location { location: String },
-    Death { killer: String },
-    Kill { victim: String },
-    ShipChanged { ship: String },
+/// Compiled regexes for log parsing, initialised once on first use.
+struct LogRegexes {
+    location: Regex,
+    death: Regex,
+    kill: Regex,
+    ship: Regex,
+}
+
+fn log_regexes() -> &'static LogRegexes {
+    static INSTANCE: OnceLock<LogRegexes> = OnceLock::new();
+    INSTANCE.get_or_init(|| LogRegexes {
+        location: Regex::new(r"<Location:\s*(.+?)>").unwrap(),
+        death: Regex::new(r"<Actor Death>.+?killed by (.+)").unwrap(),
+        kill: Regex::new(r"<Actor Death>\s*(.+?) killed (.+)").unwrap(),
+        ship: Regex::new(r"\[Ship\]\s*(.+)").unwrap(),
+    })
 }
 
 pub struct LogWatcher {
@@ -28,56 +36,67 @@ pub struct LogWatcher {
     _watcher: Option<RecommendedWatcher>,
 }
 
+/// Create a new file watcher and initialise the offset to the current file size.
+/// Returns `(watcher, offset, running)` on success.
+fn create_watcher(
+    app: &AppHandle,
+    log_path: &Path,
+) -> Result<(RecommendedWatcher, Arc<Mutex<u64>>, Arc<AtomicBool>), String> {
+    let offset = Arc::new(Mutex::new(0u64));
+    let running = Arc::new(AtomicBool::new(true));
+
+    // If file exists, seek to end (we only care about new events)
+    if log_path.exists() {
+        if let Ok(metadata) = std::fs::metadata(log_path) {
+            let mut off = offset.lock().unwrap();
+            *off = metadata.len();
+        }
+    }
+
+    let offset_clone = Arc::clone(&offset);
+    let app_clone = app.clone();
+    let path_clone = log_path.to_path_buf();
+    let running_clone = Arc::clone(&running);
+
+    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+        if !running_clone.load(Ordering::Relaxed) {
+            return;
+        }
+        match res {
+            Ok(event) => {
+                if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                    LogWatcher::process_new_lines(&app_clone, &path_clone, &offset_clone);
+                }
+            }
+            Err(e) => {
+                error!("Log watcher error: {}", e);
+            }
+        }
+    })
+    .map_err(|e| format!("Failed to create file watcher: {}", e))?;
+
+    // Watch the parent directory (handles file rotation)
+    if let Some(parent) = log_path.parent() {
+        if parent.exists() {
+            watcher
+                .watch(parent, RecursiveMode::NonRecursive)
+                .map_err(|e| format!("Failed to watch log directory: {}", e))?;
+        } else {
+            warn!(
+                "Log directory does not exist yet: {:?}. Watcher not started.",
+                parent
+            );
+        }
+    }
+
+    Ok((watcher, offset, running))
+}
+
 impl LogWatcher {
     /// Start watching the game log file
     pub fn start(app: AppHandle, log_path: PathBuf) -> Result<Self, String> {
-        let offset = Arc::new(Mutex::new(0u64));
-        let running = Arc::new(AtomicBool::new(true));
-
-        // If file exists, seek to end (we only care about new events)
-        if log_path.exists() {
-            if let Ok(metadata) = std::fs::metadata(&log_path) {
-                let mut off = offset.lock().unwrap();
-                *off = metadata.len();
-            }
-        }
-
-        let offset_clone = Arc::clone(&offset);
-        let app_clone = app.clone();
-        let path_clone = log_path.clone();
-        let running_clone = Arc::clone(&running);
-
-        let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            if !running_clone.load(Ordering::Relaxed) {
-                return;
-            }
-            match res {
-                Ok(event) => {
-                    if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                        Self::process_new_lines(&app_clone, &path_clone, &offset_clone);
-                    }
-                }
-                Err(e) => {
-                    error!("Log watcher error: {}", e);
-                }
-            }
-        })
-        .map_err(|e| format!("Failed to create file watcher: {}", e))?;
-
-        // Watch the parent directory (handles file rotation)
-        if let Some(parent) = log_path.parent() {
-            if parent.exists() {
-                watcher
-                    .watch(parent, RecursiveMode::NonRecursive)
-                    .map_err(|e| format!("Failed to watch log directory: {}", e))?;
-                info!("Log watcher started for: {:?}", log_path);
-            } else {
-                warn!(
-                    "Log directory does not exist yet: {:?}. Watcher not started.",
-                    parent
-                );
-            }
-        }
+        let (watcher, offset, running) = create_watcher(&app, &log_path)?;
+        info!("Log watcher started for: {:?}", log_path);
 
         Ok(Self {
             app,
@@ -86,6 +105,23 @@ impl LogWatcher {
             running,
             _watcher: Some(watcher),
         })
+    }
+
+    /// Update the log file path (e.g., from settings change)
+    pub fn update_path(&mut self, new_path: PathBuf) -> Result<(), String> {
+        // Stop existing watcher
+        self.running.store(false, Ordering::Relaxed);
+        self._watcher = None;
+
+        let (watcher, offset, running) = create_watcher(&self.app, &new_path)?;
+
+        self.log_path = new_path;
+        self.offset = offset;
+        self.running = running;
+        self._watcher = Some(watcher);
+
+        info!("Log watcher updated to: {:?}", self.log_path);
+        Ok(())
     }
 
     fn process_new_lines(app: &AppHandle, path: &Path, offset: &Arc<Mutex<u64>>) {
@@ -142,92 +178,31 @@ impl LogWatcher {
     }
 
     fn parse_and_emit(app: &AppHandle, text: &str) {
-        // Compile regexes (in a real hot path, you'd cache these)
-        let location_re = Regex::new(r"<Location:\s*(.+?)>").unwrap();
-        let death_re = Regex::new(r"<Actor Death>.+?killed by (.+)").unwrap();
-        let kill_re = Regex::new(r"<Actor Death>\s*(.+?) killed (.+)").unwrap();
-        let ship_re = Regex::new(r"\[Ship\]\s*(.+)").unwrap();
+        let re = log_regexes();
 
         for line in text.lines() {
-            if let Some(caps) = location_re.captures(line) {
+            if let Some(caps) = re.location.captures(line) {
                 let location = caps[1].trim().to_string();
                 info!("Log: location changed to {}", location);
                 let _ = app.emit("sc-location", serde_json::json!({ "location": location }));
             }
 
-            if let Some(caps) = death_re.captures(line) {
+            if let Some(caps) = re.death.captures(line) {
                 let killer = caps[1].trim().to_string();
                 info!("Log: player killed by {}", killer);
                 let _ = app.emit("sc-death", serde_json::json!({ "killer": killer }));
-            } else if let Some(caps) = kill_re.captures(line) {
+            } else if let Some(caps) = re.kill.captures(line) {
                 let victim = caps[2].trim().to_string();
                 info!("Log: player killed {}", victim);
                 let _ = app.emit("sc-kill", serde_json::json!({ "victim": victim }));
             }
 
-            if let Some(caps) = ship_re.captures(line) {
+            if let Some(caps) = re.ship.captures(line) {
                 let ship = caps[1].trim().to_string();
                 info!("Log: ship changed to {}", ship);
                 let _ = app.emit("sc-ship-changed", serde_json::json!({ "ship": ship }));
             }
         }
-    }
-
-    /// Update the log file path (e.g., from settings change)
-    pub fn update_path(&mut self, new_path: PathBuf) -> Result<(), String> {
-        self.running.store(false, Ordering::Relaxed);
-        self._watcher = None;
-
-        // Re-create watcher with new path
-        let offset = Arc::new(Mutex::new(0u64));
-        let running = Arc::new(AtomicBool::new(true));
-
-        if new_path.exists() {
-            if let Ok(metadata) = std::fs::metadata(&new_path) {
-                let mut off = offset.lock().unwrap();
-                *off = metadata.len();
-            }
-        }
-
-        let offset_clone = Arc::clone(&offset);
-        let app_clone = self.app.clone();
-        let path_clone = new_path.clone();
-        let running_clone = Arc::clone(&running);
-
-        let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            if !running_clone.load(Ordering::Relaxed) {
-                return;
-            }
-            match res {
-                Ok(event) => {
-                    if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                        Self::process_new_lines(&app_clone, &path_clone, &offset_clone);
-                    }
-                }
-                Err(e) => {
-                    error!("Log watcher error: {}", e);
-                }
-            }
-        })
-        .map_err(|e| format!("Failed to create file watcher: {}", e))?;
-
-        self.log_path = new_path;
-        self.offset = offset;
-        self.running = running;
-        self._watcher = Some(watcher);
-
-        // Watch the parent directory
-        if let Some(parent) = self.log_path.parent() {
-            if parent.exists() {
-                if let Some(ref mut w) = self._watcher {
-                    w.watch(parent, RecursiveMode::NonRecursive)
-                        .map_err(|e| format!("Failed to watch log directory: {}", e))?;
-                }
-            }
-        }
-
-        info!("Log watcher updated to: {:?}", self.log_path);
-        Ok(())
     }
 }
 

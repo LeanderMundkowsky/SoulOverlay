@@ -21,23 +21,10 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("SoulOverlay")
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show_hide" => {
-                let is_visible = window::is_overlay_visible(app);
-                if is_visible {
-                    #[cfg(windows)]
-                    {
-                        // We need game state here - just hide via window API
-                        if let Some(w) = app.get_webview_window("overlay") {
-                            let _ = w.hide();
-                        }
-                    }
-                    #[cfg(not(windows))]
-                    {
-                        if let Some(w) = app.get_webview_window("overlay") {
-                            let _ = w.hide();
-                        }
-                    }
-                } else {
-                    if let Some(w) = app.get_webview_window("overlay") {
+                if let Some(w) = app.get_webview_window("overlay") {
+                    if window::is_overlay_visible(app) {
+                        let _ = w.hide();
+                    } else {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }

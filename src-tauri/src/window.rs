@@ -13,19 +13,19 @@ use tauri::{AppHandle, Emitter};
 use tauri::WebviewWindow;
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{BOOL, HWND, POINT, RECT};
+use windows::Win32::Foundation::{BOOL, HWND, POINT};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    ClientToScreen, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
-    MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+    GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    MONITOR_DEFAULTTOPRIMARY,
 };
 #[cfg(windows)]
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetClientRect, GetWindowLongPtrW, GetWindowThreadProcessId,
-    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST,
-    SET_WINDOW_POS_FLAGS, SW_HIDE, SW_SHOW, WS_EX_TOOLWINDOW,
+    BringWindowToTop, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SET_WINDOW_POS_FLAGS,
+    SW_HIDE, SW_SHOW, WS_EX_TOOLWINDOW,
 };
 
 /// Cached overlay HWND as isize so any thread can call Win32 show/hide directly.
@@ -115,7 +115,7 @@ pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
         log::warn!("post_hotkey_toggle: overlay HWND not yet cached");
         return;
     }
-    let hwnd = crate::game_tracker::hwnd_from_isize(overlay);
+    let hwnd = crate::platform::hwnd_from_isize(overlay);
     unsafe {
         let _ = PostMessageW(
             hwnd,
@@ -200,7 +200,7 @@ pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
         None => return,
     };
 
-    let sc_hwnd = crate::game_tracker::hwnd_from_isize(sc_hwnd_val);
+    let sc_hwnd = crate::platform::hwnd_from_isize(sc_hwnd_val);
 
     unsafe {
         // Attach input threads so we can steal focus
@@ -250,7 +250,7 @@ pub fn hide_overlay(app: &AppHandle, sc_hwnd_val: isize) {
         None => return,
     };
 
-    let sc_hwnd = crate::game_tracker::hwnd_from_isize(sc_hwnd_val);
+    let sc_hwnd = crate::platform::hwnd_from_isize(sc_hwnd_val);
 
     unsafe {
         let _ = ShowWindow(overlay_hwnd, SW_HIDE);
@@ -309,23 +309,6 @@ pub fn set_window_geometry(app: &AppHandle, _x: i32, _y: i32, w: u32, h: u32) {
         }));
     }
     info!("set_window_geometry: basic resize on non-Windows");
-}
-
-/// Get the client area geometry of a window.
-#[cfg(windows)]
-pub fn get_window_geometry(hwnd: HWND) -> Option<(i32, i32, u32, u32)> {
-    unsafe {
-        let mut rect = RECT::default();
-        if GetClientRect(hwnd, &mut rect).is_ok() {
-            let mut point = POINT { x: 0, y: 0 };
-            if ClientToScreen(hwnd, &mut point).as_bool() {
-                let w = (rect.right - rect.left) as u32;
-                let h = (rect.bottom - rect.top) as u32;
-                return Some((point.x, point.y, w, h));
-            }
-        }
-    }
-    None
 }
 
 /// Get the full screen rect of the monitor that contains the given HWND.

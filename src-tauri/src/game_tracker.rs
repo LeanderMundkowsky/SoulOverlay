@@ -59,20 +59,6 @@ impl Default for GameTrackerState {
 
 pub type SharedGameState = Arc<Mutex<GameTrackerState>>;
 
-/// Convert an isize handle value to a Win32 HWND.
-#[cfg(windows)]
-#[inline]
-pub fn hwnd_from_isize(val: isize) -> HWND {
-    HWND(val as *mut std::ffi::c_void)
-}
-
-/// Convert a Win32 HWND to an isize handle value.
-#[cfg(windows)]
-#[inline]
-pub fn hwnd_to_isize(hwnd: HWND) -> isize {
-    hwnd.0 as isize
-}
-
 pub struct GameTracker {
     app: AppHandle,
     state: SharedGameState,
@@ -101,7 +87,7 @@ impl GameTracker {
 
         // Try to find SC window immediately
         if let Some(hwnd) = find_sc_window() {
-            let hwnd_val = hwnd_to_isize(hwnd);
+            let hwnd_val = crate::platform::hwnd_to_isize(hwnd);
             let mut s = state.lock().unwrap();
             s.sc_hwnd = Some(hwnd_val);
             s.is_running = true;
@@ -132,7 +118,7 @@ impl GameTracker {
                 let mut s = state.lock().unwrap();
 
                 if let Some(hwnd_val) = s.sc_hwnd {
-                    let hwnd = hwnd_from_isize(hwnd_val);
+                    let hwnd = crate::platform::hwnd_from_isize(hwnd_val);
 
                     // Check if window is still valid
                     let still_valid = unsafe { IsWindow(hwnd).as_bool() };
@@ -181,7 +167,7 @@ impl GameTracker {
                 } else {
                     // Try to find SC window
                     if let Some(hwnd) = find_sc_window() {
-                        let hwnd_val = hwnd_to_isize(hwnd);
+                        let hwnd_val = crate::platform::hwnd_to_isize(hwnd);
                         s.sc_hwnd = Some(hwnd_val);
                         s.is_running = true;
 
