@@ -80,10 +80,10 @@ function closeCommodityPanel() {
 <template>
   <div
     class="w-full h-full"
-    :style="{ opacity: settingsStore.settings.overlay_opacity }"
+    :style="{ '--overlay-bg-opacity': settingsStore.settings.overlay_opacity }"
   >
     <!-- Main overlay background -->
-    <div class="w-full h-full bg-black/60 flex flex-col">
+    <div class="w-full h-full flex flex-col" :style="{ backgroundColor: `rgba(0,0,0,calc(0.7 * var(--overlay-bg-opacity, 1)))` }">
       <!-- Top bar -->
       <div class="flex items-center justify-between px-6 py-3 bg-black/40 border-b border-white/10">
         <div class="flex items-center gap-3">
