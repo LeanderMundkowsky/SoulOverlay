@@ -25,6 +25,108 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SET_WINDOW_POS_FLAGS, SW_HIDE, SW_SHOW, WS_EX_TOOLWINDOW,
 };
 
+/// Cached overlay HWND as isize so any thread can call Win32 show/hide directly.
+/// Set once during init_overlay_window and never changes.
+#[cfg(windows)]
+static OVERLAY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Get the cached overlay HWND. Returns 0 if not yet initialised.
+#[cfg(windows)]
+pub fn get_overlay_hwnd_raw() -> isize {
+    OVERLAY_HWND.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Original WNDPROC of the overlay window, saved during subclassing.
+#[cfg(windows)]
+static ORIGINAL_WNDPROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Global AppHandle stored for the subclass proc to use.
+#[cfg(windows)]
+static SUBCLASS_APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+/// Custom message used by the hotkey hook to request show/hide.
+/// WPARAM: 0 = hide, 1 = show. LPARAM: SC HWND as isize (0 if unknown).
+/// WM_APP is 0x8000; we add 42 to avoid collisions with other custom messages.
+#[cfg(windows)]
+const WM_HOTKEY_TOGGLE: u32 = 0x8000 + 42;
+
+/// Subclass WNDPROC that intercepts WM_HOTKEY_TOGGLE messages.
+#[cfg(windows)]
+unsafe extern "system" fn overlay_subclass_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging::{CallWindowProcW, WNDPROC};
+
+    if msg == WM_HOTKEY_TOGGLE {
+        let show = wparam.0 != 0;
+        let sc_hwnd_val = lparam.0 as isize;
+
+        if let Some(app) = SUBCLASS_APP.get() {
+            if show {
+                info!("WM_HOTKEY_TOGGLE: showing overlay (main thread)");
+                if sc_hwnd_val != 0 {
+                    show_overlay(app, sc_hwnd_val);
+                } else {
+                    use tauri::Manager;
+                    if let Some(w) = app.get_webview_window("overlay") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+            } else {
+                info!("WM_HOTKEY_TOGGLE: hiding overlay (main thread)");
+                if sc_hwnd_val != 0 {
+                    hide_overlay(app, sc_hwnd_val);
+                } else {
+                    use tauri::Manager;
+                    if let Some(w) = app.get_webview_window("overlay") {
+                        let _ = w.hide();
+                    }
+                }
+            }
+        }
+        return windows::Win32::Foundation::LRESULT(0);
+    }
+
+    // Chain to original WNDPROC for all other messages.
+    let original = ORIGINAL_WNDPROC.load(std::sync::atomic::Ordering::SeqCst);
+    let original_proc: WNDPROC = std::mem::transmute(original);
+    CallWindowProcW(original_proc, hwnd, msg, wparam, lparam)
+}
+
+/// Post a hotkey toggle message to the overlay window from any thread.
+/// This is safe to call from the LL keyboard hook callback — it just enqueues
+/// a message, never blocks on the main thread.
+/// `show`: true to show, false to hide. `sc_hwnd_val`: SC HWND as isize (0 if unknown).
+#[cfg(windows)]
+pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+
+    let overlay = get_overlay_hwnd_raw();
+    if overlay == 0 {
+        log::warn!("post_hotkey_toggle: overlay HWND not yet cached");
+        return;
+    }
+    let hwnd = crate::game_tracker::hwnd_from_isize(overlay);
+    unsafe {
+        let _ = PostMessageW(
+            hwnd,
+            WM_HOTKEY_TOGGLE,
+            WPARAM(if show { 1 } else { 0 }),
+            LPARAM(sc_hwnd_val),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+pub fn post_hotkey_toggle(_show: bool, _sc_hwnd_val: isize) {
+    info!("post_hotkey_toggle: no-op on non-Windows");
+}
+
 /// Helper: Get the Win32 HWND from a Tauri WebviewWindow.
 /// Tauri 2 returns HWND from the `windows` crate version it depends on (0.61),
 /// which may differ from our project's `windows` 0.58. Both define
@@ -38,9 +140,11 @@ fn get_hwnd(window: &WebviewWindow) -> Option<HWND> {
 }
 
 /// Initialize the overlay window with WS_EX_TOOLWINDOW style on Windows.
+/// Also installs a WNDPROC subclass to handle WM_HOTKEY_TOGGLE messages from
+/// the LL keyboard hook thread.
 /// Call this after the app is ready.
 #[cfg(windows)]
-pub fn init_overlay_window(window: &WebviewWindow) {
+pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     let hwnd = match get_hwnd(window) {
         Some(h) => h,
         None => {
@@ -53,13 +157,27 @@ pub fn init_overlay_window(window: &WebviewWindow) {
         // Add WS_EX_TOOLWINDOW to extended style (hides from taskbar and Alt+Tab)
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_TOOLWINDOW.0 as isize);
+
+        // Install our subclass WNDPROC to handle hotkey toggle messages.
+        let old_proc = SetWindowLongPtrW(
+            hwnd,
+            windows::Win32::UI::WindowsAndMessaging::GWLP_WNDPROC,
+            overlay_subclass_proc as *const () as isize,
+        );
+        ORIGINAL_WNDPROC.store(old_proc, std::sync::atomic::Ordering::SeqCst);
     }
 
-    info!("Overlay window initialized with WS_EX_TOOLWINDOW");
+    // Store the AppHandle so the subclass proc can access it.
+    let _ = SUBCLASS_APP.set(app.clone());
+
+    // Cache the HWND so the hotkey hook thread can PostMessage to it.
+    OVERLAY_HWND.store(hwnd.0 as isize, std::sync::atomic::Ordering::SeqCst);
+
+    info!("Overlay window initialized with WS_EX_TOOLWINDOW + subclass WNDPROC");
 }
 
 #[cfg(not(windows))]
-pub fn init_overlay_window(_window: &tauri::WebviewWindow) {
+pub fn init_overlay_window(_window: &tauri::WebviewWindow, _app: &AppHandle) {
     info!("init_overlay_window: no-op on non-Windows");
 }
 

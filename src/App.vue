@@ -38,7 +38,32 @@ function handleKeyDown(e: KeyboardEvent) {
     } else {
       invoke("hide_overlay_cmd");
     }
+    return;
   }
+
+  // Fallback hotkey handling: when the overlay is focused, the LL keyboard
+  // hook may not fire (Windows limitation). Match the configured hotkey here
+  // and hide the overlay from the frontend side.
+  if (matchesHotkey(e, settingsStore.settings.hotkey)) {
+    e.preventDefault();
+    invoke("hide_overlay_cmd");
+  }
+}
+
+/** Check if a KeyboardEvent matches a hotkey string like "F4" or "Alt+Shift+S". */
+function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
+  const parts = hotkey.split("+").map((p) => p.trim().toLowerCase());
+  const key = parts[parts.length - 1];
+  const needCtrl = parts.includes("ctrl") || parts.includes("control");
+  const needAlt = parts.includes("alt");
+  const needShift = parts.includes("shift");
+
+  if (e.ctrlKey !== needCtrl || e.altKey !== needAlt || e.shiftKey !== needShift) {
+    return false;
+  }
+
+  // Match the key part against e.key (case-insensitive)
+  return e.key.toLowerCase() === key;
 }
 
 // Listen for SC window events

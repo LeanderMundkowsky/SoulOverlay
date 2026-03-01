@@ -38,14 +38,34 @@ impl Drop for HookHandle {
 #[cfg(windows)]
 static HOOK_STATE: std::sync::OnceLock<Arc<Mutex<HookState>>> = std::sync::OnceLock::new();
 
+/// Tracks whether the overlay is currently visible. Maintained by the hotkey
+/// handler so the LL hook callback can read it without touching Tauri APIs
+/// (which require the main thread).
+/// Starts as `false` because the overlay is hidden on launch.
+#[cfg(windows)]
+static OVERLAY_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Self-tracked modifier key states. Updated by the LL hook itself on every
+/// key event — avoids GetAsyncKeyState races when the overlay is focused.
+#[cfg(windows)]
+static MOD_CTRL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(windows)]
+static MOD_ALT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(windows)]
+static MOD_SHIFT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Target VK code stored as an atomic so the hook can fast-reject without
+/// locking HOOK_STATE. Avoids mutex contention inside the time-critical callback.
+#[cfg(windows)]
+static TARGET_VK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// Required modifiers as packed bits: bit 0 = ctrl, bit 1 = alt, bit 2 = shift.
+#[cfg(windows)]
+static TARGET_MODS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
 #[cfg(windows)]
 struct HookState {
     app: AppHandle,
     game_state: SharedGameState,
-    vk: u32,
-    require_alt: bool,
-    require_ctrl: bool,
-    require_shift: bool,
 }
 
 /// Parse a hotkey string like "Alt+Shift+S" or "Ctrl+Alt+F9" into a
@@ -162,8 +182,8 @@ pub fn register_hotkey(
 ) -> Result<HookHandle, String> {
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_MENU, VK_RCONTROL,
-        VK_RMENU, VK_RSHIFT, VK_SHIFT,
+        VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_MENU, VK_RCONTROL, VK_RMENU, VK_RSHIFT,
+        VK_SHIFT,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK,
@@ -173,15 +193,16 @@ pub fn register_hotkey(
     let (vk, require_ctrl, require_alt, require_shift) =
         parse_hotkey(hotkey).ok_or_else(|| format!("Could not parse hotkey: '{}'", hotkey))?;
 
+    // Store VK and modifier requirements in atomics for lock-free access in the hook.
+    TARGET_VK.store(vk, std::sync::atomic::Ordering::SeqCst);
+    let mods: u8 = (require_ctrl as u8) | ((require_alt as u8) << 1) | ((require_shift as u8) << 2);
+    TARGET_MODS.store(mods, std::sync::atomic::Ordering::SeqCst);
+
     // Store state in the global slot so the bare-fn callback can access it.
     // If the OnceLock is already set we replace the inner value.
     let state = Arc::new(Mutex::new(HookState {
         app: app.clone(),
         game_state,
-        vk,
-        require_alt,
-        require_ctrl,
-        require_shift,
     }));
 
     // HOOK_STATE may already be initialised from a previous call; update in place.
@@ -194,13 +215,7 @@ pub fn register_hotkey(
                     let s = state.lock().unwrap();
                     s.game_state.clone()
                 },
-                vk,
-                require_alt,
-                require_ctrl,
-                require_shift,
             };
-            // Also update app since we have a new AppHandle.
-            existing.lock().unwrap().app = app.clone();
         }
         None => {
             let _ = HOOK_STATE.set(state);
@@ -209,38 +224,72 @@ pub fn register_hotkey(
 
     // The low-level keyboard hook callback (bare fn — no captures allowed).
     unsafe extern "system" fn ll_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        use std::sync::atomic::Ordering::SeqCst;
         use windows::Win32::UI::WindowsAndMessaging::HC_ACTION;
 
         if code == HC_ACTION as i32 {
             let msg = wparam.0 as u32;
-            if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
-                let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+            let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+            let vk = kb.vkCode;
 
-                if let Some(slot) = HOOK_STATE.get() {
-                    let s = slot.lock().unwrap();
+            // Track modifier key state ourselves — avoids GetAsyncKeyState races
+            // when the overlay window is focused.
+            let is_ctrl = vk == VK_CONTROL.0 as u32
+                || vk == VK_LCONTROL.0 as u32
+                || vk == VK_RCONTROL.0 as u32;
+            let is_alt =
+                vk == VK_MENU.0 as u32 || vk == VK_LMENU.0 as u32 || vk == VK_RMENU.0 as u32;
+            let is_shift =
+                vk == VK_SHIFT.0 as u32 || vk == VK_LSHIFT.0 as u32 || vk == VK_RSHIFT.0 as u32;
 
-                    if kb.vkCode == s.vk {
-                        // Check modifier state via GetAsyncKeyState (high bit = pressed).
-                        let ctrl_down = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16) & 0x8000
-                            != 0
-                            || (GetAsyncKeyState(VK_LCONTROL.0 as i32) as u16) & 0x8000 != 0
-                            || (GetAsyncKeyState(VK_RCONTROL.0 as i32) as u16) & 0x8000 != 0;
-                        let alt_down = (GetAsyncKeyState(VK_MENU.0 as i32) as u16) & 0x8000 != 0
-                            || (GetAsyncKeyState(VK_LMENU.0 as i32) as u16) & 0x8000 != 0
-                            || (GetAsyncKeyState(VK_RMENU.0 as i32) as u16) & 0x8000 != 0;
-                        let shift_down = (GetAsyncKeyState(VK_SHIFT.0 as i32) as u16) & 0x8000 != 0
-                            || (GetAsyncKeyState(VK_LSHIFT.0 as i32) as u16) & 0x8000 != 0
-                            || (GetAsyncKeyState(VK_RSHIFT.0 as i32) as u16) & 0x8000 != 0;
+            let pressed = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
 
-                        let modifiers_match = ctrl_down == s.require_ctrl
-                            && alt_down == s.require_alt
-                            && shift_down == s.require_shift;
+            if is_ctrl {
+                MOD_CTRL.store(pressed, SeqCst);
+            } else if is_alt {
+                MOD_ALT.store(pressed, SeqCst);
+            } else if is_shift {
+                MOD_SHIFT.store(pressed, SeqCst);
+            }
 
-                        if modifiers_match {
+            // Fast path: check VK and modifiers via atomics — no mutex needed.
+            let target_vk = TARGET_VK.load(SeqCst);
+            if pressed && vk == target_vk {
+                let mods = TARGET_MODS.load(SeqCst);
+                let need_ctrl = (mods & 1) != 0;
+                let need_alt = (mods & 2) != 0;
+                let need_shift = (mods & 4) != 0;
+
+                let got_ctrl = MOD_CTRL.load(SeqCst);
+                let got_alt = MOD_ALT.load(SeqCst);
+                let got_shift = MOD_SHIFT.load(SeqCst);
+
+                let modifiers_match =
+                    got_ctrl == need_ctrl && got_alt == need_alt && got_shift == need_shift;
+
+                if !modifiers_match {
+                    info!(
+                        "LL hook: VK matched but mods wrong (ctrl={}/{}, alt={}/{}, shift={}/{})",
+                        got_ctrl, need_ctrl, got_alt, need_alt, got_shift, need_shift
+                    );
+                }
+
+                if modifiers_match {
+                    // Only lock the mutex to grab app + game_state handles.
+                    if let Some(slot) = HOOK_STATE.get() {
+                        if let Ok(s) = slot.try_lock() {
                             let app = s.app.clone();
                             let game_state = s.game_state.clone();
-                            drop(s); // release lock before calling into Tauri
-                            handle_hotkey_press(&app, &game_state);
+                            drop(s);
+
+                            let was_visible = OVERLAY_VISIBLE.fetch_xor(true, SeqCst);
+                            info!("LL hook: hotkey matched, was_visible={}", was_visible);
+                            handle_hotkey_press(&app, &game_state, was_visible);
+
+                            // Swallow the keypress — do NOT pass it to the game.
+                            return LRESULT(1);
+                        } else {
+                            info!("LL hook: hotkey matched but HOOK_STATE locked, skipping");
                         }
                     }
                 }
@@ -312,53 +361,41 @@ pub fn unregister_hotkey(_handle: HookHandle) {
     info!("unregister_hotkey: no-op on non-Windows");
 }
 
+/// Notify the hotkey module that the overlay was hidden by means other than
+/// the hotkey (e.g. ESC key from the frontend). Keeps the OVERLAY_VISIBLE
+/// atomic in sync so the next hotkey press shows rather than double-hides.
+pub fn notify_overlay_hidden() {
+    #[cfg(windows)]
+    OVERLAY_VISIBLE.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Notify the hotkey module that the overlay was shown by means other than
+/// the hotkey. Keeps the OVERLAY_VISIBLE atomic in sync.
+pub fn notify_overlay_shown() {
+    #[cfg(windows)]
+    OVERLAY_VISIBLE.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 // ---------------------------------------------------------------------------
 // Shared toggle logic (same on all platforms, guarded internally)
 // ---------------------------------------------------------------------------
 
-fn handle_hotkey_press(app: &AppHandle, game_state: &SharedGameState) {
-    let state = game_state.lock().unwrap();
-    let is_visible = crate::window::is_overlay_visible(app);
+fn handle_hotkey_press(_app: &AppHandle, game_state: &SharedGameState, was_visible: bool) {
+    // Snapshot the SC hwnd while we hold the lock, then release immediately.
+    let sc_hwnd_val: isize = {
+        let state = game_state.lock().unwrap();
+        state.sc_hwnd.unwrap_or(0)
+    };
 
-    if is_visible {
-        #[cfg(windows)]
-        {
-            if let Some(sc_hwnd_val) = state.sc_hwnd {
-                drop(state);
-                crate::window::hide_overlay(app, sc_hwnd_val);
-            } else {
-                drop(state);
-                use tauri::Manager;
-                if let Some(w) = app.get_webview_window("overlay") {
-                    let _ = w.hide();
-                }
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            drop(state);
-            crate::window::hide_overlay(app, ());
-        }
-    } else {
-        #[cfg(windows)]
-        {
-            if let Some(sc_hwnd_val) = state.sc_hwnd {
-                drop(state);
-                crate::window::show_overlay(app, sc_hwnd_val);
-            } else {
-                info!("Hotkey pressed but SC not detected — showing overlay anyway");
-                drop(state);
-                use tauri::Manager;
-                if let Some(w) = app.get_webview_window("overlay") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            drop(state);
-            crate::window::show_overlay(app, ());
-        }
-    }
+    // Post a custom message to the overlay window. This is fully async —
+    // it enqueues a message and returns immediately. The overlay's subclass
+    // WNDPROC on the main thread will process it after the current keyboard
+    // event finishes, avoiding the deadlock that run_on_main_thread caused
+    // when the overlay was focused.
+    let show = !was_visible;
+    info!(
+        "Hotkey: posting WM_HOTKEY_TOGGLE (show={}, sc_hwnd={})",
+        show, sc_hwnd_val
+    );
+    crate::window::post_hotkey_toggle(show, sc_hwnd_val);
 }
