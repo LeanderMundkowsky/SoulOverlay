@@ -7,6 +7,8 @@ export interface Settings {
   uex_api_key: string;
   log_path: string | null;
   overlay_opacity: number;
+  esc_closes_overlay: boolean;
+  reset_on_open: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -14,6 +16,8 @@ const defaultSettings: Settings = {
   uex_api_key: "",
   log_path: null,
   overlay_opacity: 0.85,
+  esc_closes_overlay: true,
+  reset_on_open: true,
 };
 
 export const useSettingsStore = defineStore("settings", () => {

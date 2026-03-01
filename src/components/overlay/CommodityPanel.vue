@@ -75,7 +75,7 @@ watch(
 </script>
 
 <template>
-  <div class="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+  <div class="overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
       <h2 class="text-white font-semibold text-sm">

@@ -7,7 +7,7 @@
 ///
 /// On non-Windows (dev builds on Linux), provides no-op stubs.
 use log::info;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 #[cfg(windows)]
 use tauri::WebviewWindow;
@@ -78,6 +78,7 @@ unsafe extern "system" fn overlay_subclass_proc(
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
+                    let _ = app.emit("overlay-shown", ());
                 }
             } else {
                 info!("WM_HOTKEY_TOGGLE: hiding overlay (main thread)");
@@ -219,6 +220,7 @@ pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
         }
     }
 
+    let _ = app.emit("overlay-shown", ());
     info!("Overlay shown");
 }
 
@@ -229,6 +231,7 @@ pub fn show_overlay(app: &AppHandle, _sc_hwnd: ()) {
         let _ = window.show();
         let _ = window.set_focus();
     }
+    let _ = app.emit("overlay-shown", ());
     info!("show_overlay: basic show on non-Windows");
 }
 

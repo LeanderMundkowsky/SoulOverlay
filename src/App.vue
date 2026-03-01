@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, nextTick, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import TabBar from "./components/overlay/TabBar.vue";
@@ -19,6 +19,7 @@ const showSettings = ref(false);
 const showDebug = ref(false);
 const scDetected = ref(false);
 const selectedCommodity = ref<{ id: string; name: string } | null>(null);
+const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null);
 
 useLogWatcher();
 
@@ -37,7 +38,7 @@ function handleKeyDown(e: KeyboardEvent) {
       showSettings.value = false;
     } else if (showDebug.value) {
       showDebug.value = false;
-    } else {
+    } else if (settingsStore.settings.esc_closes_overlay) {
       invoke("hide_overlay_cmd");
     }
     return;
@@ -95,6 +96,20 @@ function codeToToken(code: string): string {
 let unlistenFound: (() => void) | null = null;
 let unlistenLost: (() => void) | null = null;
 let unlistenOpenSettings: (() => void) | null = null;
+let unlistenOverlayShown: (() => void) | null = null;
+
+function onOverlayShown() {
+  if (!settingsStore.settings.reset_on_open) return;
+  // Switch back to search tab and clear commodity panel
+  activeTab.value = "search";
+  selectedCommodity.value = null;
+  showSettings.value = false;
+  showDebug.value = false;
+  // Focus the search input — nextTick ensures the tab v-if has rendered
+  nextTick(() => {
+    searchBarRef.value?.focusInput();
+  });
+}
 
 onMounted(async () => {
   unlistenFound = await listen("sc-window-found", () => {
@@ -111,6 +126,8 @@ onMounted(async () => {
     showSettings.value = true;
   });
 
+  unlistenOverlayShown = await listen("overlay-shown", onOverlayShown);
+
   try {
     const gs = await invoke<{ sc_detected: boolean }>("get_game_state");
     scDetected.value = gs.sc_detected;
@@ -124,6 +141,7 @@ onUnmounted(() => {
   unlistenFound?.();
   unlistenLost?.();
   unlistenOpenSettings?.();
+  unlistenOverlayShown?.();
 });
 
 function onCommoditySelected(commodity: { id: string; name: string }) {
@@ -175,7 +193,7 @@ function onToggleDebug() {
         <div class="flex-1 overflow-y-auto">
 
           <!-- SEARCH tab -->
-          <div v-if="activeTab === 'search'" class="p-6 grid grid-cols-1 gap-4 max-w-4xl mx-auto w-full">
+          <div v-show="activeTab === 'search'" class="p-6 grid grid-cols-1 gap-4 max-w-4xl mx-auto w-full">
             <!-- SC not detected notice — pill style -->
             <div
               v-if="!scDetected"
@@ -195,8 +213,8 @@ function onToggleDebug() {
             </div>
 
             <!-- Search card -->
-            <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-visible">
-              <SearchBar @select="onCommoditySelected" />
+            <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+              <SearchBar ref="searchBarRef" @select="onCommoditySelected" />
             </div>
 
             <!-- Commodity prices card -->
@@ -209,8 +227,19 @@ function onToggleDebug() {
             </div>
           </div>
 
+          <!-- INVENTORY tab -->
+          <div v-show="activeTab === 'inventory'" class="p-6 max-w-4xl mx-auto w-full">
+            <div class="bg-[#1a1d24] border border-white/10 rounded-xl p-6">
+              <textarea
+                class="w-full bg-transparent border border-white/10 rounded-lg p-3 text-white/80 text-sm placeholder-white/20 resize-none focus:outline-none focus:border-white/30"
+                rows="6"
+                placeholder=""
+              ></textarea>
+            </div>
+          </div>
+
           <!-- Placeholder tabs -->
-          <div v-else class="p-6 max-w-4xl mx-auto w-full">
+          <div v-show="activeTab !== 'search' && activeTab !== 'inventory'" class="p-6 max-w-4xl mx-auto w-full">
             <div class="bg-[#1a1d24] border border-white/10 rounded-xl flex flex-col items-center justify-center py-16 gap-3 text-white/20 select-none">
               <svg class="w-10 h-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>

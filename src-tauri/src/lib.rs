@@ -11,7 +11,7 @@ use serde::Serialize;
 use settings::Settings;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 
 /// Application state managed by Tauri
@@ -192,6 +192,7 @@ async fn show_overlay_cmd(app: AppHandle, state: State<'_, AppState>) -> Result<
                 let _ = w.show();
                 let _ = w.set_focus();
             }
+            let _ = app.emit("overlay-shown", ());
         }
     }
 

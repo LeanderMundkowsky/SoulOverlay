@@ -14,6 +14,8 @@ const form = ref<Settings>({
   uex_api_key: "",
   log_path: null,
   overlay_opacity: 1.0,
+  esc_closes_overlay: true,
+  reset_on_open: true,
 });
 
 const saving = ref(false);
@@ -59,6 +61,8 @@ function resetDefaults() {
     uex_api_key: "",
     log_path: null,
     overlay_opacity: 0.85,
+    esc_closes_overlay: true,
+    reset_on_open: true,
   };
 }
 
@@ -229,6 +233,52 @@ function stopCapture() {
           class="w-full accent-blue-500"
         />
         <p class="text-white/30 text-xs mt-1">Controls background dimming only — UI is always fully visible</p>
+      </div>
+
+      <!-- ESC closes overlay -->
+      <div>
+        <label class="flex items-center justify-between gap-3 cursor-pointer select-none">
+          <div>
+            <p class="text-white/60 text-xs font-medium uppercase tracking-wider">ESC closes overlay</p>
+            <p class="text-white/30 text-xs mt-0.5">When disabled, ESC only clears the search bar</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="form.esc_closes_overlay"
+            @click="form.esc_closes_overlay = !form.esc_closes_overlay"
+            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            :class="form.esc_closes_overlay ? 'bg-blue-600' : 'bg-white/10'"
+          >
+            <span
+              class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+              :class="form.esc_closes_overlay ? 'translate-x-4' : 'translate-x-0'"
+            ></span>
+          </button>
+        </label>
+      </div>
+
+      <!-- Reset on open -->
+      <div>
+        <label class="flex items-center justify-between gap-3 cursor-pointer select-none">
+          <div>
+            <p class="text-white/60 text-xs font-medium uppercase tracking-wider">Reset on open</p>
+            <p class="text-white/30 text-xs mt-0.5">Switch to Search tab and focus input when overlay opens</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="form.reset_on_open"
+            @click="form.reset_on_open = !form.reset_on_open"
+            class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            :class="form.reset_on_open ? 'bg-blue-600' : 'bg-white/10'"
+          >
+            <span
+              class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+              :class="form.reset_on_open ? 'translate-x-4' : 'translate-x-0'"
+            ></span>
+          </button>
+        </label>
       </div>
 
       <!-- Error -->
