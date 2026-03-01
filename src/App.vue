@@ -78,14 +78,11 @@ function closeCommodityPanel() {
 </script>
 
 <template>
-  <div
-    class="w-full h-full"
-    :style="{ '--overlay-bg-opacity': settingsStore.settings.overlay_opacity }"
-  >
+  <div class="w-full h-full">
     <!-- Main overlay background -->
-    <div class="w-full h-full flex flex-col" :style="{ backgroundColor: `rgba(0,0,0,calc(0.7 * var(--overlay-bg-opacity, 1)))` }">
+    <div class="w-full h-full flex flex-col" :style="{ backgroundColor: `rgba(0,0,0,${settingsStore.settings.overlay_opacity})` }">
       <!-- Top bar -->
-      <div class="flex items-center justify-between px-6 py-3 bg-black/40 border-b border-white/10">
+      <div class="flex-shrink-0 flex items-center justify-between px-6 py-3 bg-black/40 border-b border-white/10">
         <div class="flex items-center gap-3">
           <h1 class="text-white font-bold text-lg tracking-wide">SoulOverlay</h1>
           <div
@@ -125,15 +122,6 @@ function closeCommodityPanel() {
 
       <!-- Content area -->
       <div class="flex-1 flex overflow-hidden">
-        <!-- Settings panel (slide over) -->
-        <Transition name="slide">
-          <SettingsPanel
-            v-if="showSettings"
-            @close="showSettings = false"
-            class="absolute right-0 top-[52px] bottom-[44px] w-96 z-50"
-          />
-        </Transition>
-
         <!-- Main content -->
         <div class="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
           <!-- First-run notice -->
@@ -162,6 +150,15 @@ function closeCommodityPanel() {
           <!-- Spacer -->
           <div class="flex-1"></div>
         </div>
+
+        <!-- Settings panel (slide in from right, inside content area) -->
+        <Transition name="slide">
+          <SettingsPanel
+            v-if="showSettings"
+            @close="showSettings = false"
+            class="w-96 flex-shrink-0"
+          />
+        </Transition>
       </div>
 
       <!-- Status bar -->
@@ -173,10 +170,14 @@ function closeCommodityPanel() {
 <style>
 .slide-enter-active,
 .slide-leave-active {
-  transition: transform 0.2s ease;
+  transition: margin-right 0.2s ease;
 }
 .slide-enter-from,
 .slide-leave-to {
-  transform: translateX(100%);
+  margin-right: -384px; /* -w-96 */
+}
+.slide-enter-to,
+.slide-leave-from {
+  margin-right: 0;
 }
 </style>
