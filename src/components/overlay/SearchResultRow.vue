@@ -12,10 +12,19 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "select"): void;
 }>();
+
+// Forward all attrs (tabindex, @keydown, @focus, etc.) to the root div
+defineOptions({ inheritAttrs: false });
+
+import { ref } from "vue";
+const rootEl = ref<HTMLElement | null>(null);
+defineExpose({ rootEl });
 </script>
 
 <template>
   <div
+    ref="rootEl"
+    v-bind="$attrs"
     class="group flex items-center gap-3 px-4 py-3 border-t border-white/5 transition-colors outline-none cursor-default"
     :class="isActive ? 'bg-white/8 ring-1 ring-inset ring-blue-500/30' : 'hover:bg-white/5 focus:bg-white/8'"
   >

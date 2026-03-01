@@ -13,7 +13,7 @@ const query = ref("");
 const { loading, error, results, search } = useUex();
 const activeIndex = ref(-1);
 const inputEl = ref<HTMLInputElement | null>(null);
-const rowEls = ref<HTMLElement[]>([]);
+const rowRefs = ref<InstanceType<typeof SearchResultRow>[]>([]);
 
 onMounted(() => {
   inputEl.value?.focus();
@@ -21,6 +21,7 @@ onMounted(() => {
 
 watch(results, () => {
   activeIndex.value = -1;
+  rowRefs.value = [];
 });
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,13 +82,14 @@ function onRowKeydown(e: KeyboardEvent, index: number, result: UexResult) {
 function setActiveIndex(index: number) {
   activeIndex.value = index;
   nextTick(() => {
-    rowEls.value[index]?.focus();
-    rowEls.value[index]?.scrollIntoView({ block: "nearest" });
+    const el = rowRefs.value[index]?.rootEl;
+    el?.focus();
+    el?.scrollIntoView({ block: "nearest" });
   });
 }
 
-function setRowRef(el: Element | null, index: number) {
-  if (el instanceof HTMLElement) rowEls.value[index] = el;
+function setRowRef(el: InstanceType<typeof SearchResultRow> | null, index: number) {
+  if (el) rowRefs.value[index] = el;
 }
 
 function focusInput() {
@@ -130,7 +132,7 @@ defineExpose({ focusInput });
       <SearchResultRow
         v-for="(result, index) in results"
         :key="result.id"
-        :ref="(el) => setRowRef(el as Element | null, index)"
+        :ref="(el) => setRowRef(el as InstanceType<typeof SearchResultRow> | null, index)"
         :result="result"
         :is-active="activeIndex === index"
         tabindex="0"
