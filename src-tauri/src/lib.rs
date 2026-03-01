@@ -16,7 +16,6 @@ use settings::Settings;
 use state::AppState;
 use std::sync::Mutex;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     logging::setup();
 
@@ -46,6 +45,7 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::uex::uex_search,
+            commands::uex::uex_search_all,
             commands::uex::uex_prices,
             commands::settings::get_settings,
             commands::settings::save_settings,

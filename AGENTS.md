@@ -134,8 +134,8 @@ Tauri commands: `snake_case` matching the JS `invoke` string. Unused params: `_n
 Discard acceptable failures: `let _ = expr;`. `.unwrap()` only on `Mutex::lock()`.
 `try_lock()` inside LL hook callbacks — never block in a hook.
 
-**Platform guards**: Every Windows function needs a `#[cfg(not(windows))]` no-op stub.
-Exception: `platform.rs` helpers (only called from already-gated code).
+**Platform**: Windows-only (x86_64-pc-windows-msvc). No `#[cfg(windows)]` guards or
+non-Windows stubs — Win32 APIs are called directly without conditional compilation.
 
 **Thread safety**: Store `HWND` as `isize` for `Send + Sync`. Document `unsafe impl`
 with `// SAFETY:`. Use `Arc<Mutex<T>>` for shared state, `Arc<AtomicBool>` for flags.

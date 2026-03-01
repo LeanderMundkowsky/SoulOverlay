@@ -1,27 +1,18 @@
 /// Window management for the overlay.
 ///
-/// On Windows, this uses Win32 API calls to:
+/// Uses Win32 API calls to:
 /// - Set WS_EX_TOOLWINDOW (no taskbar entry)
 /// - Position the overlay over the SC window
 /// - Show/hide with proper focus management
-///
-/// On non-Windows (dev builds on Linux), provides no-op stubs.
 use log::info;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, WebviewWindow};
 
-#[cfg(windows)]
-use tauri::WebviewWindow;
-
-#[cfg(windows)]
 use windows::Win32::Foundation::{BOOL, HWND, POINT};
-#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     MONITOR_DEFAULTTOPRIMARY,
 };
-#[cfg(windows)]
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
-#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SET_WINDOW_POS_FLAGS,
@@ -30,31 +21,25 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 /// Cached overlay HWND as isize so any thread can call Win32 show/hide directly.
 /// Set once during init_overlay_window and never changes.
-#[cfg(windows)]
 static OVERLAY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 /// Get the cached overlay HWND. Returns 0 if not yet initialised.
-#[cfg(windows)]
 pub fn get_overlay_hwnd_raw() -> isize {
     OVERLAY_HWND.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Original WNDPROC of the overlay window, saved during subclassing.
-#[cfg(windows)]
 static ORIGINAL_WNDPROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 /// Global AppHandle stored for the subclass proc to use.
-#[cfg(windows)]
 static SUBCLASS_APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 
 /// Custom message used by the hotkey hook to request show/hide.
 /// WPARAM: 0 = hide, 1 = show. LPARAM: SC HWND as isize (0 if unknown).
 /// WM_APP is 0x8000; we add 42 to avoid collisions with other custom messages.
-#[cfg(windows)]
 const WM_HOTKEY_TOGGLE: u32 = 0x8000 + 42;
 
 /// Subclass WNDPROC that intercepts WM_HOTKEY_TOGGLE messages.
-#[cfg(windows)]
 unsafe extern "system" fn overlay_subclass_proc(
     hwnd: HWND,
     msg: u32,
@@ -105,7 +90,6 @@ unsafe extern "system" fn overlay_subclass_proc(
 /// This is safe to call from the LL keyboard hook callback — it just enqueues
 /// a message, never blocks on the main thread.
 /// `show`: true to show, false to hide. `sc_hwnd_val`: SC HWND as isize (0 if unknown).
-#[cfg(windows)]
 pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
@@ -126,16 +110,10 @@ pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
     }
 }
 
-#[cfg(not(windows))]
-pub fn post_hotkey_toggle(_show: bool, _sc_hwnd_val: isize) {
-    info!("post_hotkey_toggle: no-op on non-Windows");
-}
-
 /// Helper: Get the Win32 HWND from a Tauri WebviewWindow.
 /// Tauri 2 returns HWND from the `windows` crate version it depends on (0.61),
 /// which may differ from our project's `windows` 0.58. Both define
 /// HWND(*mut c_void), so we convert via the raw pointer.
-#[cfg(windows)]
 fn get_hwnd(window: &WebviewWindow) -> Option<HWND> {
     match window.hwnd() {
         Ok(h) => Some(HWND(h.0)),
@@ -143,11 +121,10 @@ fn get_hwnd(window: &WebviewWindow) -> Option<HWND> {
     }
 }
 
-/// Initialize the overlay window with WS_EX_TOOLWINDOW style on Windows.
+/// Initialize the overlay window with WS_EX_TOOLWINDOW style.
 /// Also installs a WNDPROC subclass to handle WM_HOTKEY_TOGGLE messages from
 /// the LL keyboard hook thread.
 /// Call this after the app is ready.
-#[cfg(windows)]
 pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     let hwnd = match get_hwnd(window) {
         Some(h) => h,
@@ -180,13 +157,7 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     info!("Overlay window initialized with WS_EX_TOOLWINDOW + subclass WNDPROC");
 }
 
-#[cfg(not(windows))]
-pub fn init_overlay_window(_window: &tauri::WebviewWindow, _app: &AppHandle) {
-    info!("init_overlay_window: no-op on non-Windows");
-}
-
 /// Show the overlay window, stealing focus from SC.
-#[cfg(windows)]
 pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
     use tauri::Manager;
 
@@ -224,19 +195,7 @@ pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
     info!("Overlay shown");
 }
 
-#[cfg(not(windows))]
-pub fn show_overlay(app: &AppHandle, _sc_hwnd: ()) {
-    use tauri::Manager;
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-    let _ = app.emit("overlay-shown", ());
-    info!("show_overlay: basic show on non-Windows");
-}
-
 /// Hide the overlay and return focus to SC.
-#[cfg(windows)]
 pub fn hide_overlay(app: &AppHandle, sc_hwnd_val: isize) {
     use tauri::Manager;
 
@@ -260,17 +219,7 @@ pub fn hide_overlay(app: &AppHandle, sc_hwnd_val: isize) {
     info!("Overlay hidden, focus returned to SC");
 }
 
-#[cfg(not(windows))]
-pub fn hide_overlay(app: &AppHandle, _sc_hwnd: ()) {
-    use tauri::Manager;
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.hide();
-    }
-    info!("hide_overlay: basic hide on non-Windows");
-}
-
 /// Position and resize the overlay to match the SC window geometry.
-#[cfg(windows)]
 pub fn set_window_geometry(app: &AppHandle, x: i32, y: i32, w: u32, h: u32) {
     use tauri::Manager;
 
@@ -299,21 +248,8 @@ pub fn set_window_geometry(app: &AppHandle, x: i32, y: i32, w: u32, h: u32) {
     info!("Overlay geometry set to {}x{} at ({}, {})", w, h, x, y);
 }
 
-#[cfg(not(windows))]
-pub fn set_window_geometry(app: &AppHandle, _x: i32, _y: i32, w: u32, h: u32) {
-    use tauri::Manager;
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-            width: w,
-            height: h,
-        }));
-    }
-    info!("set_window_geometry: basic resize on non-Windows");
-}
-
 /// Get the full screen rect of the monitor that contains the given HWND.
 /// Falls back to the primary monitor if the HWND is invalid.
-#[cfg(windows)]
 pub fn get_monitor_geometry_for_window(hwnd: HWND) -> (i32, i32, u32, u32) {
     unsafe {
         let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -336,7 +272,6 @@ pub fn get_monitor_geometry_for_window(hwnd: HWND) -> (i32, i32, u32, u32) {
 }
 
 /// Get the full screen rect of the primary monitor.
-#[cfg(windows)]
 pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
     unsafe {
         let hmonitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
@@ -354,16 +289,6 @@ pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
             );
         }
     }
-    (0, 0, 1920, 1080)
-}
-
-#[cfg(not(windows))]
-pub fn get_monitor_geometry_for_window(_hwnd: ()) -> (i32, i32, u32, u32) {
-    (0, 0, 1920, 1080)
-}
-
-#[cfg(not(windows))]
-pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
     (0, 0, 1920, 1080)
 }
 

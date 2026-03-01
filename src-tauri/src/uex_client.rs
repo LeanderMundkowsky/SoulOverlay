@@ -218,22 +218,153 @@ async fn uex_get(url: &str, query: &[(&str, &str)], api_key: &str) -> Result<ser
         .map_err(|e| format!("Failed to parse UEX response: {}", e))
 }
 
-/// Search UEX for commodities/items by query string
-pub async fn search(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
+/// Extract results from a UEX API response body, applying a name filter client-side.
+fn extract_results(body: &serde_json::Value, query_lower: &str, kind_override: Option<&str>) -> Vec<UexResult> {
+    body.get("data")
+        .and_then(|d| d.as_array())
+        .map(|data| {
+            data.iter()
+                .map(|item| {
+                    let mut r = UexResult::from_json(item);
+                    if let Some(k) = kind_override {
+                        r.kind = k.to_string();
+                    }
+                    r
+                })
+                .filter(|r| r.name.to_lowercase().contains(query_lower))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Search UEX for commodities by query string
+pub async fn search_commodities(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
     let url = format!("{}/commodities", UEX_BASE_URL);
     let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
-
     let query_lower = query.to_lowercase();
+    Ok(extract_results(&body, &query_lower, Some("commodity")))
+}
+
+/// Search UEX for vehicles (ships + ground vehicles) by query string
+pub async fn search_vehicles(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/vehicles", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let query_lower = query.to_lowercase();
+
     let results = body
         .get("data")
         .and_then(|d| d.as_array())
         .map(|data| {
             data.iter()
-                .map(UexResult::from_json)
+                .map(|item| {
+                    let id = item
+                        .get("id")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v.to_string())
+                        .or_else(|| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .unwrap_or_default();
+
+                    let name = item
+                        .get("name_full")
+                        .or_else(|| item.get("name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string();
+
+                    let slug = item
+                        .get("slug")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    let kind = if item.get("is_ground_vehicle").and_then(|v| v.as_u64()).unwrap_or(0) == 1 {
+                        "ground vehicle"
+                    } else {
+                        "vehicle"
+                    };
+
+                    UexResult { id, name, kind: kind.to_string(), slug }
+                })
                 .filter(|r| r.name.to_lowercase().contains(&query_lower))
                 .collect()
         })
         .unwrap_or_default();
+
+    Ok(results)
+}
+
+/// Search UEX for items by query string
+pub async fn search_items(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/items", UEX_BASE_URL);
+    let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
+    let query_lower = query.to_lowercase();
+    Ok(extract_results(&body, &query_lower, Some("item")))
+}
+
+/// Search UEX for locations (terminals) by query string
+pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
+    let url = format!("{}/terminals", UEX_BASE_URL);
+    let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
+    let query_lower = query.to_lowercase();
+
+    let results = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|data| {
+            data.iter()
+                .map(|item| {
+                    let id = item
+                        .get("id")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v.to_string())
+                        .or_else(|| item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .unwrap_or_default();
+
+                    // Prefer displayname → fullname → name
+                    let name = item
+                        .get("displayname")
+                        .or_else(|| item.get("fullname"))
+                        .or_else(|| item.get("name"))
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| item.get("name").and_then(|v| v.as_str()))
+                        .unwrap_or("Unknown")
+                        .to_string();
+
+                    let slug = item
+                        .get("code")
+                        .or_else(|| item.get("slug"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    UexResult { id, name, kind: "location".to_string(), slug }
+                })
+                .filter(|r| r.name.to_lowercase().contains(&query_lower))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(results)
+}
+
+/// Search UEX across all entity types (commodities, vehicles, items, locations).
+/// Runs all four queries in parallel and merges results, grouped by kind.
+pub async fn search_all(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
+    let (commodities, vehicles, items, locations) = tokio::join!(
+        search_commodities(query, api_key),
+        search_vehicles(query, api_key),
+        search_items(query, api_key),
+        search_locations(query, api_key),
+    );
+
+    let mut results = Vec::new();
+    // Collect each category; ignore individual failures so a broken endpoint
+    // doesn't block the others.
+    if let Ok(mut v) = commodities { results.append(&mut v); }
+    if let Ok(mut v) = vehicles    { results.append(&mut v); }
+    if let Ok(mut v) = items       { results.append(&mut v); }
+    if let Ok(mut v) = locations   { results.append(&mut v); }
 
     Ok(results)
 }

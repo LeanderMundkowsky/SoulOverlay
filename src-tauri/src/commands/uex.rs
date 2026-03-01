@@ -9,9 +9,22 @@ pub async fn uex_search(
     api_key: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<uex_client::UexResult>, String> {
-    let cache_key = format!("search:{}", query);
+    let cache_key = format!("search:commodity:{}", query);
     uex_client::cached_fetch(&state.uex_cache, &cache_key, || {
-        uex_client::search(&query, &api_key)
+        uex_client::search_commodities(&query, &api_key)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn uex_search_all(
+    query: String,
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<uex_client::UexResult>, String> {
+    let cache_key = format!("search:all:{}", query);
+    uex_client::cached_fetch(&state.uex_cache, &cache_key, || {
+        uex_client::search_all(&query, &api_key)
     })
     .await
 }

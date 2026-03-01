@@ -6,7 +6,7 @@ import SearchResultRow from "@/components/overlay/SearchResultRow.vue";
 import { useUex, type UexResult } from "@/composables/useUex";
 
 const emit = defineEmits<{
-  (e: "select", commodity: { id: string; name: string }): void;
+  (e: "select", result: { id: string; name: string; kind: string }): void;
 }>();
 
 const query = ref("");
@@ -32,7 +32,7 @@ watch(query, (val) => {
 });
 
 function selectResult(result: UexResult) {
-  emit("select", { id: result.id, name: result.name });
+  emit("select", { id: result.id, name: result.name, kind: result.kind });
 }
 
 function onInputKeydown(e: KeyboardEvent) {
@@ -109,7 +109,7 @@ defineExpose({ focusInput });
           ref="inputEl"
           v-model="query"
           type="text"
-          placeholder="Search UEX commodities..."
+          placeholder="Search commodities, vehicles, items, locations…"
           class="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-10 py-2.5 text-white placeholder-white/30 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors text-sm"
           @keydown="onInputKeydown"
         />
@@ -155,7 +155,7 @@ defineExpose({ focusInput });
       v-else-if="!query.trim()"
       class="px-4 py-6 text-center text-white/20 text-xs select-none"
     >
-      Type to search commodities, ships, items&hellip;
+      Type to search commodities, vehicles, items, locations&hellip;
     </div>
   </div>
 </template>

@@ -40,7 +40,7 @@ export function useUex() {
 
     try {
       const apiKey = settingsStore.settings.uex_api_key;
-      results.value = await invoke<UexResult[]>("uex_search", {
+      results.value = await invoke<UexResult[]>("uex_search_all", {
         query,
         apiKey,
       });

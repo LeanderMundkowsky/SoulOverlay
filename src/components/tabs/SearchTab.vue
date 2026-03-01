@@ -8,16 +8,17 @@ defineProps<{
   scDetected: boolean;
 }>();
 
-interface Commodity {
+interface SelectedResult {
   id: string;
   name: string;
+  kind: string;
 }
 
 const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null);
-const selectedCommodity = ref<Commodity | null>(null);
+const selectedResult = ref<SelectedResult | null>(null);
 
-function onCommoditySelected(commodity: Commodity) {
-  selectedCommodity.value = commodity;
+function onResultSelected(result: SelectedResult) {
+  selectedResult.value = result;
 }
 
 function focusInput() {
@@ -39,15 +40,15 @@ defineExpose({ focusInput });
 
     <!-- Search card -->
     <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
-      <SearchBar ref="searchBarRef" @select="onCommoditySelected" />
+      <SearchBar ref="searchBarRef" @select="onResultSelected" />
     </div>
 
-    <!-- Commodity prices card -->
-    <div v-if="selectedCommodity" class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+    <!-- Commodity prices card (only for commodities) -->
+    <div v-if="selectedResult && selectedResult.kind === 'commodity'" class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
       <CommodityPanel
-        :commodity-id="selectedCommodity.id"
-        :commodity-name="selectedCommodity.name"
-        @close="selectedCommodity = null"
+        :commodity-id="selectedResult.id"
+        :commodity-name="selectedResult.name"
+        @close="selectedResult = null"
       />
     </div>
   </div>

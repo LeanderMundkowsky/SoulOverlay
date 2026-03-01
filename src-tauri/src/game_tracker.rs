@@ -1,24 +1,18 @@
 /// Game window tracker for Star Citizen.
 ///
-/// On Windows, uses a polling thread to monitor:
+/// Uses a polling thread to monitor:
 /// - SC window creation/destruction
 /// - SC window move/resize
 /// - SC window focus changes
-///
-/// On non-Windows, provides no-op stubs.
 use log::info;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
-#[cfg(windows)]
-use std::time::Instant;
-
-#[cfg(windows)]
 use windows::Win32::Foundation::HWND;
-#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
 
 /// Shared state for the game tracker.
@@ -78,8 +72,7 @@ impl GameTracker {
         Arc::clone(&self.state)
     }
 
-    /// Start the game tracker. On Windows, spawns a thread with a polling loop.
-    #[cfg(windows)]
+    /// Start the game tracker. Spawns a thread with a polling loop.
     pub fn start(&self) {
         let app = self.app.clone();
         let state = Arc::clone(&self.state);
@@ -191,13 +184,6 @@ impl GameTracker {
         });
     }
 
-    #[cfg(not(windows))]
-    pub fn start(&self) {
-        info!("GameTracker::start: no-op on non-Windows (SC detection not available)");
-        // On non-Windows (dev), just emit sc-window-found so UI works
-        let _ = self.app.emit("sc-window-found", ());
-    }
-
     pub fn stop(&self) {
         self.running.store(false, Ordering::Relaxed);
     }
@@ -212,7 +198,6 @@ impl Drop for GameTracker {
 /// Find the Star Citizen window by title only.
 /// We pass None for the class name because the SC window class is not "Star Citizen".
 /// Returns the HWND if found, None otherwise.
-#[cfg(windows)]
 fn find_sc_window() -> Option<HWND> {
     use windows::core::w;
 

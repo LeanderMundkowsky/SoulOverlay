@@ -19,7 +19,6 @@ pub struct HookHandle {
 
 impl Drop for HookHandle {
     fn drop(&mut self) {
-        #[cfg(windows)]
         unsafe {
             // Post WM_QUIT to the hook thread's message loop so it exits cleanly.
             windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW(
@@ -30,41 +29,32 @@ impl Drop for HookHandle {
             )
             .ok();
         }
-        let _ = self.thread_id; // suppress unused on non-windows
     }
 }
 
 /// Global slot for the current hook state, shared between the hook callback and
 /// the thread that owns it.  We need a static because `SetWindowsHookExW` only
 /// accepts a bare fn pointer, not a closure.
-#[cfg(windows)]
 static HOOK_STATE: std::sync::OnceLock<Arc<Mutex<HookState>>> = std::sync::OnceLock::new();
 
 /// Tracks whether the overlay is currently visible. Maintained by the hotkey
 /// handler so the LL hook callback can read it without touching Tauri APIs
 /// (which require the main thread).
 /// Starts as `false` because the overlay is hidden on launch.
-#[cfg(windows)]
 static OVERLAY_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Self-tracked modifier key states. Updated by the LL hook itself on every
 /// key event — avoids GetAsyncKeyState races when the overlay is focused.
-#[cfg(windows)]
 static MOD_CTRL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-#[cfg(windows)]
 static MOD_ALT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-#[cfg(windows)]
 static MOD_SHIFT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Target VK code stored as an atomic so the hook can fast-reject without
 /// locking HOOK_STATE. Avoids mutex contention inside the time-critical callback.
-#[cfg(windows)]
 static TARGET_VK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Required modifiers as packed bits: bit 0 = ctrl, bit 1 = alt, bit 2 = shift.
-#[cfg(windows)]
 static TARGET_MODS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-#[cfg(windows)]
 struct HookState {
     app: AppHandle,
     game_state: SharedGameState,
@@ -97,11 +87,6 @@ fn parse_hotkey(hotkey: &str) -> Option<(u32, bool, bool, bool)> {
     vk.map(|v| (v, ctrl, alt, shift))
 }
 
-// ---------------------------------------------------------------------------
-// Windows implementation
-// ---------------------------------------------------------------------------
-
-#[cfg(windows)]
 pub fn register_hotkey(
     app: &AppHandle,
     hotkey: &str,
@@ -269,38 +254,18 @@ pub fn register_hotkey(
     Ok(HookHandle { thread_id })
 }
 
-// ---------------------------------------------------------------------------
-// Non-Windows stubs
-// ---------------------------------------------------------------------------
-
-#[cfg(not(windows))]
-pub fn register_hotkey(
-    _app: &AppHandle,
-    hotkey: &str,
-    _game_state: SharedGameState,
-) -> Result<HookHandle, String> {
-    info!("register_hotkey: no-op on non-Windows (hotkey: {})", hotkey);
-    Ok(HookHandle { thread_id: 0 })
-}
-
 /// Notify the hotkey module that the overlay was hidden by means other than
 /// the hotkey (e.g. ESC key from the frontend). Keeps the OVERLAY_VISIBLE
 /// atomic in sync so the next hotkey press shows rather than double-hides.
 pub fn notify_overlay_hidden() {
-    #[cfg(windows)]
     OVERLAY_VISIBLE.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Notify the hotkey module that the overlay was shown by means other than
 /// the hotkey. Keeps the OVERLAY_VISIBLE atomic in sync.
 pub fn notify_overlay_shown() {
-    #[cfg(windows)]
     OVERLAY_VISIBLE.store(true, std::sync::atomic::Ordering::SeqCst);
 }
-
-// ---------------------------------------------------------------------------
-// Shared toggle logic (same on all platforms, guarded internally)
-// ---------------------------------------------------------------------------
 
 fn handle_hotkey_press(_app: &AppHandle, game_state: &SharedGameState, was_visible: bool) {
     // Snapshot the SC hwnd while we hold the lock, then release immediately.
