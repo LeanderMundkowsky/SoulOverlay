@@ -106,13 +106,14 @@ impl GameTracker {
             s.sc_hwnd = Some(hwnd_val);
             s.is_running = true;
 
-            if let Some((x, y, w, h)) = crate::window::get_window_geometry(hwnd) {
-                s.window_x = x;
-                s.window_y = y;
-                s.window_w = w;
-                s.window_h = h;
-                crate::window::set_window_geometry(&app, x, y, w, h);
-            }
+            // Use the monitor that contains the SC window so the overlay always
+            // fills the full display, regardless of SC's window mode.
+            let (x, y, w, h) = crate::window::get_monitor_geometry_for_window(hwnd);
+            s.window_x = x;
+            s.window_y = y;
+            s.window_w = w;
+            s.window_h = h;
+            crate::window::set_window_geometry(&app, x, y, w, h);
 
             let _ = app.emit("sc-window-found", ());
             info!("Star Citizen window found on startup");
@@ -157,33 +158,24 @@ impl GameTracker {
                         );
                     }
 
-                    // Check geometry (debounced)
+                    // Check geometry (debounced) — track which monitor SC is on
+                    // so the overlay stays fullscreen on that monitor even if SC moves.
                     if last_geometry_check.elapsed() >= geometry_interval {
                         last_geometry_check = Instant::now();
-                        if let Some((x, y, w, h)) = crate::window::get_window_geometry(hwnd) {
-                            if x != s.window_x
-                                || y != s.window_y
-                                || w != s.window_w
-                                || h != s.window_h
-                            {
-                                s.window_x = x;
-                                s.window_y = y;
-                                s.window_w = w;
-                                s.window_h = h;
+                        let (x, y, w, h) = crate::window::get_monitor_geometry_for_window(hwnd);
+                        if x != s.window_x || y != s.window_y || w != s.window_w || h != s.window_h
+                        {
+                            s.window_x = x;
+                            s.window_y = y;
+                            s.window_w = w;
+                            s.window_h = h;
 
-                                let app_for_thread = app.clone();
-                                let app_for_closure = app_for_thread.clone();
-                                // Must set window geometry on main thread
-                                let _ = app_for_thread.run_on_main_thread(move || {
-                                    crate::window::set_window_geometry(
-                                        &app_for_closure,
-                                        x,
-                                        y,
-                                        w,
-                                        h,
-                                    );
-                                });
-                            }
+                            let app_for_thread = app.clone();
+                            let app_for_closure = app_for_thread.clone();
+                            // Must set window geometry on main thread
+                            let _ = app_for_thread.run_on_main_thread(move || {
+                                crate::window::set_window_geometry(&app_for_closure, x, y, w, h);
+                            });
                         }
                     }
                 } else {
@@ -193,18 +185,17 @@ impl GameTracker {
                         s.sc_hwnd = Some(hwnd_val);
                         s.is_running = true;
 
-                        if let Some((x, y, w, h)) = crate::window::get_window_geometry(hwnd) {
-                            s.window_x = x;
-                            s.window_y = y;
-                            s.window_w = w;
-                            s.window_h = h;
+                        let (x, y, w, h) = crate::window::get_monitor_geometry_for_window(hwnd);
+                        s.window_x = x;
+                        s.window_y = y;
+                        s.window_w = w;
+                        s.window_h = h;
 
-                            let app_for_thread = app.clone();
-                            let app_for_closure = app_for_thread.clone();
-                            let _ = app_for_thread.run_on_main_thread(move || {
-                                crate::window::set_window_geometry(&app_for_closure, x, y, w, h);
-                            });
-                        }
+                        let app_for_thread = app.clone();
+                        let app_for_closure = app_for_thread.clone();
+                        let _ = app_for_thread.run_on_main_thread(move || {
+                            crate::window::set_window_geometry(&app_for_closure, x, y, w, h);
+                        });
 
                         let _ = app.emit("sc-window-found", ());
                         info!("Star Citizen window found");
@@ -232,15 +223,17 @@ impl Drop for GameTracker {
     }
 }
 
-/// Find the Star Citizen window by class name and title.
+/// Find the Star Citizen window by title only.
+/// We pass None for the class name because the SC window class is not "Star Citizen".
 /// Returns the HWND if found, None otherwise.
 #[cfg(windows)]
 fn find_sc_window() -> Option<HWND> {
     use windows::core::w;
 
     unsafe {
-        // FindWindowW in windows 0.58 returns Result<HWND>
-        match FindWindowW(w!("Star Citizen"), w!("Star Citizen")) {
+        // First arg = class name (None = match any class), second arg = window title.
+        // Star Citizen's window title is "Star Citizen" but its class name is not.
+        match FindWindowW(None, w!("Star Citizen")) {
             Ok(hwnd) => Some(hwnd),
             Err(_) => None,
         }

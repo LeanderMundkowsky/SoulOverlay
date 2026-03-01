@@ -15,7 +15,10 @@ use tauri::WebviewWindow;
 #[cfg(windows)]
 use windows::Win32::Foundation::{BOOL, HWND, POINT, RECT};
 #[cfg(windows)]
-use windows::Win32::Graphics::Gdi::ClientToScreen;
+use windows::Win32::Graphics::Gdi::{
+    ClientToScreen, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
+    MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+};
 #[cfg(windows)]
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 #[cfg(windows)]
@@ -320,6 +323,62 @@ pub fn get_window_geometry(hwnd: HWND) -> Option<(i32, i32, u32, u32)> {
         }
     }
     None
+}
+
+/// Get the full screen rect of the monitor that contains the given HWND.
+/// Falls back to the primary monitor if the HWND is invalid.
+#[cfg(windows)]
+pub fn get_monitor_geometry_for_window(hwnd: HWND) -> (i32, i32, u32, u32) {
+    unsafe {
+        let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmonitor, &mut info).as_bool() {
+            let r = info.rcMonitor;
+            return (
+                r.left,
+                r.top,
+                (r.right - r.left) as u32,
+                (r.bottom - r.top) as u32,
+            );
+        }
+    }
+    // Last resort: primary monitor at origin with common resolution
+    (0, 0, 1920, 1080)
+}
+
+/// Get the full screen rect of the primary monitor.
+#[cfg(windows)]
+pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
+    unsafe {
+        let hmonitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmonitor, &mut info).as_bool() {
+            let r = info.rcMonitor;
+            return (
+                r.left,
+                r.top,
+                (r.right - r.left) as u32,
+                (r.bottom - r.top) as u32,
+            );
+        }
+    }
+    (0, 0, 1920, 1080)
+}
+
+#[cfg(not(windows))]
+pub fn get_monitor_geometry_for_window(_hwnd: ()) -> (i32, i32, u32, u32) {
+    (0, 0, 1920, 1080)
+}
+
+#[cfg(not(windows))]
+pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
+    (0, 0, 1920, 1080)
 }
 
 /// Check if the overlay window is currently visible.

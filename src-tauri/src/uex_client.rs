@@ -47,6 +47,11 @@ impl UexCache {
         self.entries
             .retain(|_, entry| entry.inserted_at.elapsed().as_secs() < self.ttl_secs);
     }
+
+    /// Number of entries currently in the cache (including expired).
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 }
 
 /// A search result from UEX API

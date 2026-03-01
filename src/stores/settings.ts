@@ -13,7 +13,7 @@ const defaultSettings: Settings = {
   hotkey: "Alt+Shift+S",
   uex_api_key: "",
   log_path: null,
-  overlay_opacity: 1.0,
+  overlay_opacity: 0.85,
 };
 
 export const useSettingsStore = defineStore("settings", () => {

@@ -58,7 +58,7 @@ function resetDefaults() {
     hotkey: "Alt+Shift+S",
     uex_api_key: "",
     log_path: null,
-    overlay_opacity: 1.0,
+    overlay_opacity: 0.85,
   };
 }
 
@@ -148,7 +148,7 @@ function stopCapture() {
 </script>
 
 <template>
-  <div class="bg-gray-900/98 border-l border-white/10 flex flex-col overflow-y-auto">
+  <div class="bg-[#111318] border-l border-white/10 flex flex-col overflow-y-auto">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
       <h2 class="text-white font-semibold text-base">Settings</h2>
@@ -218,16 +218,17 @@ function stopCapture() {
       <!-- Overlay Opacity -->
       <div>
         <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
-          Overlay Opacity: {{ Math.round(form.overlay_opacity * 100) }}%
+          Background Opacity: {{ Math.round(form.overlay_opacity * 100) }}%
         </label>
         <input
           v-model.number="form.overlay_opacity"
           type="range"
-          min="0.1"
+          min="0"
           max="1"
           step="0.05"
           class="w-full accent-blue-500"
         />
+        <p class="text-white/30 text-xs mt-1">Controls background dimming only — UI is always fully visible</p>
       </div>
 
       <!-- Error -->

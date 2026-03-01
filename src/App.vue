@@ -2,8 +2,10 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import TabBar from "./components/overlay/TabBar.vue";
 import SearchBar from "./components/overlay/SearchBar.vue";
 import CommodityPanel from "./components/overlay/CommodityPanel.vue";
+import DebugPanel from "./components/overlay/DebugPanel.vue";
 import StatusBar from "./components/overlay/StatusBar.vue";
 import SettingsPanel from "./components/settings/SettingsPanel.vue";
 import { useGameStore } from "./stores/game";
@@ -12,18 +14,16 @@ import { useLogWatcher } from "./composables/useLogWatcher";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
+const activeTab = ref("search");
 const showSettings = ref(false);
+const showDebug = ref(false);
 const scDetected = ref(false);
 const selectedCommodity = ref<{ id: string; name: string } | null>(null);
 
-// Initialize log watcher composable
 useLogWatcher();
 
-// Load settings on mount
 onMounted(async () => {
   await settingsStore.loadSettings();
-
-  // Listen for ESC key to hide overlay
   document.addEventListener("keydown", handleKeyDown);
 });
 
@@ -35,22 +35,20 @@ function handleKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     if (showSettings.value) {
       showSettings.value = false;
+    } else if (showDebug.value) {
+      showDebug.value = false;
     } else {
       invoke("hide_overlay_cmd");
     }
     return;
   }
 
-  // Fallback hotkey handling: when the overlay is focused, the LL keyboard
-  // hook may not fire (Windows limitation). Match the configured hotkey here
-  // and hide the overlay from the frontend side.
   if (matchesHotkey(e, settingsStore.settings.hotkey)) {
     e.preventDefault();
     invoke("hide_overlay_cmd");
   }
 }
 
-/** Check if a KeyboardEvent matches a hotkey string like "F4" or "Alt+Shift+S". */
 function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
   const parts = hotkey.split("+").map((p) => p.trim().toLowerCase());
   const key = parts[parts.length - 1];
@@ -62,15 +60,11 @@ function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
     return false;
   }
 
-  // Use e.code (physical key) to avoid locale-dependent e.key values
-  // when modifiers are held (e.g. Alt+Shift+S → "Í" on some layouts).
   const eventKey = codeToToken(e.code);
   return eventKey === key;
 }
 
-/** Map KeyboardEvent.code to the lowercase token format used in hotkey strings. */
 function codeToToken(code: string): string {
-  // "KeyA" → "a", "Digit0" → "0", "F4" → "f4"
   const letterMatch = code.match(/^Key([A-Z])$/);
   if (letterMatch) return letterMatch[1].toLowerCase();
 
@@ -98,7 +92,6 @@ function codeToToken(code: string): string {
   return map[code] ?? code.toLowerCase();
 }
 
-// Listen for SC window events
 let unlistenFound: (() => void) | null = null;
 let unlistenLost: (() => void) | null = null;
 let unlistenOpenSettings: (() => void) | null = null;
@@ -117,6 +110,14 @@ onMounted(async () => {
   unlistenOpenSettings = await listen("open-settings", () => {
     showSettings.value = true;
   });
+
+  try {
+    const gs = await invoke<{ sc_detected: boolean }>("get_game_state");
+    scDetected.value = gs.sc_detected;
+    gameStore.scConnected = gs.sc_detected;
+  } catch (e) {
+    console.error("get_game_state failed:", e);
+  }
 });
 
 onUnmounted(() => {
@@ -132,83 +133,97 @@ function onCommoditySelected(commodity: { id: string; name: string }) {
 function closeCommodityPanel() {
   selectedCommodity.value = null;
 }
+
+function onTabClose() {
+  invoke("hide_overlay_cmd");
+}
+
+function onToggleSettings() {
+  showSettings.value = !showSettings.value;
+  if (showSettings.value) showDebug.value = false;
+}
+
+function onToggleDebug() {
+  showDebug.value = !showDebug.value;
+  if (showDebug.value) showSettings.value = false;
+}
 </script>
 
 <template>
   <div class="w-full h-full">
-    <!-- Main overlay background -->
-    <div class="w-full h-full flex flex-col" :style="{ backgroundColor: `rgba(0,0,0,${settingsStore.settings.overlay_opacity})` }">
-      <!-- Top bar -->
-      <div class="flex-shrink-0 flex items-center justify-between px-6 py-3 bg-black/40 border-b border-white/10">
-        <div class="flex items-center gap-3">
-          <h1 class="text-white font-bold text-lg tracking-wide">SoulOverlay</h1>
-          <div
-            class="flex items-center gap-1.5 text-xs"
-            :class="scDetected ? 'text-green-400' : 'text-yellow-400'"
-          >
-            <span
-              class="w-2 h-2 rounded-full"
-              :class="scDetected ? 'bg-green-400' : 'bg-yellow-400'"
-            ></span>
-            {{ scDetected ? "Star Citizen Connected" : "Waiting for Star Citizen..." }}
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="showSettings = !showSettings"
-            class="text-white/60 hover:text-white transition-colors p-2 rounded hover:bg-white/10"
-            title="Settings"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-            </svg>
-          </button>
-          <button
-            @click="invoke('hide_overlay_cmd')"
-            class="text-white/60 hover:text-white transition-colors p-2 rounded hover:bg-white/10"
-            title="Close overlay (ESC)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-      </div>
+    <!-- Background dimming layer — opacity-controlled, sits behind all UI -->
+    <div
+      class="absolute inset-0 pointer-events-none"
+      :style="{ backgroundColor: `rgba(0,0,0,${settingsStore.settings.overlay_opacity})` }"
+    ></div>
 
-      <!-- Content area -->
+    <!-- UI layer — always full opacity, positioned above the background -->
+    <div class="relative w-full h-full flex flex-col">
+      <!-- Tab bar -->
+      <TabBar
+        :active-tab="activeTab"
+        :sc-detected="scDetected"
+        @update:active-tab="(t) => { activeTab = t; selectedCommodity = null; }"
+        @close="onTabClose"
+        @toggle-settings="onToggleSettings"
+        @toggle-debug="onToggleDebug"
+      />
+
+      <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
-        <!-- Main content -->
-        <div class="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
-          <!-- First-run notice -->
-          <div
-            v-if="!scDetected"
-            class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-yellow-200 text-sm"
-          >
-            <p class="font-semibold mb-1">Star Citizen not detected</p>
-            <p class="text-yellow-200/70">
-              Make sure Star Citizen is running in <strong>Borderless Windowed</strong> mode.
-              The overlay will automatically detect the game window.
-            </p>
+        <!-- Tab content area -->
+        <div class="flex-1 overflow-y-auto">
+
+          <!-- SEARCH tab -->
+          <div v-if="activeTab === 'search'" class="p-6 grid grid-cols-1 gap-4 max-w-4xl mx-auto w-full">
+            <!-- SC not detected notice — pill style -->
+            <div
+              v-if="!scDetected"
+              class="flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 text-yellow-200 text-sm"
+            >
+              <svg class="w-4 h-4 mt-0.5 flex-shrink-0 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <div>
+                <p class="font-semibold">Star Citizen not detected</p>
+                <p class="text-yellow-200/70 text-xs mt-0.5">
+                  Make sure Star Citizen is running in <strong>Borderless Windowed</strong> mode.
+                </p>
+              </div>
+            </div>
+
+            <!-- Search card -->
+            <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-visible">
+              <SearchBar @select="onCommoditySelected" />
+            </div>
+
+            <!-- Commodity prices card -->
+            <div v-if="selectedCommodity" class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+              <CommodityPanel
+                :commodity-id="selectedCommodity.id"
+                :commodity-name="selectedCommodity.name"
+                @close="closeCommodityPanel"
+              />
+            </div>
           </div>
 
-          <!-- Search -->
-          <SearchBar @select="onCommoditySelected" />
-
-          <!-- Commodity prices -->
-          <CommodityPanel
-            v-if="selectedCommodity"
-            :commodity-id="selectedCommodity.id"
-            :commodity-name="selectedCommodity.name"
-            @close="closeCommodityPanel"
-          />
-
-          <!-- Spacer -->
-          <div class="flex-1"></div>
+          <!-- Placeholder tabs -->
+          <div v-else class="p-6 max-w-4xl mx-auto w-full">
+            <div class="bg-[#1a1d24] border border-white/10 rounded-xl flex flex-col items-center justify-center py-16 gap-3 text-white/20 select-none">
+              <svg class="w-10 h-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <p class="text-sm uppercase tracking-widest font-semibold">Coming soon</p>
+              <p class="text-xs">This tab will be implemented in a future update.</p>
+            </div>
+          </div>
         </div>
 
-        <!-- Settings panel (slide in from right, inside content area) -->
+        <!-- Settings panel (slide in from right) -->
         <Transition name="slide">
           <SettingsPanel
             v-if="showSettings"
@@ -216,10 +231,19 @@ function closeCommodityPanel() {
             class="w-96 flex-shrink-0"
           />
         </Transition>
+
+        <!-- Debug panel (slide in from right) -->
+        <Transition name="slide">
+          <DebugPanel
+            v-if="showDebug"
+            @close="showDebug = false"
+            class="w-72 flex-shrink-0"
+          />
+        </Transition>
       </div>
 
       <!-- Status bar -->
-      <StatusBar />
+      <StatusBar :sc-detected="scDetected" @toggle-debug="onToggleDebug" />
     </div>
   </div>
 </template>
@@ -231,7 +255,7 @@ function closeCommodityPanel() {
 }
 .slide-enter-from,
 .slide-leave-to {
-  margin-right: -384px; /* -w-96 */
+  margin-right: -384px;
 }
 .slide-enter-to,
 .slide-leave-from {
