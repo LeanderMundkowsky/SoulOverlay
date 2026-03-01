@@ -1,6 +1,7 @@
 mod app_setup;
 mod cache_store;
 mod commands;
+pub mod config;
 mod database;
 mod game_tracker;
 mod hotkey;
@@ -19,10 +20,20 @@ use state::AppState;
 use std::sync::Mutex;
 
 pub fn run() {
-    logging::setup();
+    // 1. Resolve all paths first (creates data dir)
+    let paths = match config::AppPaths::init() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[FATAL] Failed to initialize paths: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    // Initialize SQLite database
-    let db_conn = match database::init() {
+    // 2. Set up logging (needs data dir to exist)
+    logging::setup(&paths.log_file);
+
+    // 3. Initialize SQLite database
+    let db_conn = match database::init(&paths.db_file) {
         Ok(conn) => conn,
         Err(e) => {
             error!("Failed to initialize database: {}", e);
@@ -36,6 +47,7 @@ pub fn run() {
     ));
 
     let app_state = AppState {
+        paths,
         game_tracker: Mutex::new(None),
         game_state: game_state.clone(),
         log_watcher: Mutex::new(None),
@@ -45,7 +57,6 @@ pub fn run() {
     };
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
             // On second instance, show the overlay

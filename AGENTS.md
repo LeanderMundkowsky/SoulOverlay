@@ -56,12 +56,13 @@ src/                                 # Vue 3 + TypeScript frontend
 src-tauri/src/                       # Rust backend
 ├── lib.rs                           # Module declarations + Tauri builder + run()
 ├── main.rs                          # Entry point — calls lib::run()
-├── state.rs                         # AppState struct (all Mutex-wrapped fields)
+├── config.rs                        # AppPaths: centralized path resolution + settings I/O
+├── state.rs                         # AppState struct (all Mutex-wrapped fields + AppPaths)
 ├── app_setup.rs                     # .setup() initialization sequence + background prefetch
 ├── settings.rs                      # Settings struct (pure serde data)
 ├── database.rs                      # SQLite connection init, WAL mode, schema migrations
 ├── cache_store.rs                   # CacheStore: per-collection TTL, in-memory HashMap + SQLite persistence
-├── logging.rs                       # fern dual-logger setup (stderr + file)
+├── logging.rs                       # fern dual-logger setup (stderr + file, path from config)
 ├── platform.rs                      # HWND <-> isize helpers (breaks circular deps)
 ├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry
 ├── game_tracker.rs                  # SC window polling thread, SharedGameState
@@ -130,7 +131,33 @@ green-400 success, red-400 errors, yellow-400 warnings.
 Never apply CSS `opacity` to the overlay root div — only to the background layer.
 
 **Pinia**: Setup Store pattern exclusively. Export interfaces from store files.
-No `$patch`, no Options mutations. Persistence via `tauri-plugin-store`.
+No `$patch`, no Options mutations. Settings persisted via Rust backend (`invoke`).
+
+## Path Configuration
+
+All application files live under a single directory: `%APPDATA%\SoulOverlay\`.
+Path resolution is centralized in `config.rs` via the `AppPaths` struct — no other
+module should resolve `APPDATA` or hard-code file paths.
+
+| File                | Path                                          | Purpose                    |
+|---------------------|-----------------------------------------------|----------------------------|
+| `soul-overlay.log`  | `%APPDATA%\SoulOverlay\soul-overlay.log`      | App log (overwritten each launch) |
+| `soul_overlay.db`   | `%APPDATA%\SoulOverlay\soul_overlay.db`       | SQLite cache database      |
+| `settings.json`     | `%APPDATA%\SoulOverlay\settings.json`         | User settings (plain JSON) |
+
+**Initialization order** in `lib::run()`:
+1. `AppPaths::init()` — resolves all paths, creates data directory
+2. `logging::setup(&paths.log_file)` — sets up fern loggers
+3. `database::init(&paths.db_file)` — opens SQLite, runs migrations
+4. Build `AppState` (includes `paths`, `cache`, `current_settings`, etc.)
+5. Tauri builder `.manage(app_state)` + `.setup(app_setup::initialize)`
+
+**Settings I/O**: `AppPaths` provides `load_settings()` and `save_settings()` methods
+that read/write `settings.json` as plain JSON. No `tauri-plugin-store` dependency —
+settings are stored as a direct `serde_json` serialization of the `Settings` struct.
+
+**SC game log**: The Star Citizen game log path (`game.log`) is resolved separately
+in `log_watcher::default_log_path()` since it lives outside the app data directory.
 
 ## Cache / Database Architecture
 

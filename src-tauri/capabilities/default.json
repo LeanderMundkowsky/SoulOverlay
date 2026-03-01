@@ -4,18 +4,6 @@
   "description": "Main window capabilities",
   "windows": ["overlay"],
   "permissions": [
-    "core:default",
-    "store:allow-get",
-    "store:allow-set",
-    "store:allow-save",
-    "store:allow-load",
-    "store:allow-keys",
-    "store:allow-entries",
-    "store:allow-length",
-    "store:allow-has",
-    "store:allow-delete",
-    "store:allow-clear",
-    "store:allow-reset",
-    "store:allow-get-store"
+    "core:default"
   ]
 }

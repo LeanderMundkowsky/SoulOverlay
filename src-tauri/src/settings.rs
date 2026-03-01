@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Application settings persisted via tauri-plugin-store
+/// Application settings persisted as JSON to `%APPDATA%\SoulOverlay\settings.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     /// Global hotkey string (e.g., "Alt+Shift+S")

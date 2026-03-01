@@ -13,8 +13,7 @@
     "vue": "^3.4",
     "pinia": "^2.1",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-global-shortcut": "^2",
-    "@tauri-apps/plugin-store": "^2"
+    "@tauri-apps/plugin-global-shortcut": "^2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

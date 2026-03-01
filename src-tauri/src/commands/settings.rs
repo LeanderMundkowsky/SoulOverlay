@@ -1,7 +1,6 @@
 use log::{error, info};
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
-use tauri_plugin_store::StoreExt;
 
 use crate::hotkey;
 use crate::log_watcher;
@@ -27,14 +26,8 @@ pub async fn save_settings(
         old
     };
 
-    // Persist to store
-    if let Ok(store) = app.store("settings.json") {
-        let _ = store.set(
-            "settings",
-            serde_json::to_value(&new_settings).unwrap_or_default(),
-        );
-        let _ = store.save();
-    }
+    // Persist to disk via AppPaths
+    state.paths.save_settings(&new_settings)?;
 
     // Side effects: re-register hotkey if changed
     if old_settings.hotkey != new_settings.hotkey {

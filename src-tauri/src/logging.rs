@@ -1,9 +1,9 @@
-/// Set up logging to both stderr and a log file in %APPDATA%/SoulOverlay/.
-/// The log file is rotated on each launch (overwritten, not appended) to keep
-/// it at a reasonable size. Falls back to stderr-only if the file can't be created.
-pub fn setup() {
-    use std::fs;
+use std::path::Path;
 
+/// Set up logging to both stderr and a log file.
+/// The log file is overwritten on each launch (not appended) to keep
+/// it at a reasonable size. Falls back to stderr-only if the file can't be created.
+pub fn setup(log_file: &Path) {
     let log_level = log::LevelFilter::Info;
 
     // Build stderr output
@@ -18,13 +18,9 @@ pub fn setup() {
         })
         .chain(std::io::stderr());
 
-    // Try to set up a file logger in %APPDATA%/SoulOverlay/
+    // Try to set up a file logger at the given path
     let file_dispatch = (|| -> Option<fern::Dispatch> {
-        let app_data = std::env::var("APPDATA").ok()?;
-        let log_dir = std::path::PathBuf::from(app_data).join("SoulOverlay");
-        fs::create_dir_all(&log_dir).ok()?;
-        let log_path = log_dir.join("soul-overlay.log");
-        let file = fern::log_file(&log_path).ok()?;
+        let file = fern::log_file(log_file).ok()?;
         Some(
             fern::Dispatch::new()
                 .format(|out, message, record| {
@@ -52,9 +48,12 @@ pub fn setup() {
     if let Some(fd) = file_dispatch {
         dispatch = dispatch.chain(fd);
         // Can't use log macros yet — logger not initialised
-        eprintln!("[INFO] File logging enabled");
+        eprintln!("[INFO] File logging enabled at {}", log_file.display());
     } else {
-        eprintln!("[WARN] Could not create log file, logging to stderr only");
+        eprintln!(
+            "[WARN] Could not create log file at {}, logging to stderr only",
+            log_file.display()
+        );
     }
 
     dispatch.apply().unwrap_or_else(|e| {

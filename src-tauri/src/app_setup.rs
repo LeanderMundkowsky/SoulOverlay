@@ -1,13 +1,11 @@
 use log::{error, info};
 use std::path::PathBuf;
 use tauri::{App, Manager};
-use tauri_plugin_store::StoreExt;
 
 use crate::commands;
 use crate::game_tracker;
 use crate::hotkey;
 use crate::log_watcher;
-use crate::settings::Settings;
 use crate::state::AppState;
 use crate::tray;
 use crate::window;
@@ -16,23 +14,14 @@ use crate::window;
 pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
 
-    // Load persisted settings
-    let settings: Settings = if let Ok(store) = handle.store("settings.json") {
-        if let Some(val) = store.get("settings") {
-            serde_json::from_value::<Settings>(val).unwrap_or_default()
-        } else {
-            Settings::default()
-        }
-    } else {
-        Settings::default()
-    };
-
-    // Update managed state with loaded settings
-    {
+    // Load persisted settings from disk via AppPaths
+    let settings = {
         let state = handle.state::<AppState>();
+        let loaded = state.paths.load_settings();
         let mut current = state.current_settings.lock().unwrap();
-        *current = settings.clone();
-    }
+        *current = loaded.clone();
+        loaded
+    };
 
     // Initialize overlay window
     if let Some(window) = app.get_webview_window("overlay") {
