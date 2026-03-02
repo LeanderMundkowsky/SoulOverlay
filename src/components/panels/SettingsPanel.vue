@@ -26,6 +26,7 @@ const form = ref<Settings>({
   cache_ttl_prices_secs: 3600,
   cache_ttl_catalog_secs: 86400,
   layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
+  font_size: 14,
 });
 
 const saving = ref(false);
@@ -66,6 +67,7 @@ function resetDefaults() {
     cache_ttl_prices_secs: 3600,
     cache_ttl_catalog_secs: 86400,
     layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
+    font_size: 14,
   };
 }
 </script>
@@ -115,6 +117,24 @@ function resetDefaults() {
 
       <!-- Opacity Slider -->
       <OpacitySlider v-model="form.overlay_opacity" />
+
+      <!-- Font Size -->
+      <SettingsField
+        label="Font Size"
+        :hint="`Base font size: ${form.font_size}px`"
+      >
+        <div class="flex items-center gap-3">
+          <input
+            v-model.number="form.font_size"
+            type="range"
+            min="11"
+            max="18"
+            step="1"
+            class="flex-1 accent-blue-500"
+          />
+          <span class="text-white/60 text-xs w-10 text-right">{{ form.font_size }}px</span>
+        </div>
+      </SettingsField>
 
       <!-- ESC closes overlay -->
       <ToggleSwitch

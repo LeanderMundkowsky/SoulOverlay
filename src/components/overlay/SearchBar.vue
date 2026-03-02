@@ -72,8 +72,7 @@ function onRowKeydown(e: KeyboardEvent, index: number, result: UexResult) {
   } else if (e.key === "Escape") {
     e.preventDefault();
     e.stopImmediatePropagation();
-    query.value = "";
-    results.value = [];
+    // First ESC: deselect row, return focus to input (keeps results visible)
     activeIndex.value = -1;
     inputEl.value?.focus();
   }

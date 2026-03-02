@@ -71,6 +71,9 @@ pub struct Settings {
     /// User-adjusted panel layout widths
     #[serde(default)]
     pub layout_widths: LayoutWidths,
+    /// Base font size in pixels (default: 14)
+    #[serde(default = "default_font_size")]
+    pub font_size: u32,
 }
 
 fn default_true() -> bool {
@@ -89,6 +92,10 @@ fn default_ttl_catalog() -> u32 {
     86400
 }
 
+fn default_font_size() -> u32 {
+    14
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -102,6 +109,7 @@ impl Default for Settings {
             cache_ttl_prices_secs: 3600,
             cache_ttl_catalog_secs: 86400,
             layout_widths: LayoutWidths::default(),
+            font_size: 14,
         }
     }
 }

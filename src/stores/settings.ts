@@ -20,6 +20,7 @@ export interface Settings {
   cache_ttl_prices_secs: number;
   cache_ttl_catalog_secs: number;
   layout_widths: LayoutWidths;
+  font_size: number;
 }
 
 const defaultSettings: Settings = {
@@ -38,6 +39,7 @@ const defaultSettings: Settings = {
     search_split_pct: 50,
     search_solo_pct: 50,
   },
+  font_size: 14,
 };
 
 export const useSettingsStore = defineStore("settings", () => {

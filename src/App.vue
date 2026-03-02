@@ -69,6 +69,10 @@ function onSettingsReset() {
 
 useLogWatcher();
 
+watch(() => settingsStore.settings.font_size, (px) => {
+  document.documentElement.style.fontSize = px + "px";
+});
+
 // Watch for details store tab-switch requests
 watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
   if (shouldSwitch) {
@@ -81,6 +85,7 @@ onMounted(async () => {
   await settingsStore.loadSettings();
   leftPanelPx.value = settingsStore.settings.layout_widths.left_panel_px;
   settingsPanelPx.value = settingsStore.settings.layout_widths.settings_panel_px;
+  document.documentElement.style.fontSize = settingsStore.settings.font_size + "px";
   await favoritesStore.loadFavorites();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);

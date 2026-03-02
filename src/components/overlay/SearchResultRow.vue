@@ -41,85 +41,73 @@ function openInDetails() {
   <div
     ref="rootEl"
     v-bind="$attrs"
-    class="group flex items-center gap-3 px-4 py-3 border-t border-white/5 transition-colors outline-none cursor-default"
+    class="group flex flex-col px-4 py-2 border-t border-white/5 transition-colors outline-none cursor-default"
     :class="isActive ? 'bg-white/8 ring-1 ring-inset ring-blue-500/30' : 'hover:bg-white/5 focus:bg-white/8'"
+    @dblclick.stop="emit('select')"
   >
-    <!-- Entity icon -->
-    <div
-      class="flex-shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center transition-colors"
-      :class="isActive ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-white/5 border-white/10 text-white/40'"
-    >
-      <IconCommodity v-if="props.result.kind === 'commodity'"     class="w-3.5 h-3.5" />
-      <IconPlane     v-else-if="props.result.kind === 'vehicle' || props.result.kind === 'ground vehicle'" class="w-3.5 h-3.5" />
-      <IconMapPin    v-else-if="props.result.kind === 'location'"  class="w-3.5 h-3.5" />
-      <IconPackage   v-else                                        class="w-3.5 h-3.5" />
+    <!-- Row 1: icon + name + kind -->
+    <div class="flex items-center gap-3">
+      <div
+        class="flex-shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center transition-colors"
+        :class="isActive ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-white/5 border-white/10 text-white/40'"
+      >
+        <IconCommodity v-if="props.result.kind === 'commodity'"     class="w-3.5 h-3.5" />
+        <IconPlane     v-else-if="props.result.kind === 'vehicle' || props.result.kind === 'ground vehicle'" class="w-3.5 h-3.5" />
+        <IconMapPin    v-else-if="props.result.kind === 'location'"  class="w-3.5 h-3.5" />
+        <IconPackage   v-else                                        class="w-3.5 h-3.5" />
+      </div>
+
+      <span class="flex-1 text-white text-sm font-medium leading-snug">{{ result.name }}</span>
+
+      <span
+        class="flex-shrink-0 text-xs uppercase tracking-widest font-medium"
+        :class="{
+          'text-blue-400/50':   result.kind === 'commodity',
+          'text-purple-400/50': result.kind === 'vehicle' || result.kind === 'ground vehicle',
+          'text-green-400/50':  result.kind === 'location',
+          'text-yellow-400/50': result.kind === 'item',
+          'text-white/25':      !['commodity','vehicle','ground vehicle','location','item'].includes(result.kind),
+        }"
+      >{{ result.kind }}</span>
     </div>
 
-    <!-- Name + kind badge -->
-    <div class="flex-1 min-w-0 flex items-center gap-2">
-      <span class="text-white text-sm font-medium truncate">{{ result.name }}</span>
-      <span class="flex-shrink-0 text-xs uppercase tracking-widest text-white/30 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
-        {{ result.kind }}
-      </span>
-    </div>
-
-    <!-- Action buttons -->
+    <!-- Row 2: action buttons — expand only when active (click/keyboard), no hover expansion -->
     <div
-      class="flex items-center gap-1 flex-shrink-0 transition-opacity duration-150"
-      :class="isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+      class="overflow-hidden transition-all duration-150"
+      :class="isActive ? 'max-h-10 mt-1.5 opacity-100' : 'max-h-0 mt-0 opacity-0'"
     >
-      <!-- Favorite toggle -->
-      <button
-        @click.stop="toggleFavorite"
-        class="p-1.5 rounded-lg transition-colors"
-        :class="favoritesStore.isFavorite(props.result.id, props.result.kind)
-          ? 'text-red-400 hover:text-red-300'
-          : 'text-white/20 hover:text-red-400'"
-        :title="favoritesStore.isFavorite(props.result.id, props.result.kind) ? 'Remove from favorites' : 'Add to favorites'"
-      >
-        <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(props.result.id, props.result.kind)" />
-      </button>
+      <div class="flex items-center gap-1 pl-10">
+        <button
+          @click.stop="toggleFavorite"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs transition-colors"
+          :class="favoritesStore.isFavorite(props.result.id, props.result.kind)
+            ? 'text-red-400 hover:text-red-300 bg-red-400/10'
+            : 'text-white/30 hover:text-red-400 hover:bg-red-400/10'"
+        >
+          <IconHeart class="w-3 h-3" :filled="favoritesStore.isFavorite(props.result.id, props.result.kind)" />
+          {{ favoritesStore.isFavorite(props.result.id, props.result.kind) ? 'Unfavorite' : 'Favorite' }}
+        </button>
 
-      <!-- Open in Details -->
-      <button
-        @click.stop="openInDetails"
-        class="p-1.5 rounded-lg text-white/20 hover:text-blue-400 transition-colors"
-        title="Open in Details tab"
-      >
-        <IconInfoCircle class="w-3.5 h-3.5" />
-      </button>
+        <button
+          @click.stop="openInDetails"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
+        >
+          <IconInfoCircle class="w-3 h-3" />
+          Details
+        </button>
 
-      <!-- View prices (commodities only) -->
-      <button
-        v-if="props.result.kind === 'commodity'"
-        @click.stop="emit('select')"
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors"
-        :class="isActive
-          ? 'bg-blue-500/20 border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
-          : 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40'"
-        title="View prices (Enter)"
-      >
-        <IconDollarSign class="w-3 h-3" />
-        Prices
-        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-xs">↵</span>
-      </button>
-
-      <!-- Generic select button for non-commodity types -->
-      <button
-        v-else
-        @click.stop="emit('select')"
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors"
-        :class="isActive
-          ? 'bg-blue-500/20 border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
-          : 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40'"
-        title="Select (Enter)"
-      >
-        <IconMapPin    v-if="props.result.kind === 'location'"  class="w-3 h-3" />
-        <IconPlane     v-else-if="props.result.kind === 'vehicle' || props.result.kind === 'ground vehicle'" class="w-3 h-3" />
-        <IconPackage   v-else                                   class="w-3 h-3" />
-        View
-        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-xs">↵</span>
-      </button>
+        <button
+          @click.stop="emit('select')"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-xs font-medium ml-auto transition-colors bg-blue-500/20 border-blue-500/40 text-blue-300 hover:bg-blue-500/30"
+        >
+          <IconDollarSign v-if="props.result.kind === 'commodity'" class="w-3 h-3" />
+          <IconMapPin     v-else-if="props.result.kind === 'location'" class="w-3 h-3" />
+          <IconPlane      v-else-if="props.result.kind === 'vehicle' || props.result.kind === 'ground vehicle'" class="w-3 h-3" />
+          <IconPackage    v-else class="w-3 h-3" />
+          {{ props.result.kind === 'commodity' ? 'Prices' : 'View' }}
+          <span class="opacity-50 font-normal">↵</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
