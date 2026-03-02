@@ -62,7 +62,7 @@ src-tauri/src/                       # Rust backend
 ├── lib.rs                           # Module declarations + Tauri builder + run()
 ├── main.rs                          # Entry point — calls lib::run()
 ├── config.rs                        # AppPaths: centralized path resolution + settings I/O
-├── state.rs                         # AppState struct (all Mutex-wrapped fields + AppPaths)
+├── state.rs                         # AppState struct (all Mutex-wrapped fields + AppPaths + UexClient)
 ├── app_setup.rs                     # .setup() initialization sequence + background prefetch
 ├── settings.rs                      # Settings struct (pure serde data)
 ├── database.rs                      # SQLite connection init, WAL mode, schema migrations
@@ -72,7 +72,15 @@ src-tauri/src/                       # Rust backend
 ├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry
 ├── game_tracker.rs                  # SC window polling thread, SharedGameState
 ├── log_watcher.rs                   # game.log tail + regex parse + Tauri event emit
-├── uex_client.rs                    # UEX HTTP client, fetch_all_* + search_* functions
+├── uex/                             # UEX Corp API client (typed deserialization from swagger spec)
+│   ├── mod.rs                       # Module declarations + public re-exports
+│   ├── client.rs                    # UexClient struct: shared reqwest::Client, generic get<T>
+│   ├── types.rs                     # App types: UexResult, PriceEntry, EntityInfo + serde helpers
+│   ├── commodities.rs               # Commodity fetch/search/info/prices + CommodityDto/CommodityPriceDto
+│   ├── vehicles.rs                  # Vehicle fetch/search/info/purchase & rental prices + VehicleDto
+│   ├── items.rs                     # Item fetch/search/info/prices + category fan-out + ItemDto
+│   ├── locations.rs                 # Terminal fetch/search + TerminalDto
+│   └── fuel.rs                      # Fuel price fetch + FuelPriceDto
 ├── tray.rs                          # System tray icon + menu
 ├── commands/                        # All #[tauri::command] functions
 │   ├── mod.rs                       # pub mod for each submodule

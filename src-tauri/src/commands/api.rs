@@ -22,7 +22,7 @@ use tauri::State;
 
 use crate::cache_store::{CacheResult, Collection};
 use crate::state::AppState;
-use crate::uex_client::{self, EntityInfo, PriceEntry, UexResult};
+use crate::uex::{self, EntityInfo, PriceEntry, UexResult};
 
 // ── Response envelope ──────────────────────────────────────────────────────
 
@@ -71,18 +71,18 @@ async fn search_cached_or_fetch(
     let key = collection.storage_key();
     match state.cache.get::<Vec<UexResult>>(&key) {
         CacheResult::Fresh(data) => {
-            Ok((uex_client::search_in_collection(&data, query), false))
+            Ok((uex::search_in_collection(&data, query), false))
         }
         CacheResult::Stale(data) => {
-            Ok((uex_client::search_in_collection(&data, query), true))
+            Ok((uex::search_in_collection(&data, query), true))
         }
         CacheResult::Missing => {
             // Fallback: direct API call for this specific query
             let results = match collection {
-                Collection::Commodities => uex_client::search_commodities(query, api_key).await?,
-                Collection::Vehicles => uex_client::search_vehicles(query, api_key).await?,
-                Collection::Items => uex_client::search_items(query, api_key).await?,
-                Collection::Locations => uex_client::search_locations(query, api_key).await?,
+                Collection::Commodities => uex::search_commodities(&state.uex, query, api_key).await?,
+                Collection::Vehicles => uex::search_vehicles(&state.uex, query, api_key).await?,
+                Collection::Items => uex::search_items(&state.uex, query, api_key).await?,
+                Collection::Locations => uex::search_locations(&state.uex, query, api_key).await?,
                 Collection::CommodityPrices
                 | Collection::RawCommodityPrices
                 | Collection::ItemPrices
@@ -257,7 +257,7 @@ pub async fn api_commodity_prices(
     }
 
     // Fetch from API
-    match uex_client::get_commodity_prices(&commodity_id, &api_key).await {
+    match uex::get_commodity_prices(&state.uex, &commodity_id, &api_key).await {
         Ok(prices) => {
             // Cache the result
             let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
@@ -308,7 +308,7 @@ pub async fn api_raw_commodity_prices(
     price_lookup(
         &commodity_id,
         Collection::RawCommodityPrices,
-        uex_client::get_raw_commodity_prices(&commodity_id, &key),
+        uex::get_raw_commodity_prices(&state.uex, &commodity_id, &key),
         &state,
     ).await
 }
@@ -326,7 +326,7 @@ pub async fn api_item_prices(
     price_lookup(
         &item_id,
         Collection::ItemPrices,
-        uex_client::get_item_prices(&item_id, &key),
+        uex::get_item_prices(&state.uex, &item_id, &key),
         &state,
     ).await
 }
@@ -344,7 +344,7 @@ pub async fn api_vehicle_purchase_prices(
     price_lookup(
         &vehicle_id,
         Collection::VehiclePurchasePrices,
-        uex_client::get_vehicle_purchase_prices(&vehicle_id, &key),
+        uex::get_vehicle_purchase_prices(&state.uex, &vehicle_id, &key),
         &state,
     ).await
 }
@@ -362,7 +362,7 @@ pub async fn api_vehicle_rental_prices(
     price_lookup(
         &vehicle_id,
         Collection::VehicleRentalPrices,
-        uex_client::get_vehicle_rental_prices(&vehicle_id, &key),
+        uex::get_vehicle_rental_prices(&state.uex, &vehicle_id, &key),
         &state,
     ).await
 }
@@ -380,7 +380,7 @@ pub async fn api_fuel_prices(
     price_lookup(
         &terminal_id,
         Collection::FuelPrices,
-        uex_client::get_fuel_prices(&terminal_id, &key),
+        uex::get_fuel_prices(&state.uex, &terminal_id, &key),
         &state,
     ).await
 }
@@ -413,8 +413,8 @@ pub async fn api_entity_info(
     let key = api_key(&state);
 
     let result = match kind.as_str() {
-        "commodity" => uex_client::get_commodity_info(&entity_id, &key).await,
-        "vehicle" | "ground vehicle" => uex_client::get_vehicle_info(&entity_id, &key).await,
+        "commodity" => uex::get_commodity_info(&state.uex, &entity_id, &key).await,
+        "vehicle" | "ground vehicle" => uex::get_vehicle_info(&state.uex, &entity_id, &key).await,
         "item" => {
             // Items require uuid; look it up from the cached items collection
             let items_key = Collection::Items.storage_key();
@@ -430,7 +430,7 @@ pub async fn api_entity_info(
             if uuid.is_empty() {
                 Err(format!("Item {} uuid not available in cache", entity_id))
             } else {
-                uex_client::get_item_info(&uuid, &key).await
+                uex::get_item_info(&state.uex, &uuid, &key).await
             }
         }
         _ => Err(format!("Entity info not supported for kind: {}", kind)),

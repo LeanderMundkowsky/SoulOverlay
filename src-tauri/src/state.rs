@@ -6,6 +6,7 @@ use crate::game_tracker;
 use crate::hotkey;
 use crate::log_watcher;
 use crate::settings::Settings;
+use crate::uex::UexClient;
 
 /// Application state managed by Tauri
 pub struct AppState {
@@ -13,6 +14,7 @@ pub struct AppState {
     pub game_tracker: Mutex<Option<game_tracker::GameTracker>>,
     pub game_state: game_tracker::SharedGameState,
     pub log_watcher: Mutex<Option<log_watcher::LogWatcher>>,
+    pub uex: UexClient,
     pub cache: Arc<CacheStore>,
     pub current_settings: Mutex<Settings>,
     /// Holds the LL keyboard hook handle. Dropping it stops the hook thread.

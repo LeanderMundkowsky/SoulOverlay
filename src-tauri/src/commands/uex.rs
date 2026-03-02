@@ -2,23 +2,23 @@ use tauri::State;
 
 use crate::cache_store::{CacheResult, Collection};
 use crate::state::AppState;
-use crate::uex_client;
+use crate::uex;
 
 #[tauri::command]
 pub async fn uex_search(
     query: String,
     api_key: String,
     state: State<'_, AppState>,
-) -> Result<Vec<uex_client::UexResult>, String> {
+) -> Result<Vec<uex::UexResult>, String> {
     // Try cache first
     let key = Collection::Commodities.storage_key();
-    match state.cache.get::<Vec<uex_client::UexResult>>(&key) {
+    match state.cache.get::<Vec<uex::UexResult>>(&key) {
         CacheResult::Fresh(data) | CacheResult::Stale(data) => {
-            Ok(uex_client::search_in_collection(&data, &query))
+            Ok(uex::search_in_collection(&data, &query))
         }
         CacheResult::Missing => {
             // Fallback to direct API call
-            uex_client::search_commodities(&query, &api_key).await
+            uex::search_commodities(&state.uex, &query, &api_key).await
         }
     }
 }
@@ -28,7 +28,7 @@ pub async fn uex_search_all(
     query: String,
     api_key: String,
     state: State<'_, AppState>,
-) -> Result<Vec<uex_client::UexResult>, String> {
+) -> Result<Vec<uex::UexResult>, String> {
     let mut results = Vec::new();
 
     let collections = [
@@ -40,18 +40,18 @@ pub async fn uex_search_all(
 
     for collection in &collections {
         let key = collection.storage_key();
-        match state.cache.get::<Vec<uex_client::UexResult>>(&key) {
+        match state.cache.get::<Vec<uex::UexResult>>(&key) {
             CacheResult::Fresh(data) | CacheResult::Stale(data) => {
-                let mut filtered = uex_client::search_in_collection(&data, &query);
+                let mut filtered = uex::search_in_collection(&data, &query);
                 results.append(&mut filtered);
             }
             CacheResult::Missing => {
                 // Fallback to direct API call for this collection
                 let fetched = match collection {
-                    Collection::Commodities => uex_client::search_commodities(&query, &api_key).await,
-                    Collection::Vehicles => uex_client::search_vehicles(&query, &api_key).await,
-                    Collection::Items => uex_client::search_items(&query, &api_key).await,
-                    Collection::Locations => uex_client::search_locations(&query, &api_key).await,
+                    Collection::Commodities => uex::search_commodities(&state.uex, &query, &api_key).await,
+                    Collection::Vehicles => uex::search_vehicles(&state.uex, &query, &api_key).await,
+                    Collection::Items => uex::search_items(&state.uex, &query, &api_key).await,
+                    Collection::Locations => uex::search_locations(&state.uex, &query, &api_key).await,
                     Collection::CommodityPrices
                     | Collection::RawCommodityPrices
                     | Collection::ItemPrices
@@ -74,11 +74,11 @@ pub async fn uex_prices(
     commodity: String,
     api_key: String,
     state: State<'_, AppState>,
-) -> Result<Vec<uex_client::PriceEntry>, String> {
+) -> Result<Vec<uex::PriceEntry>, String> {
     let cache_key = Collection::CommodityPrices.storage_key_with_id(&commodity);
 
     // Check cache first
-    match state.cache.get::<Vec<uex_client::PriceEntry>>(&cache_key) {
+    match state.cache.get::<Vec<uex::PriceEntry>>(&cache_key) {
         CacheResult::Fresh(prices) | CacheResult::Stale(prices) => {
             return Ok(prices);
         }
@@ -86,7 +86,7 @@ pub async fn uex_prices(
     }
 
     // Fetch from API and cache
-    let prices = uex_client::get_commodity_prices(&commodity, &api_key).await?;
+    let prices = uex::get_commodity_prices(&state.uex, &commodity, &api_key).await?;
     let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
     let _ = state.cache.put(&cache_key, ttl, &prices);
     Ok(prices)

@@ -1,0 +1,229 @@
+use serde::Deserialize;
+
+use super::client::UexClient;
+use super::types::{
+    deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string,
+    deserialize_positive_f64, location_string, timestamp_string, EntityInfo, PriceEntry, UexResult,
+};
+
+// ── API DTOs ───────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub(crate) struct CommodityDto {
+    #[serde(deserialize_with = "deserialize_flexible_id")]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
+    pub wiki: Option<String>,
+    #[serde(default)]
+    pub weight_scu: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_positive_f64")]
+    pub price_buy: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_positive_f64")]
+    pub price_sell: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_illegal: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_buyable: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_sellable: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_mineral: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_raw: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_refined: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_bool_flag")]
+    pub is_harvestable: Option<bool>,
+}
+
+impl From<&CommodityDto> for UexResult {
+    fn from(dto: &CommodityDto) -> Self {
+        Self {
+            id: dto.id.clone(),
+            name: dto.name.clone(),
+            kind: "commodity".to_string(),
+            slug: dto.slug.clone(),
+            uuid: String::new(),
+        }
+    }
+}
+
+impl From<&CommodityDto> for EntityInfo {
+    fn from(dto: &CommodityDto) -> Self {
+        Self {
+            id: dto.id.clone(),
+            name: dto.name.clone(),
+            kind: "commodity".to_string(),
+            slug: dto.slug.clone(),
+            code: dto.code.clone(),
+            wiki: dto.wiki.clone(),
+            commodity_kind: dto.kind.clone(),
+            weight_scu: dto.weight_scu,
+            avg_buy: dto.price_buy,
+            avg_sell: dto.price_sell,
+            is_illegal: dto.is_illegal,
+            is_buyable: dto.is_buyable,
+            is_sellable: dto.is_sellable,
+            is_mineral: dto.is_mineral,
+            is_raw: dto.is_raw,
+            is_refined: dto.is_refined,
+            is_harvestable: dto.is_harvestable,
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CommodityPriceDto {
+    #[serde(default, deserialize_with = "deserialize_flexible_id")]
+    pub id_commodity: String,
+    #[serde(default)]
+    pub commodity_name: Option<String>,
+    #[serde(default)]
+    pub star_system_name: Option<String>,
+    #[serde(default)]
+    pub planet_name: Option<String>,
+    #[serde(default)]
+    pub terminal_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_flexible_id")]
+    pub id_terminal: String,
+    #[serde(default)]
+    pub price_buy: Option<f64>,
+    #[serde(default)]
+    pub price_sell: Option<f64>,
+    #[serde(default)]
+    pub scu_buy: Option<f64>,
+    #[serde(default)]
+    pub scu_sell: Option<f64>,
+    #[serde(default)]
+    pub date_modified: Option<serde_json::Value>,
+    #[serde(default)]
+    pub date_added: Option<serde_json::Value>,
+}
+
+impl CommodityPriceDto {
+    fn to_price_entry(&self, price_type: &str) -> PriceEntry {
+        PriceEntry {
+            entity_id: self.id_commodity.clone(),
+            entity_name: self.commodity_name.clone().unwrap_or_default(),
+            price_type: price_type.to_string(),
+            location: location_string(&self.star_system_name, &self.planet_name),
+            terminal: self.terminal_name.clone().unwrap_or_else(|| "Unknown".to_string()),
+            terminal_id: self.id_terminal.clone(),
+            buy_price: self.price_buy.unwrap_or(0.0),
+            sell_price: self.price_sell.unwrap_or(0.0),
+            rent_price: 0.0,
+            scu_available: self.scu_buy.or(self.scu_sell),
+            date_updated: timestamp_string(&self.date_modified, &self.date_added),
+        }
+    }
+}
+
+// ── Public functions ───────────────────────────────────────────────────────
+
+/// Fetch ALL commodities from UEX.
+pub async fn fetch_all_commodities(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<UexResult>, String> {
+    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
+    Ok(dtos.iter().map(UexResult::from).collect())
+}
+
+/// Search UEX for commodities by query string (direct API call, no cache).
+pub async fn search_commodities(
+    client: &UexClient,
+    query: &str,
+    api_key: &str,
+) -> Result<Vec<UexResult>, String> {
+    let dtos: Vec<CommodityDto> = client
+        .get("/commodities", &[("name_filter", query)], api_key)
+        .await?;
+    let query_lower = query.to_lowercase();
+    Ok(dtos
+        .iter()
+        .map(UexResult::from)
+        .filter(|r| r.name.to_lowercase().contains(&query_lower))
+        .collect())
+}
+
+/// Fetch commodity details by id.
+pub async fn get_commodity_info(
+    client: &UexClient,
+    commodity_id: &str,
+    api_key: &str,
+) -> Result<EntityInfo, String> {
+    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
+    dtos.iter()
+        .find(|dto| dto.id == commodity_id)
+        .map(EntityInfo::from)
+        .ok_or_else(|| format!("Commodity {} not found", commodity_id))
+}
+
+/// Get prices for a specific commodity from UEX (direct API call).
+pub async fn get_commodity_prices(
+    client: &UexClient,
+    commodity_id: &str,
+    api_key: &str,
+) -> Result<Vec<PriceEntry>, String> {
+    let dtos: Vec<CommodityPriceDto> = client
+        .get(
+            "/commodities_prices",
+            &[("id_commodity", commodity_id)],
+            api_key,
+        )
+        .await?;
+    Ok(dtos.iter().map(|d| d.to_price_entry("commodity")).collect())
+}
+
+/// Get raw commodity prices for a specific commodity (direct API call).
+pub async fn get_raw_commodity_prices(
+    client: &UexClient,
+    commodity_id: &str,
+    api_key: &str,
+) -> Result<Vec<PriceEntry>, String> {
+    let dtos: Vec<CommodityPriceDto> = client
+        .get(
+            "/commodities_raw_prices",
+            &[("id_commodity", commodity_id)],
+            api_key,
+        )
+        .await?;
+    Ok(dtos
+        .iter()
+        .map(|d| d.to_price_entry("raw_commodity"))
+        .collect())
+}
+
+/// Fetch ALL commodity prices from UEX (bulk).
+pub async fn fetch_all_commodity_prices(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<PriceEntry>, String> {
+    let dtos: Vec<CommodityPriceDto> = client
+        .get("/commodities_prices_all", &[], api_key)
+        .await?;
+    Ok(dtos.iter().map(|d| d.to_price_entry("commodity")).collect())
+}
+
+/// Fetch ALL raw commodity prices from UEX (bulk).
+pub async fn fetch_all_raw_commodity_prices(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<PriceEntry>, String> {
+    let dtos: Vec<CommodityPriceDto> = client
+        .get("/commodities_raw_prices_all", &[], api_key)
+        .await?;
+    Ok(dtos
+        .iter()
+        .map(|d| d.to_price_entry("raw_commodity"))
+        .collect())
+}

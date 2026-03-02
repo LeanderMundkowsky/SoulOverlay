@@ -11,7 +11,7 @@ mod platform;
 mod settings;
 pub mod state;
 mod tray;
-mod uex_client;
+mod uex;
 mod window;
 
 use log::{error, info};
@@ -51,6 +51,7 @@ pub fn run() {
         game_tracker: Mutex::new(None),
         game_state: game_state.clone(),
         log_watcher: Mutex::new(None),
+        uex: uex::UexClient::new(),
         cache: std::sync::Arc::new(cache_store::CacheStore::new(db_conn)),
         current_settings: Mutex::new(Settings::default()),
         hotkey_handle: Mutex::new(None),

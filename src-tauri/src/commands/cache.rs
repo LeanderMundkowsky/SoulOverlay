@@ -6,8 +6,8 @@ use tauri::State;
 use crate::cache_store::{CacheStore, Collection, CollectionStatus};
 use crate::settings::Settings;
 use crate::state::AppState;
-use crate::uex_client;
-use crate::uex_client::PriceEntry;
+use crate::uex;
+use crate::uex::PriceEntry;
 
 /// Response from cache refresh operations.
 #[derive(Debug, Serialize)]
@@ -119,10 +119,11 @@ async fn refresh_collection_by_name(
 ) -> CacheRefreshResult {
     let prices_ttl = settings.cache_ttl_prices_secs as i64;
     let catalog_ttl = settings.cache_ttl_catalog_secs as i64;
+    let client = &state.uex;
 
     let result = match name {
         "commodities" => {
-            match uex_client::fetch_all_commodities(api_key).await {
+            match uex::fetch_all_commodities(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed commodities: {} entries", data.len());
                     state.cache.put(&Collection::Commodities.storage_key(), prices_ttl, &data)
@@ -131,7 +132,7 @@ async fn refresh_collection_by_name(
             }
         }
         "vehicles" => {
-            match uex_client::fetch_all_vehicles(api_key).await {
+            match uex::fetch_all_vehicles(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed vehicles: {} entries", data.len());
                     state.cache.put(&Collection::Vehicles.storage_key(), catalog_ttl, &data)
@@ -140,7 +141,7 @@ async fn refresh_collection_by_name(
             }
         }
         "items" => {
-            match uex_client::fetch_all_items(api_key).await {
+            match uex::fetch_all_items(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed items: {} entries", data.len());
                     state.cache.put(&Collection::Items.storage_key(), catalog_ttl, &data)
@@ -149,7 +150,7 @@ async fn refresh_collection_by_name(
             }
         }
         "locations" => {
-            match uex_client::fetch_all_locations(api_key).await {
+            match uex::fetch_all_locations(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed locations: {} entries", data.len());
                     state.cache.put(&Collection::Locations.storage_key(), catalog_ttl, &data)
@@ -158,7 +159,7 @@ async fn refresh_collection_by_name(
             }
         }
         "commodity_prices" => {
-            match uex_client::fetch_all_commodity_prices(api_key).await {
+            match uex::fetch_all_commodity_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed commodity prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::CommodityPrices, prices_ttl)
@@ -167,7 +168,7 @@ async fn refresh_collection_by_name(
             }
         }
         "raw_commodity_prices" => {
-            match uex_client::fetch_all_raw_commodity_prices(api_key).await {
+            match uex::fetch_all_raw_commodity_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed raw commodity prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::RawCommodityPrices, prices_ttl)
@@ -176,7 +177,7 @@ async fn refresh_collection_by_name(
             }
         }
         "item_prices" => {
-            match uex_client::fetch_all_item_prices(api_key).await {
+            match uex::fetch_all_item_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed item prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::ItemPrices, prices_ttl)
@@ -185,7 +186,7 @@ async fn refresh_collection_by_name(
             }
         }
         "vehicle_purchase_prices" => {
-            match uex_client::fetch_all_vehicle_purchase_prices(api_key).await {
+            match uex::fetch_all_vehicle_purchase_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed vehicle purchase prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, prices_ttl)
@@ -194,7 +195,7 @@ async fn refresh_collection_by_name(
             }
         }
         "vehicle_rental_prices" => {
-            match uex_client::fetch_all_vehicle_rental_prices(api_key).await {
+            match uex::fetch_all_vehicle_rental_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed vehicle rental prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, prices_ttl)
@@ -203,7 +204,7 @@ async fn refresh_collection_by_name(
             }
         }
         "fuel_prices" => {
-            match uex_client::fetch_all_fuel_prices(api_key).await {
+            match uex::fetch_all_fuel_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed fuel prices: {} rows", data.len());
                     store_prices_split(&state.cache, &data, Collection::FuelPrices, prices_ttl)
@@ -272,23 +273,24 @@ pub async fn prefetch_all(state: &AppState) {
         info!("Prefetching expired collection: {}", key);
         let api_key = settings.uex_api_key.clone();
         let cache = state.cache_arc();
+        let client = state.uex.clone();
         let coll = *collection;
         let ttl = prices_ttl;
 
         handles.push(tokio::spawn(async move {
             let key = coll.storage_key();
             let result: Result<(), String> = match key.as_str() {
-                "commodity_prices" => uex_client::fetch_all_commodity_prices(&api_key).await
+                "commodity_prices" => uex::fetch_all_commodity_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "raw_commodity_prices" => uex_client::fetch_all_raw_commodity_prices(&api_key).await
+                "raw_commodity_prices" => uex::fetch_all_raw_commodity_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched raw commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "item_prices" => uex_client::fetch_all_item_prices(&api_key).await
+                "item_prices" => uex::fetch_all_item_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched item prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "vehicle_purchase_prices" => uex_client::fetch_all_vehicle_purchase_prices(&api_key).await
+                "vehicle_purchase_prices" => uex::fetch_all_vehicle_purchase_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched vehicle purchase prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "vehicle_rental_prices" => uex_client::fetch_all_vehicle_rental_prices(&api_key).await
+                "vehicle_rental_prices" => uex::fetch_all_vehicle_rental_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched vehicle rental prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "fuel_prices" => uex_client::fetch_all_fuel_prices(&api_key).await
+                "fuel_prices" => uex::fetch_all_fuel_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched fuel prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
                 _ => Ok(()),
             };
