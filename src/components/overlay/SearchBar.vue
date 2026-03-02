@@ -123,7 +123,7 @@ defineExpose({ focusInput, stale });
     <!-- Results header (fixed, not scrollable) -->
     <div v-if="results.length > 0 && query.trim()" class="px-4 py-2 flex items-center gap-2 flex-shrink-0 border-b border-white/5">
       <span class="text-white/30 text-xs uppercase tracking-widest">Results</span>
-      <span class="bg-white/10 text-white/50 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+      <span class="bg-white/10 text-white/50 text-xs font-bold px-1.5 py-0.5 rounded-full">
         {{ total !== null && total > results.length ? `${results.length} / ${total}` : results.length }}
       </span>
     </div>

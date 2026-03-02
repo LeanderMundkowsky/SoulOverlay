@@ -70,7 +70,6 @@ function onOverlayShown() {
   if (!settingsStore.settings.reset_on_open) return;
   activeTab.value = "search";
   showSettings.value = false;
-  showDebug.value = false;
   nextTick(() => { searchTabRef.value?.focusInput(); });
 }
 
@@ -137,12 +136,10 @@ function onTabClose() {
 
 function onToggleSettings() {
   showSettings.value = !showSettings.value;
-  if (showSettings.value) showDebug.value = false;
 }
 
 function onToggleDebug() {
   showDebug.value = !showDebug.value;
-  if (showDebug.value) showSettings.value = false;
 }
 </script>
 
@@ -169,13 +166,21 @@ function onToggleDebug() {
 
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
-        <!-- Favorites panel (left side, only on Search + Details) -->
+        <!-- Left column: Favorites + Debug stacked -->
         <Transition name="slide-left">
           <div
-            v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
-            class="flex-shrink-0 py-4 pl-4"
+            v-if="showDebug || (showFavorites && (activeTab === 'search' || activeTab === 'details'))"
+            class="flex-shrink-0 flex flex-col gap-4 py-4 pl-4"
           >
-            <FavoritesPanel class="h-full" />
+            <FavoritesPanel
+              v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+              class="flex-1 min-h-0"
+            />
+            <DebugPanel
+              v-if="showDebug"
+              class="flex-1 min-h-0"
+              @close="showDebug = false"
+            />
           </div>
         </Transition>
 
@@ -196,17 +201,8 @@ function onToggleDebug() {
         <Transition name="slide">
           <SettingsPanel
             v-if="showSettings"
-            class="w-96 flex-shrink-0"
+            class="w-[28rem] flex-shrink-0"
             @close="showSettings = false"
-          />
-        </Transition>
-
-        <!-- Debug side panel -->
-        <Transition name="slide">
-          <DebugPanel
-            v-if="showDebug"
-            class="w-72 flex-shrink-0"
-            @close="showDebug = false"
           />
         </Transition>
       </div>

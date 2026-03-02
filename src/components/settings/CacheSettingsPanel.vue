@@ -78,7 +78,7 @@ function formatTtl(secs: number): string {
           <div class="flex items-center gap-2">
             <span class="text-white/80 text-sm">{{ col.display_name }}</span>
             <span
-              class="text-[10px] px-1.5 py-0.5 rounded-full"
+              class="text-xs px-1.5 py-0.5 rounded-full"
               :class="col.is_expired
                 ? 'bg-yellow-500/20 text-yellow-400'
                 : 'bg-green-500/20 text-green-400'"

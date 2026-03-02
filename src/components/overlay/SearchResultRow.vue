@@ -58,7 +58,7 @@ function openInDetails() {
     <!-- Name + kind badge -->
     <div class="flex-1 min-w-0 flex items-center gap-2">
       <span class="text-white text-sm font-medium truncate">{{ result.name }}</span>
-      <span class="flex-shrink-0 text-[10px] uppercase tracking-widest text-white/30 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+      <span class="flex-shrink-0 text-xs uppercase tracking-widest text-white/30 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
         {{ result.kind }}
       </span>
     </div>
@@ -101,7 +101,7 @@ function openInDetails() {
       >
         <IconDollarSign class="w-3 h-3" />
         Prices
-        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-[10px]">↵</span>
+        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-xs">↵</span>
       </button>
 
       <!-- Generic select button for non-commodity types -->
@@ -118,7 +118,7 @@ function openInDetails() {
         <IconPlane     v-else-if="props.result.kind === 'vehicle' || props.result.kind === 'ground vehicle'" class="w-3 h-3" />
         <IconPackage   v-else                                   class="w-3 h-3" />
         View
-        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-[10px]">↵</span>
+        <span v-if="isActive" class="ml-0.5 opacity-50 font-normal text-xs">↵</span>
       </button>
     </div>
   </div>

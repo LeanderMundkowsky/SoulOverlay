@@ -118,7 +118,7 @@ function handleTab(tab: Tab) {
         <!-- Shortcut badge -->
         <div
           v-if="tab.shortcut"
-          class="mb-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide leading-none"
+          class="mb-1.5 px-1.5 py-0.5 rounded text-xs font-bold tracking-wide leading-none"
           :class="tab.disabled ? 'bg-white/10 text-white/40' : 'bg-teal-500 text-white'"
         >
           {{ tab.shortcut }}

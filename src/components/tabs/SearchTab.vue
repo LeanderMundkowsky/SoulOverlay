@@ -50,7 +50,7 @@ defineExpose({ focusInput });
       <div
         class="flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
         :style="{
-          width: selectedResult ? '42%' : 'min(100%, 40rem)',
+          width: selectedResult ? '36%' : 'min(100%, 32rem)',
           marginLeft: selectedResult ? '0' : 'auto',
           marginRight: selectedResult ? '0' : 'auto',
           transition: 'width 0.3s ease, margin-left 0.3s ease, margin-right 0.3s ease',

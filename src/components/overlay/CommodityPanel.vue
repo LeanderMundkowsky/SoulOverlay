@@ -193,7 +193,7 @@ function formatSimplePrice(val: number): string {
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
       <div class="flex items-center gap-2 min-w-0">
-        <span class="px-1.5 py-0.5 rounded bg-white/10 text-white/70 text-[10px] font-medium uppercase tracking-wide shrink-0">{{ kindLabels[entityKind] ?? entityKind }}</span>
+        <span class="px-1.5 py-0.5 rounded bg-white/10 text-white/70 text-xs font-medium uppercase tracking-wide shrink-0">{{ kindLabels[entityKind] ?? entityKind }}</span>
         <h2 class="text-white font-semibold text-sm truncate">{{ entityName }}</h2>
       </div>
       <button @click="emit('close')" class="text-white/40 hover:text-white transition-colors shrink-0 ml-2">
@@ -233,7 +233,7 @@ function formatSimplePrice(val: number): string {
     <div v-else-if="sortedPrices.length > 0 && hasRichData" class="overflow-x-auto overflow-y-auto flex-1">
       <table class="w-full text-xs whitespace-nowrap">
         <thead>
-          <tr class="text-white/30 text-[10px] uppercase tracking-wider sticky top-0 bg-[#1a1d24] z-10">
+          <tr class="text-white/30 text-xs uppercase tracking-wider sticky top-0 bg-[#1a1d24] z-10">
             <!-- Location group -->
             <th colspan="2" class="text-left px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5">Location</th>
             <!-- Region group -->
@@ -249,7 +249,7 @@ function formatSimplePrice(val: number): string {
             <!-- Age -->
             <th class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">⏱</th>
           </tr>
-          <tr class="text-white/40 text-[10px] uppercase tracking-wider sticky top-[26px] bg-[#1a1d24] z-10 border-b border-white/10">
+          <tr class="text-white/40 text-xs uppercase tracking-wider sticky top-[26px] bg-[#1a1d24] z-10 border-b border-white/10">
             <th @click="toggleSort('terminal')" class="text-left px-2 py-1.5 cursor-pointer hover:text-white/70">Name{{ sortIndicator("terminal") }}</th>
             <th @click="toggleSort('orbit')" class="text-left px-2 py-1.5 cursor-pointer hover:text-white/70">Orbit{{ sortIndicator("orbit") }}</th>
             <th class="text-left px-2 py-1.5 border-l border-white/5">Sys</th>

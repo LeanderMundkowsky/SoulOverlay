@@ -51,7 +51,7 @@ async function removeFavorite(fav: Favorite) {
 </script>
 
 <template>
-  <div class="w-[220px] flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+  <div class="w-[280px] flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
     <!-- Header -->
     <div class="px-3 py-2 border-b border-white/10">
       <span class="text-xs font-semibold text-white/50 uppercase tracking-widest">Favorites</span>
@@ -73,11 +73,11 @@ async function removeFavorite(fav: Favorite) {
             @click="toggleGroup(group.kind)"
           >
             <span
-              class="text-[10px] text-white/30 transition-transform duration-150"
+              class="text-xs text-white/30 transition-transform duration-150"
               :class="collapsedGroups[group.kind] ? '-rotate-90' : 'rotate-0'"
             >▼</span>
-            <span class="text-[10px] uppercase tracking-widest text-white/40 font-semibold">{{ group.label }}</span>
-            <span class="text-[10px] text-white/20 ml-auto">{{ favoritesForKind(group.kind).length }}</span>
+            <span class="text-xs uppercase tracking-widest text-white/40 font-semibold">{{ group.label }}</span>
+            <span class="text-xs text-white/20 ml-auto">{{ favoritesForKind(group.kind).length }}</span>
           </div>
 
           <!-- Group items -->

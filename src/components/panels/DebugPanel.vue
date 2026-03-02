@@ -168,59 +168,58 @@ function fmtMs(ms: number): string {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0d0e11] border-l border-white/10 text-[11px] font-mono">
+  <div class="w-[220px] flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden text-xs font-mono">
     <!-- Header -->
-    <div class="flex items-center justify-between px-3 py-2 bg-[#0a0b0e] border-b border-white/10 flex-shrink-0">
+    <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+      <span class="text-xs font-sans font-semibold text-white/50 uppercase tracking-widest">Debug</span>
       <div class="flex items-center gap-2">
-        <span class="text-white/80 font-sans font-semibold text-xs">Debug</span>
-        <span class="text-white/20">·</span>
-        <span class="text-white/30">{{ lastUpdated ? formatTime(lastUpdated) : "—" }}</span>
+        <span class="text-white/20 text-xs">{{ lastUpdated ? formatTime(lastUpdated) : "—" }}</span>
+        <button @click="$emit('close')" class="text-white/30 hover:text-white/70 transition-colors">
+          <IconClose class="w-3 h-3" />
+        </button>
       </div>
-      <button @click="$emit('close')" class="text-white/40 hover:text-white transition-colors">
-        <IconClose class="w-3.5 h-3.5" />
-      </button>
     </div>
 
     <!-- Section tabs -->
     <div class="flex border-b border-white/10 flex-shrink-0">
       <button v-for="s in (['system', 'cache', 'activity'] as const)" :key="s"
         @click="activeSection = s"
-        class="flex-1 py-1.5 text-[10px] uppercase tracking-wider transition-colors"
-        :class="activeSection === s ? 'text-blue-400 border-b border-blue-400' : 'text-white/30 hover:text-white/60'">
+        class="flex-1 py-1 text-xs uppercase tracking-wider transition-colors font-sans"
+        :class="activeSection === s ? 'text-blue-400 border-b border-blue-400' : 'text-white/25 hover:text-white/50'">
         {{ s }}
       </button>
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-3 text-red-400 text-xs">{{ error }}</div>
-    <div v-else-if="!info" class="p-3 text-white/30">Loading...</div>
+    <div v-if="error" class="p-2 text-red-400 text-xs">{{ error }}</div>
+    <div v-else-if="!info" class="p-2 text-white/30 text-xs">Loading...</div>
 
     <!-- ══ SYSTEM ══════════════════════════════════════════════════════════ -->
-    <div v-else-if="activeSection === 'system'" class="flex-1 overflow-y-auto p-3 space-y-3">
+    <div v-else-if="activeSection === 'system'" class="flex-1 overflow-y-auto p-2 space-y-2.5">
 
       <!-- Game Window -->
       <div>
-        <p class="text-white/30 uppercase tracking-widest text-[9px] mb-1.5 font-sans">Game Window</p>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Game</p>
         <div class="space-y-0.5">
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Detected</span>
             <span :class="info.sc_detected ? 'text-green-400' : 'text-red-400'">{{ info.sc_detected ? "yes" : "no" }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Focused</span>
             <span :class="info.sc_focused ? 'text-green-400' : 'text-white/30'">{{ info.sc_focused ? "yes" : "no" }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">HWND</span>
-            <span class="text-white/60">{{ formatHwnd(info.sc_hwnd) }}</span>
+            <span class="text-white/55">{{ formatHwnd(info.sc_hwnd) }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Position</span>
-            <span class="text-white/60">{{ info.sc_window_x }}, {{ info.sc_window_y }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Pos</span>
+            <span class="text-white/55">{{ info.sc_window_x }}, {{ info.sc_window_y }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Size</span>
-            <span class="text-white/60">{{ info.sc_window_w }} × {{ info.sc_window_h }}</span>
+            <span class="text-white/55">{{ info.sc_window_w }}×{{ info.sc_window_h }}</span>
           </div>
         </div>
       </div>
@@ -229,23 +228,23 @@ function fmtMs(ms: number): string {
 
       <!-- Services -->
       <div>
-        <p class="text-white/30 uppercase tracking-widest text-[9px] mb-1.5 font-sans">Services</p>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Services</p>
         <div class="space-y-0.5">
-          <div class="flex justify-between">
-            <span class="text-white/40">Log Watcher</span>
-            <span :class="info.log_watcher_active ? 'text-green-400' : 'text-red-400'">{{ info.log_watcher_active ? "active" : "inactive" }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Log watcher</span>
+            <span :class="info.log_watcher_active ? 'text-green-400' : 'text-red-400'">{{ info.log_watcher_active ? "on" : "off" }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Hotkey Hook</span>
-            <span :class="info.hotkey_registered ? 'text-green-400' : 'text-red-400'">{{ info.hotkey_registered ? "registered" : "not registered" }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Hotkey</span>
+            <span :class="info.hotkey_registered ? 'text-green-400' : 'text-red-400'">{{ info.hotkey_registered ? "on" : "off" }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Cache Keys</span>
-            <span class="text-white/60">{{ info.cache_total_keys }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Cache keys</span>
+            <span class="text-white/55">{{ info.cache_total_keys }}</span>
           </div>
-          <div v-if="info.refreshing_collections.length > 0" class="flex justify-between">
+          <div v-if="info.refreshing_collections.length > 0" class="flex justify-between gap-1">
             <span class="text-white/40">Refreshing</span>
-            <span class="text-yellow-400">{{ info.refreshing_collections.join(", ") }}</span>
+            <span class="text-yellow-400 truncate text-right" :title="info.refreshing_collections.join(', ')">{{ info.refreshing_collections.length }}</span>
           </div>
         </div>
       </div>
@@ -254,21 +253,18 @@ function fmtMs(ms: number): string {
 
       <!-- Background Timer -->
       <div>
-        <p class="text-white/30 uppercase tracking-widest text-[9px] mb-1.5 font-sans">Background Timer (30s)</p>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">BG Timer (30s)</p>
         <div class="space-y-0.5">
-          <div class="flex justify-between">
-            <span class="text-white/40">Last check</span>
-            <span class="text-white/60">{{ relTime(info.last_bg_check_at) }}
-              <span v-if="info.last_bg_check_ago_secs !== null" class="text-white/30"> ({{ info.last_bg_check_ago_secs }}s)</span>
-            </span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Last</span>
+            <span class="text-white/55">{{ relTime(info.last_bg_check_at) }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Next check</span>
-            <span class="text-white/60">{{ countdown(info.next_bg_check_in_secs) }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Next</span>
+            <span class="text-white/55">{{ countdown(info.next_bg_check_in_secs) }}</span>
           </div>
-          <!-- Progress bar -->
           <div class="h-1 bg-white/10 rounded-full overflow-hidden mt-1">
-            <div class="h-full bg-blue-500/60 rounded-full transition-all duration-1000"
+            <div class="h-full bg-blue-500/50 rounded-full transition-all duration-1000"
               :style="{ width: (100 - (info.next_bg_check_in_secs / 30) * 100) + '%' }"></div>
           </div>
         </div>
@@ -278,71 +274,67 @@ function fmtMs(ms: number): string {
 
       <!-- Settings -->
       <div>
-        <p class="text-white/30 uppercase tracking-widest text-[9px] mb-1.5 font-sans">Settings</p>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Settings</p>
         <div class="space-y-0.5">
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Hotkey</span>
-            <span class="text-white/70">{{ info.hotkey }}</span>
+            <span class="text-white/60 truncate text-right" :title="info.hotkey">{{ info.hotkey }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Opacity</span>
-            <span class="text-white/60">{{ (info.overlay_opacity * 100).toFixed(0) }}%</span>
+            <span class="text-white/55">{{ (info.overlay_opacity * 100).toFixed(0) }}%</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">API Key</span>
-            <span :class="info.uex_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.uex_api_key_set ? "set" : "not set" }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">API key</span>
+            <span :class="info.uex_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.uex_api_key_set ? "set" : "unset" }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">ESC closes</span>
-            <span class="text-white/60">{{ info.esc_closes_overlay ? "yes" : "no" }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">ESC close</span>
+            <span class="text-white/55">{{ info.esc_closes_overlay ? "yes" : "no" }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Reset on open</span>
-            <span class="text-white/60">{{ info.reset_on_open ? "yes" : "no" }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Reset open</span>
+            <span class="text-white/55">{{ info.reset_on_open ? "yes" : "no" }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Max results</span>
-            <span class="text-white/60">{{ info.max_search_results }}</span>
+            <span class="text-white/55">{{ info.max_search_results }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">TTL prices</span>
-            <span class="text-white/60">{{ info.cache_ttl_prices_secs }}s</span>
+            <span class="text-white/55">{{ info.cache_ttl_prices_secs }}s</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">TTL catalog</span>
-            <span class="text-white/60">{{ info.cache_ttl_catalog_secs }}s</span>
-          </div>
-          <div class="flex justify-between min-w-0">
-            <span class="text-white/40 shrink-0">Log path</span>
-            <span class="text-white/40 truncate text-right ml-2" :title="info.log_path ?? 'default'">{{ info.log_path ?? "default" }}</span>
+            <span class="text-white/55">{{ info.cache_ttl_catalog_secs }}s</span>
           </div>
         </div>
       </div>
 
       <!-- Last User Action -->
       <div v-if="info.last_user_action">
-        <div class="border-t border-white/[0.06] mb-3"></div>
-        <p class="text-white/30 uppercase tracking-widest text-[9px] mb-1.5 font-sans">Last Price Lookup</p>
-        <div class="bg-white/[0.03] rounded p-2 space-y-0.5">
-          <div class="flex justify-between">
-            <span class="text-white/40">Entity</span>
-            <span class="text-white/70">{{ info.last_user_action.kind }} #{{ info.last_user_action.entity_id }}</span>
+        <div class="border-t border-white/[0.06] mb-2.5"></div>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Last Lookup</p>
+        <div class="bg-white/[0.04] rounded-lg p-1.5 space-y-0.5">
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Kind</span>
+            <span class="text-white/60">{{ info.last_user_action.kind }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-white/40">Collection</span>
-            <span class="text-white/60">{{ info.last_user_action.collection }}</span>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">ID</span>
+            <span class="text-white/55">#{{ info.last_user_action.entity_id }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Source</span>
             <span :class="sourceBadge(info.last_user_action.source)">{{ info.last_user_action.source }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">Rows</span>
-            <span class="text-white/60">{{ info.last_user_action.row_count }}</span>
+            <span class="text-white/55">{{ info.last_user_action.row_count }}</span>
           </div>
-          <div class="flex justify-between">
+          <div class="flex justify-between gap-1">
             <span class="text-white/40">When</span>
-            <span class="text-white/40">{{ relTime(info.last_user_action.timestamp) }}</span>
+            <span class="text-white/30">{{ relTime(info.last_user_action.timestamp) }}</span>
           </div>
         </div>
       </div>
@@ -350,62 +342,44 @@ function fmtMs(ms: number): string {
 
     <!-- ══ CACHE ═══════════════════════════════════════════════════════════ -->
     <div v-else-if="activeSection === 'cache'" class="flex-1 overflow-y-auto">
-      <table class="w-full">
-        <thead>
-          <tr class="text-[9px] uppercase tracking-wider text-white/25 sticky top-0 bg-[#0d0e11] border-b border-white/[0.06]">
-            <th class="text-left px-3 py-1.5">Collection</th>
-            <th class="text-right px-2 py-1.5">Rows</th>
-            <th class="text-right px-2 py-1.5">TTL left</th>
-            <th class="text-right px-2 py-1.5">Cached</th>
-            <th class="text-center px-2 py-1.5">St</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="c in info!.cache_collections" :key="c.key"
-            class="border-b border-white/[0.04] hover:bg-white/[0.03]">
-            <td class="px-3 py-1.5">
-              <div class="flex items-center gap-1.5">
-                <span v-if="c.is_refreshing" class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse shrink-0"></span>
-                <span v-else-if="c.is_expired" class="w-1.5 h-1.5 rounded-full bg-red-500/60 shrink-0"></span>
-                <span v-else class="w-1.5 h-1.5 rounded-full bg-green-500/60 shrink-0"></span>
-                <span class="text-white/70 truncate" :title="c.key">{{ c.display_name }}</span>
-              </div>
-            </td>
-            <td class="px-2 py-1.5 text-right text-white/50">{{ c.entry_count > 0 ? c.entry_count.toLocaleString() : "—" }}</td>
-            <td class="px-2 py-1.5 text-right" :class="ttlRemainingColor(c)">{{ ttlRemaining(c) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/30">{{ relTime(c.cached_at) }}</td>
-            <td class="px-2 py-1.5 text-center">
-              <span v-if="c.is_refreshing" class="text-yellow-400">⟳</span>
-              <span v-else-if="c.is_expired" class="text-red-400">✕</span>
-              <span v-else class="text-green-400/60">✓</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-for="c in info!.cache_collections" :key="c.key"
+        class="px-2 py-1.5 border-b border-white/[0.05] hover:bg-white/[0.03]">
+        <!-- Name + status dot -->
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <span v-if="c.is_refreshing" class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse shrink-0"></span>
+          <span v-else-if="c.is_expired" class="w-1.5 h-1.5 rounded-full bg-red-500/60 shrink-0"></span>
+          <span v-else class="w-1.5 h-1.5 rounded-full bg-green-500/60 shrink-0"></span>
+          <span class="text-white/65 truncate font-sans text-xs">{{ c.display_name }}</span>
+        </div>
+        <!-- Stats row -->
+        <div class="flex items-center justify-between text-xs pl-3">
+          <span class="text-white/30">{{ c.entry_count > 0 ? c.entry_count.toLocaleString() + " rows" : "empty" }}</span>
+          <span :class="ttlRemainingColor(c)">{{ ttlRemaining(c) }}</span>
+        </div>
+        <div class="text-white/20 text-xs pl-3">{{ relTime(c.cached_at) }}</div>
+      </div>
     </div>
 
     <!-- ══ ACTIVITY ════════════════════════════════════════════════════════ -->
     <div v-else-if="activeSection === 'activity'" class="flex-1 overflow-y-auto">
-      <div v-if="info!.fetch_log.length === 0" class="p-4 text-center text-white/30 text-xs">
-        No fetch events yet. Waiting for background prefetch...
+      <div v-if="info!.fetch_log.length === 0" class="p-3 text-center text-white/25 text-xs">
+        No events yet...
       </div>
       <div v-else class="divide-y divide-white/[0.04]">
         <div v-for="(ev, idx) in info!.fetch_log" :key="idx"
-          class="px-3 py-2 hover:bg-white/[0.03]">
-          <!-- Row 1: timestamp + trigger + status -->
-          <div class="flex items-center gap-2 mb-0.5">
-            <span class="text-white/25 shrink-0">{{ relTime(ev.timestamp) }}</span>
-            <span class="px-1 py-0.5 rounded text-[9px] font-sans" :class="triggerBadge(ev.triggered_by)">{{ ev.triggered_by }}</span>
-            <span v-if="!ev.ok" class="text-red-400 text-[9px]">FAILED</span>
-            <span v-else class="text-white/30 text-[9px]">ok</span>
-            <span class="text-white/25 text-[9px] ml-auto shrink-0">{{ fmtMs(ev.duration_ms) }}</span>
+          class="px-2 py-1.5 hover:bg-white/[0.03]">
+          <div class="flex items-center gap-1.5 mb-0.5">
+            <span class="px-1 rounded text-xs font-sans" :class="triggerBadge(ev.triggered_by)">{{ ev.triggered_by }}</span>
+            <span v-if="!ev.ok" class="text-red-400 text-xs">ERR</span>
+            <span class="text-white/25 text-xs ml-auto">{{ fmtMs(ev.duration_ms) }}</span>
           </div>
-          <!-- Row 2: collection + endpoint -->
-          <div class="text-white/60 truncate">{{ ev.collection }}</div>
-          <div class="text-white/30 truncate text-[10px]">{{ ev.endpoint }}</div>
-          <!-- Row 3: rows or error -->
-          <div v-if="ev.error" class="text-red-400/80 truncate text-[10px]">{{ ev.error }}</div>
-          <div v-else-if="ev.row_count > 0" class="text-white/25 text-[10px]">{{ ev.row_count.toLocaleString() }} rows</div>
+          <div class="text-white/55 truncate font-sans text-xs">{{ ev.collection }}</div>
+          <div class="text-white/25 truncate text-xs">{{ ev.endpoint }}</div>
+          <div class="flex items-center justify-between text-xs mt-0.5">
+            <span v-if="ev.error" class="text-red-400/70 truncate">{{ ev.error }}</span>
+            <span v-else class="text-white/20">{{ ev.row_count > 0 ? ev.row_count.toLocaleString() + " rows" : "" }}</span>
+            <span class="text-white/20 shrink-0">{{ relTime(ev.timestamp) }}</span>
+          </div>
         </div>
       </div>
     </div>
