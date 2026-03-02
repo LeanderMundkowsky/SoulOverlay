@@ -233,6 +233,14 @@ fn has_rich_data(prices: &[PriceEntry]) -> bool {
         .any(|p| !p.orbit.is_empty() || p.price_min > 0.0 || p.scu_min > 0.0)
 }
 
+/// Returns true if any entry has real location data (not the "Unknown" fallback).
+/// Bulk `_all` endpoints omit `star_system_name`/`planet_name`, producing "Unknown".
+fn has_location_data(prices: &[PriceEntry]) -> bool {
+    prices
+        .iter()
+        .any(|p| !p.location.is_empty() && p.location != "Unknown")
+}
+
 /// Fetch buy/sell prices for a commodity by its UEX ID.
 /// Uses per-commodity cache key (e.g. `commodity_prices:42`).
 #[tauri::command]
@@ -277,6 +285,7 @@ pub async fn api_commodity_prices(
 // ── Generic price lookup helper ───────────────────────────────────────────
 
 /// Lookup prices from cache, or live-fetch if stale/missing.
+/// Skips cached data that lacks location info (e.g. from bulk `_all` endpoints).
 async fn price_lookup(
     entity_id: &str,
     collection: Collection,
@@ -286,9 +295,9 @@ async fn price_lookup(
     let cache_key = collection.storage_key_with_id(entity_id);
 
     match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) => return Ok(ApiResponse::ok(prices)),
-        CacheResult::Stale(prices) => return Ok(ApiResponse::ok_stale(prices)),
-        CacheResult::Missing => {}
+        CacheResult::Fresh(prices) if has_location_data(&prices) => return Ok(ApiResponse::ok(prices)),
+        CacheResult::Stale(prices) if has_location_data(&prices) => return Ok(ApiResponse::ok_stale(prices)),
+        _ => {}
     }
 
     match fetch_fn.await {
