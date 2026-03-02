@@ -4,6 +4,10 @@ import HotkeyCapture from "@/components/settings/HotkeyCapture.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import { useSettingsStore, type Settings } from "@/stores/settings";
 
+const props = defineProps<{
+  widthPx: number;
+}>();
+
 const emit = defineEmits<{
   (e: "close"): void;
 }>();
@@ -49,7 +53,6 @@ async function handleSave() {
     saveSuccess.value = true;
     setTimeout(() => {
       saveSuccess.value = false;
-      emit("close");
     }, 800);
   } catch (e) {
     saveError.value = String(e);
@@ -63,13 +66,13 @@ async function handleSave() {
   <Teleport to="body">
     <!-- Backdrop -->
     <div
-      class="fixed inset-0 z-40 bg-black/60 flex items-center justify-center"
-      @mousedown.self="emit('close')"
+      class="fixed inset-0 z-40 bg-red-600/60 flex items-center justify-center"
+      :style="{ paddingRight: props.widthPx + 'px' }"
     >
-      <!-- Modal box: 70 % of viewport -->
+      <!-- Modal box -->
       <div
         class="bg-[#111318] border border-white/10 rounded-xl flex flex-col overflow-hidden shadow-2xl"
-        style="width: 70%; height: 70%;"
+        :style="{ minWidth:`300px`, width: `30%`, height: '70%' }"
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-3 border-b border-white/10 flex-shrink-0">

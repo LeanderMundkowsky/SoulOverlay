@@ -124,6 +124,9 @@ function onOverlayShown() {
 function blockBrowserShortcuts(e: KeyboardEvent) {
   const ctrl = e.ctrlKey || e.metaKey;
 
+  // In dev mode let Ctrl+Shift+I through for WebView2 devtools.
+  if (import.meta.env.DEV && ctrl && e.shiftKey && e.code === "KeyI") return;
+
   // F-keys with browser meaning
   if (e.code === "F12") { e.preventDefault(); return; } // devtools
   if (e.code === "F5")  { e.preventDefault(); return; } // reload
@@ -155,6 +158,14 @@ function blockBrowserShortcuts(e: KeyboardEvent) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
+  if (showKeybinds.value) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      showKeybinds.value = false;
+    }
+    return;
+  }
+
   if (matchesHotkey(e, settingsStore.settings.keybinds.toggle_settings)) {
     onToggleSettings();
     return;
@@ -278,7 +289,7 @@ function onToggleDebug() {
     </div>
 
     <!-- Keybinds modal (Teleports to body, z-40; settings panel is z-50) -->
-    <KeybindsModal v-if="showKeybinds" @close="showKeybinds = false" />
+    <KeybindsModal v-if="showKeybinds" :width-px="settingsPanelPx" @close="showKeybinds = false" />
   </div>
 </template>
 
