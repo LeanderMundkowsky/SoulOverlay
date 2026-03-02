@@ -209,7 +209,7 @@ function formatSimplePrice(val: number): string {
         class="px-4 py-2 text-xs font-medium transition-colors"
         :class="activeTab === 'buy' ? 'text-green-400 border-b-2 border-green-400' : 'text-white/40 hover:text-white/60'"
       >
-        Supply ({{ buyLocations.length }})
+        Buy ({{ buyLocations.length }})
       </button>
       <button
         v-if="sellLocations.length > 0"
@@ -217,7 +217,7 @@ function formatSimplePrice(val: number): string {
         class="px-4 py-2 text-xs font-medium transition-colors"
         :class="activeTab === 'sell' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-white/40 hover:text-white/60'"
       >
-        Demand ({{ sellLocations.length }})
+        Sell ({{ sellLocations.length }})
       </button>
     </div>
 

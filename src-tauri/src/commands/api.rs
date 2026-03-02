@@ -225,6 +225,14 @@ pub async fn api_search_locations(
 
 // ── Price endpoint ─────────────────────────────────────────────────────────
 
+/// Returns true if the cached price data contains rich fields from the per-commodity endpoint.
+/// Bulk-prefetched data (from `/commodities_prices_all`) lacks orbit, min/max, etc.
+fn has_rich_data(prices: &[PriceEntry]) -> bool {
+    prices
+        .iter()
+        .any(|p| !p.orbit.is_empty() || p.price_min > 0.0 || p.scu_min > 0.0)
+}
+
 /// Fetch buy/sell prices for a commodity by its UEX ID.
 /// Uses per-commodity cache key (e.g. `commodity_prices:42`).
 #[tauri::command]
@@ -239,20 +247,18 @@ pub async fn api_commodity_prices(
     let cache_key = Collection::CommodityPrices.storage_key_with_id(&commodity_id);
     let api_key = api_key(&state);
 
-    // Check cache first
+    // Check cache first — but only use it if the data has rich fields (orbit, min/max).
+    // The bulk prefetch endpoint (/commodities_prices_all) stores per-commodity entries
+    // but lacks orbit/system/faction/min/max fields. Detect that and re-fetch.
     match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) => {
+        CacheResult::Fresh(prices) if has_rich_data(&prices) => {
             return Ok(ApiResponse::ok(prices));
         }
-        CacheResult::Stale(prices) => {
-            // Return stale data immediately; caller can trigger a refresh
-            // We still try to fetch fresh data below, but return stale first
-            // Actually — to keep the command simple and avoid complexity,
-            // we return stale and let the frontend decide whether to refresh.
+        CacheResult::Stale(prices) if has_rich_data(&prices) => {
             return Ok(ApiResponse::ok_stale(prices));
         }
-        CacheResult::Missing => {
-            // Fall through to fetch
+        _ => {
+            // Missing, or cached data lacks rich fields — fall through to fetch
         }
     }
 
