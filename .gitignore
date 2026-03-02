@@ -22,3 +22,6 @@ Thumbs.db
 
 # Tauri generated files
 src-tauri/gen/
+
+# Custom
+api.json

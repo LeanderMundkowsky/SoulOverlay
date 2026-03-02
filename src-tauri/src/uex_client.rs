@@ -821,21 +821,25 @@ pub async fn fetch_all_fuel_prices(api_key: &str) -> Result<Vec<PriceEntry>, Str
 // ── Entity info functions ──────────────────────────────────────────────────
 
 /// Fetch commodity details by id.
+/// The `/commodities` endpoint returns all commodities; we filter by id client-side.
 pub async fn get_commodity_info(commodity_id: &str, api_key: &str) -> Result<EntityInfo, String> {
     let url = format!("{}/commodities", UEX_BASE_URL);
-    let body = uex_get(&url, &[("id", commodity_id)], api_key).await?;
+    let body = uex_get(&url, &[], api_key).await?;
     extract_data_array(&body)
-        .first()
+        .into_iter()
+        .find(|item| json_str_or_u64(item, "id") == commodity_id)
         .map(|item| EntityInfo::from_commodity_json(item))
         .ok_or_else(|| format!("Commodity {} not found", commodity_id))
 }
 
 /// Fetch vehicle details by id.
+/// The `/vehicles` endpoint returns all vehicles; we filter by id client-side.
 pub async fn get_vehicle_info(vehicle_id: &str, api_key: &str) -> Result<EntityInfo, String> {
     let url = format!("{}/vehicles", UEX_BASE_URL);
-    let body = uex_get(&url, &[("id", vehicle_id)], api_key).await?;
+    let body = uex_get(&url, &[], api_key).await?;
     extract_data_array(&body)
-        .first()
+        .into_iter()
+        .find(|item| json_str_or_u64(item, "id") == vehicle_id)
         .map(|item| EntityInfo::from_vehicle_json(item))
         .ok_or_else(|| format!("Vehicle {} not found", vehicle_id))
 }
