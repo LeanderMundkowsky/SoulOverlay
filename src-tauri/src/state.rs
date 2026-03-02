@@ -8,6 +8,7 @@ use crate::hotkey;
 use crate::log_watcher;
 use crate::settings::Settings;
 use crate::uex::UexClient;
+use crate::activity::ActivityLog;
 
 /// Application state managed by Tauri
 pub struct AppState {
@@ -23,6 +24,8 @@ pub struct AppState {
     /// Tracks which collections are currently being refreshed in the background,
     /// preventing duplicate concurrent refreshes from timer + search racing.
     pub refreshing_collections: Mutex<HashSet<String>>,
+    /// Activity log: fetch events + last user action + bg timer tracking.
+    pub activity: Arc<Mutex<ActivityLog>>,
 }
 
 impl AppState {

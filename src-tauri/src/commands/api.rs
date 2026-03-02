@@ -20,6 +20,7 @@
 use serde::Serialize;
 use tauri::State;
 
+use crate::activity::LastUserAction;
 use crate::cache_store::{CacheResult, Collection};
 use crate::state::AppState;
 use crate::uex::{self, EntityInfo, PriceEntry, UexResult};
@@ -225,18 +226,38 @@ pub async fn api_search_locations(
 
 // ── Price endpoint ─────────────────────────────────────────────────────────
 
-/// Lookup prices from cache only. Returns empty data if not cached.
+/// Lookup prices from cache only. Records the lookup in the activity log.
 fn price_lookup_cached(
     entity_id: &str,
+    kind: &str,
     collection: Collection,
     state: &AppState,
 ) -> ApiResponse<Vec<PriceEntry>> {
     let cache_key = collection.storage_key_with_id(entity_id);
-    match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) => ApiResponse::ok(prices),
-        CacheResult::Stale(prices) => ApiResponse::ok_stale(prices),
-        CacheResult::Missing => ApiResponse::ok(vec![]),
+    let (response, source, row_count) = match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
+        CacheResult::Fresh(prices) => {
+            let n = prices.len();
+            (ApiResponse::ok(prices), "fresh", n)
+        }
+        CacheResult::Stale(prices) => {
+            let n = prices.len();
+            (ApiResponse::ok_stale(prices), "stale", n)
+        }
+        CacheResult::Missing => (ApiResponse::ok(vec![]), "missing", 0),
+    };
+
+    if let Ok(mut log) = state.activity.lock() {
+        log.last_user_action = Some(LastUserAction {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            kind: kind.to_string(),
+            entity_id: entity_id.to_string(),
+            collection: collection.storage_key(),
+            source: source.to_string(),
+            row_count,
+        });
     }
+
+    response
 }
 
 /// Fetch buy/sell prices for a commodity by its UEX ID.
@@ -249,7 +270,7 @@ pub async fn api_commodity_prices(
     if commodity_id.trim().is_empty() {
         return Ok(ApiResponse::err("commodity_id must not be empty"));
     }
-    Ok(price_lookup_cached(&commodity_id, Collection::CommodityPrices, &state))
+    Ok(price_lookup_cached(&commodity_id, "commodity", Collection::CommodityPrices, &state))
 }
 
 /// Fetch raw commodity prices by commodity ID.
@@ -261,7 +282,7 @@ pub async fn api_raw_commodity_prices(
     if commodity_id.trim().is_empty() {
         return Ok(ApiResponse::err("commodity_id must not be empty"));
     }
-    Ok(price_lookup_cached(&commodity_id, Collection::RawCommodityPrices, &state))
+    Ok(price_lookup_cached(&commodity_id, "raw_commodity", Collection::RawCommodityPrices, &state))
 }
 
 /// Fetch item prices by item ID.
@@ -273,7 +294,7 @@ pub async fn api_item_prices(
     if item_id.trim().is_empty() {
         return Ok(ApiResponse::err("item_id must not be empty"));
     }
-    Ok(price_lookup_cached(&item_id, Collection::ItemPrices, &state))
+    Ok(price_lookup_cached(&item_id, "item", Collection::ItemPrices, &state))
 }
 
 /// Fetch vehicle purchase prices by vehicle ID.
@@ -285,7 +306,7 @@ pub async fn api_vehicle_purchase_prices(
     if vehicle_id.trim().is_empty() {
         return Ok(ApiResponse::err("vehicle_id must not be empty"));
     }
-    Ok(price_lookup_cached(&vehicle_id, Collection::VehiclePurchasePrices, &state))
+    Ok(price_lookup_cached(&vehicle_id, "vehicle", Collection::VehiclePurchasePrices, &state))
 }
 
 /// Fetch vehicle rental prices by vehicle ID.
@@ -297,7 +318,7 @@ pub async fn api_vehicle_rental_prices(
     if vehicle_id.trim().is_empty() {
         return Ok(ApiResponse::err("vehicle_id must not be empty"));
     }
-    Ok(price_lookup_cached(&vehicle_id, Collection::VehicleRentalPrices, &state))
+    Ok(price_lookup_cached(&vehicle_id, "vehicle_rental", Collection::VehicleRentalPrices, &state))
 }
 
 /// Fetch fuel prices by terminal ID.
@@ -309,7 +330,7 @@ pub async fn api_fuel_prices(
     if terminal_id.trim().is_empty() {
         return Ok(ApiResponse::err("terminal_id must not be empty"));
     }
-    Ok(price_lookup_cached(&terminal_id, Collection::FuelPrices, &state))
+    Ok(price_lookup_cached(&terminal_id, "fuel", Collection::FuelPrices, &state))
 }
 
 // ── Entity info endpoint ──────────────────────────────────────────────────

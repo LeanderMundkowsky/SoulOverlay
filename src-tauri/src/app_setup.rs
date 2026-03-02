@@ -115,6 +115,14 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             let state = timer_handle.state::<AppState>();
+
+            // Record this tick in the activity log
+            {
+                if let Ok(mut log) = state.activity.lock() {
+                    log.last_bg_check_at = Some(chrono::Utc::now());
+                }
+            }
+
             let mut refreshed_any = false;
 
             for collection in Collection::prefetch_list() {

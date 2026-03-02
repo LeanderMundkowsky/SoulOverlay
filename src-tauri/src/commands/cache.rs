@@ -1,8 +1,10 @@
 use log::{error, info};
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::State;
 
+use crate::activity::FetchEvent;
 use crate::cache_store::{CacheResult, CacheStore, Collection, CollectionStatus};
 use crate::settings::Settings;
 use crate::state::AppState;
@@ -32,7 +34,7 @@ pub async fn cache_refresh(
     state: State<'_, AppState>,
 ) -> Result<CacheRefreshResult, String> {
     let settings = state.current_settings.lock().unwrap().clone();
-    let result = refresh_collection_by_name(&collection, &settings.uex_api_key, &settings, &state).await;
+    let result = refresh_collection_by_name(&collection, &settings.uex_api_key, &settings, &state, "manual").await;
     Ok(result)
 }
 
@@ -47,7 +49,7 @@ pub async fn cache_refresh_expired(
     for collection in Collection::prefetch_list() {
         let key = collection.storage_key();
         if state.cache.is_expired(&key) {
-            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, &state).await;
+            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, &state, "manual").await;
             results.push(result);
         }
     }
@@ -63,7 +65,7 @@ pub async fn cache_refresh_all(
     let mut results = Vec::new();
     for collection in Collection::prefetch_list() {
         let name = collection.storage_key();
-        let result = refresh_collection_by_name(&name, &settings.uex_api_key, &settings, &state).await;
+        let result = refresh_collection_by_name(&name, &settings.uex_api_key, &settings, &state, "manual").await;
         results.push(result);
     }
     Ok(results)
@@ -133,10 +135,12 @@ pub(crate) async fn refresh_collection_by_name(
     api_key: &str,
     settings: &Settings,
     state: &AppState,
+    triggered_by: &str,
 ) -> CacheRefreshResult {
     let prices_ttl = settings.cache_ttl_prices_secs as i64;
     let catalog_ttl = settings.cache_ttl_catalog_secs as i64;
     let client = &state.uex;
+    let start = Instant::now();
 
     let result = match name {
         "commodities" => {
@@ -244,6 +248,40 @@ pub(crate) async fn refresh_collection_by_name(
         _ => Err(format!("Unknown collection: {}", name)),
     };
 
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let (ok, err_msg) = match &result {
+        Ok(()) => (true, None),
+        Err(e) => (false, Some(e.clone())),
+    };
+
+    let endpoint = match name {
+        "commodity_prices" => "/commodities_prices (per-entity)".to_string(),
+        "raw_commodity_prices" => "/commodities_raw_prices_all".to_string(),
+        "item_prices" => "/items_prices_all".to_string(),
+        "vehicle_purchase_prices" => "/vehicles_purchases_prices (per-entity)".to_string(),
+        "vehicle_rental_prices" => "/vehicles_rentals_prices (per-entity)".to_string(),
+        "fuel_prices" => "/fuel_prices_all".to_string(),
+        "commodities" => "/commodities".to_string(),
+        "vehicles" => "/vehicles".to_string(),
+        "items" => "/items (per-category)".to_string(),
+        "locations" => "/terminals".to_string(),
+        _ => format!("/{}", name),
+    };
+
+    let event = FetchEvent {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        collection: name.to_string(),
+        endpoint,
+        row_count: 0, // not tracked here; per-collection count is logged above
+        duration_ms,
+        triggered_by: triggered_by.to_string(),
+        ok,
+        error: err_msg.clone(),
+    };
+    if let Ok(mut log) = state.activity.lock() {
+        log.push_fetch(event);
+    }
+
     match result {
         Ok(()) => CacheRefreshResult {
             ok: true,
@@ -277,7 +315,7 @@ pub async fn prefetch_all(state: &AppState) {
         let key = collection.storage_key();
         if state.cache.is_expired(&key) {
             info!("Prefetching expired collection: {}", key);
-            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state).await;
+            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "startup").await;
             if !result.ok {
                 if let Some(e) = &result.error {
                     error!("Prefetch failed for {}: {}", key, e);
@@ -306,6 +344,7 @@ pub async fn prefetch_all(state: &AppState) {
         info!("Prefetching expired collection: {}", key);
         let api_key = settings.uex_api_key.clone();
         let cache = state.cache_arc();
+        let activity = state.activity.clone();
         let client = state.uex.clone();
         let coll = *collection;
         let ttl = prices_ttl;
@@ -314,31 +353,65 @@ pub async fn prefetch_all(state: &AppState) {
 
         handles.push(tokio::spawn(async move {
             let key = coll.storage_key();
-            let result: Result<(), String> = match key.as_str() {
+            let start = Instant::now();
+            let (result, row_count, endpoint): (Result<(), String>, usize, &str) = match key.as_str() {
                 "commodity_prices" => {
                     let data = uex::fetch_all_commodity_prices_per_entity(&client, &c_ids, &api_key).await;
-                    info!("Prefetched commodity prices: {} rows across {} commodities", data.len(), c_ids.len());
-                    store_prices_split_arc(&cache, &data, coll, ttl)
+                    let n = data.len();
+                    info!("Prefetched commodity prices: {} rows across {} commodities", n, c_ids.len());
+                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/commodities_prices (per-entity)")
                 }
-                "raw_commodity_prices" => uex::fetch_all_raw_commodity_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched raw commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "item_prices" => uex::fetch_all_item_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched item prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "raw_commodity_prices" => {
+                    match uex::fetch_all_raw_commodity_prices(&client, &api_key).await {
+                        Ok(data) => { let n = data.len(); info!("Prefetched raw commodity prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/commodities_raw_prices_all") }
+                        Err(e) => (Err(e), 0, "/commodities_raw_prices_all"),
+                    }
+                }
+                "item_prices" => {
+                    match uex::fetch_all_item_prices(&client, &api_key).await {
+                        Ok(data) => { let n = data.len(); info!("Prefetched item prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/items_prices_all") }
+                        Err(e) => (Err(e), 0, "/items_prices_all"),
+                    }
+                }
                 "vehicle_purchase_prices" => {
                     let data = uex::fetch_all_vehicle_purchase_prices_per_entity(&client, &v_ids, &api_key).await;
-                    info!("Prefetched vehicle purchase prices: {} rows across {} vehicles", data.len(), v_ids.len());
-                    store_prices_split_arc(&cache, &data, coll, ttl)
+                    let n = data.len();
+                    info!("Prefetched vehicle purchase prices: {} rows across {} vehicles", n, v_ids.len());
+                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/vehicles_purchases_prices (per-entity)")
                 }
                 "vehicle_rental_prices" => {
                     let data = uex::fetch_all_vehicle_rental_prices_per_entity(&client, &v_ids, &api_key).await;
-                    info!("Prefetched vehicle rental prices: {} rows across {} vehicles", data.len(), v_ids.len());
-                    store_prices_split_arc(&cache, &data, coll, ttl)
+                    let n = data.len();
+                    info!("Prefetched vehicle rental prices: {} rows across {} vehicles", n, v_ids.len());
+                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/vehicles_rentals_prices (per-entity)")
                 }
-                "fuel_prices" => uex::fetch_all_fuel_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched fuel prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                _ => Ok(()),
+                "fuel_prices" => {
+                    match uex::fetch_all_fuel_prices(&client, &api_key).await {
+                        Ok(data) => { let n = data.len(); info!("Prefetched fuel prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/fuel_prices_all") }
+                        Err(e) => (Err(e), 0, "/fuel_prices_all"),
+                    }
+                }
+                _ => (Ok(()), 0, ""),
             };
-            (key, result)
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let ok = result.is_ok();
+            let err = result.err();
+            if !endpoint.is_empty() {
+                let event = FetchEvent {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    collection: key.clone(),
+                    endpoint: endpoint.to_string(),
+                    row_count,
+                    duration_ms,
+                    triggered_by: "startup".to_string(),
+                    ok,
+                    error: err.clone(),
+                };
+                if let Ok(mut log) = activity.lock() {
+                    log.push_fetch(event);
+                }
+            }
+            (key, if ok { Ok(()) } else { Err(err.unwrap_or_default()) })
         }));
     }
 
@@ -375,7 +448,7 @@ pub(crate) async fn guarded_refresh(state: &AppState, collection: &Collection) -
         return false;
     }
     let settings = state.current_settings.lock().unwrap().clone();
-    let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state).await;
+    let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "timer").await;
     release_refresh(state, &key);
     if !result.ok {
         if let Some(e) = &result.error {
