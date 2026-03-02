@@ -53,13 +53,13 @@ src/                                 # Vue 3 + TypeScript frontend
 ├── components/
 │   ├── icons/                       # 14 SVG icon wrappers (template-only, use currentColor)
 │   ├── layout/                      # StatusBar, TabBar
-│   ├── overlay/                     # SearchBar, SearchResultRow, CommodityPanel
+│   ├── overlay/                     # SearchBar, SearchResultRow, CommodityPanel, FavoritesPanel, EntityInfoCard
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
-│   ├── tabs/                        # SearchTab, InventoryTab, PlaceholderTab
+│   ├── tabs/                        # SearchTab, InventoryTab, DetailsTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch
-├── stores/                          # game.ts, settings.ts (Pinia setup stores)
+├── stores/                          # game.ts, settings.ts, favorites.ts, details.ts (Pinia setup stores)
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts
 src-tauri/src/                       # Rust backend
@@ -93,6 +93,7 @@ src-tauri/src/                       # Rust backend
 │   ├── cache.rs                     # cache_status, cache_refresh, cache_refresh_all + prefetch_all
 │   ├── settings.rs                  # get_settings, save_settings
 │   ├── overlay.rs                   # show_overlay_cmd, hide_overlay_cmd
+│   ├── favorites.rs                 # get_favorites, add_favorite, remove_favorite, is_favorite + Favorite struct
 │   └── debug.rs                     # get_debug_info, get_game_state + DebugInfo/GameState types
 └── hotkey/                          # Global keyboard hook
     ├── mod.rs                       # HookHandle, register_hotkey, LL hook callback, atomics
@@ -149,6 +150,12 @@ Never apply CSS `opacity` to the overlay root div — only to the background lay
 
 **Pinia**: Setup Store pattern exclusively. Export interfaces from store files.
 No `$patch`, no Options mutations. Settings persisted via Rust backend (`invoke`).
+
+Two store archetypes:
+- **Backend-backed** (`settings.ts`, `favorites.ts`, `game.ts`): all mutations go through `invoke`
+- **UI-coordination** (`details.ts`): pure in-memory, no `invoke`. Holds the currently viewed
+  entity and a `requestTabSwitch: ref<boolean>` flag that `App.vue` watches to switch tabs
+  programmatically. Consumers call `clearTabSwitchRequest()` after handling the flag.
 
 ## Path Configuration
 
@@ -215,6 +222,12 @@ in `log_watcher::default_log_path()` since it lives outside the app data directo
 ```
 
 The `stale` flag lets the frontend show a "refreshing..." banner while serving cached data.
+
+**Favorites storage**: The `favorites` table is a plain SQLite table managed by
+`commands/favorites.rs` — it bypasses `CacheStore` entirely. Commands call
+`state.cache.db().lock()` directly. Rows are keyed by `(id, kind)` where `kind`
+disambiguates entity types (commodity / vehicle / item). No TTL; data is permanent until
+explicitly deleted.
 
 ## Rust Style
 

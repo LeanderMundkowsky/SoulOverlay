@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 
-use crate::cache_store::{CacheStore, Collection, CollectionStatus};
+use crate::cache_store::{CacheResult, CacheStore, Collection, CollectionStatus};
 use crate::settings::Settings;
 use crate::state::AppState;
 use crate::uex;
@@ -115,6 +115,18 @@ fn store_prices_split_arc(
     store_prices_split(cache.as_ref(), entries, collection, ttl)
 }
 
+/// Read entity IDs from a catalog collection in cache (Fresh or Stale).
+/// Returns an empty vec if the catalog is not cached yet.
+fn catalog_ids_from_cache(cache: &CacheStore, collection: Collection) -> Vec<String> {
+    let key = collection.storage_key();
+    match cache.get::<Vec<uex::UexResult>>(&key) {
+        CacheResult::Fresh(items) | CacheResult::Stale(items) => {
+            items.into_iter().map(|i| i.id).collect()
+        }
+        CacheResult::Missing => vec![],
+    }
+}
+
 /// Internal helper: refresh a collection by its storage key name.
 pub(crate) async fn refresh_collection_by_name(
     name: &str,
@@ -164,13 +176,17 @@ pub(crate) async fn refresh_collection_by_name(
             }
         }
         "commodity_prices" => {
-            match uex::fetch_all_commodity_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed commodity prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::CommodityPrices, prices_ttl)
-                }
-                Err(e) => Err(e),
+            let ids = catalog_ids_from_cache(&state.cache, Collection::Commodities);
+            if ids.is_empty() {
+                return CacheRefreshResult {
+                    ok: false,
+                    collection: name.to_string(),
+                    error: Some("Commodities not in cache; refresh commodities first".to_string()),
+                };
             }
+            let data = uex::fetch_all_commodity_prices_per_entity(client, &ids, api_key).await;
+            info!("Refreshed commodity prices: {} rows across {} commodities", data.len(), ids.len());
+            store_prices_split(&state.cache, &data, Collection::CommodityPrices, prices_ttl)
         }
         "raw_commodity_prices" => {
             match uex::fetch_all_raw_commodity_prices(client, api_key).await {
@@ -191,22 +207,30 @@ pub(crate) async fn refresh_collection_by_name(
             }
         }
         "vehicle_purchase_prices" => {
-            match uex::fetch_all_vehicle_purchase_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed vehicle purchase prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, prices_ttl)
-                }
-                Err(e) => Err(e),
+            let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
+            if ids.is_empty() {
+                return CacheRefreshResult {
+                    ok: false,
+                    collection: name.to_string(),
+                    error: Some("Vehicles not in cache; refresh vehicles first".to_string()),
+                };
             }
+            let data = uex::fetch_all_vehicle_purchase_prices_per_entity(client, &ids, api_key).await;
+            info!("Refreshed vehicle purchase prices: {} rows across {} vehicles", data.len(), ids.len());
+            store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, prices_ttl)
         }
         "vehicle_rental_prices" => {
-            match uex::fetch_all_vehicle_rental_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed vehicle rental prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, prices_ttl)
-                }
-                Err(e) => Err(e),
+            let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
+            if ids.is_empty() {
+                return CacheRefreshResult {
+                    ok: false,
+                    collection: name.to_string(),
+                    error: Some("Vehicles not in cache; refresh vehicles first".to_string()),
+                };
             }
+            let data = uex::fetch_all_vehicle_rental_prices_per_entity(client, &ids, api_key).await;
+            info!("Refreshed vehicle rental prices: {} rows across {} vehicles", data.len(), ids.len());
+            store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, prices_ttl)
         }
         "fuel_prices" => {
             match uex::fetch_all_fuel_prices(client, api_key).await {
@@ -265,6 +289,10 @@ pub async fn prefetch_all(state: &AppState) {
     }
 
     // Price collections in parallel
+    // Read catalog IDs needed for per-entity price fetching (catalogs were just prefetched above).
+    let commodity_ids: Vec<String> = catalog_ids_from_cache(&state.cache, Collection::Commodities);
+    let vehicle_ids: Vec<String> = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
+
     let prices_ttl = settings.cache_ttl_prices_secs as i64;
     let mut handles = Vec::new();
 
@@ -281,20 +309,31 @@ pub async fn prefetch_all(state: &AppState) {
         let client = state.uex.clone();
         let coll = *collection;
         let ttl = prices_ttl;
+        let c_ids = commodity_ids.clone();
+        let v_ids = vehicle_ids.clone();
 
         handles.push(tokio::spawn(async move {
             let key = coll.storage_key();
             let result: Result<(), String> = match key.as_str() {
-                "commodity_prices" => uex::fetch_all_commodity_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "commodity_prices" => {
+                    let data = uex::fetch_all_commodity_prices_per_entity(&client, &c_ids, &api_key).await;
+                    info!("Prefetched commodity prices: {} rows across {} commodities", data.len(), c_ids.len());
+                    store_prices_split_arc(&cache, &data, coll, ttl)
+                }
                 "raw_commodity_prices" => uex::fetch_all_raw_commodity_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched raw commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
                 "item_prices" => uex::fetch_all_item_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched item prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "vehicle_purchase_prices" => uex::fetch_all_vehicle_purchase_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched vehicle purchase prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
-                "vehicle_rental_prices" => uex::fetch_all_vehicle_rental_prices(&client, &api_key).await
-                    .and_then(|data| { info!("Prefetched vehicle rental prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "vehicle_purchase_prices" => {
+                    let data = uex::fetch_all_vehicle_purchase_prices_per_entity(&client, &v_ids, &api_key).await;
+                    info!("Prefetched vehicle purchase prices: {} rows across {} vehicles", data.len(), v_ids.len());
+                    store_prices_split_arc(&cache, &data, coll, ttl)
+                }
+                "vehicle_rental_prices" => {
+                    let data = uex::fetch_all_vehicle_rental_prices_per_entity(&client, &v_ids, &api_key).await;
+                    info!("Prefetched vehicle rental prices: {} rows across {} vehicles", data.len(), v_ids.len());
+                    store_prices_split_arc(&cache, &data, coll, ttl)
+                }
                 "fuel_prices" => uex::fetch_all_fuel_prices(&client, &api_key).await
                     .and_then(|data| { info!("Prefetched fuel prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
                 _ => Ok(()),

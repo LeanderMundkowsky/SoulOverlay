@@ -81,6 +81,10 @@ pub(crate) struct ItemPriceDto {
     #[serde(default)]
     pub planet_name: Option<String>,
     #[serde(default)]
+    pub orbit_name: Option<String>,
+    #[serde(default)]
+    pub faction_name: Option<String>,
+    #[serde(default)]
     pub terminal_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_terminal: String,
@@ -108,9 +112,9 @@ impl From<&ItemPriceDto> for PriceEntry {
             rent_price: 0.0,
             scu_available: None,
             date_updated: timestamp_string(&dto.date_modified, &dto.date_added),
-            orbit: String::new(),
-            system: String::new(),
-            faction: String::new(),
+            orbit: dto.orbit_name.clone().unwrap_or_default(),
+            system: dto.star_system_name.clone().unwrap_or_default(),
+            faction: dto.faction_name.clone().unwrap_or_default(),
             scu_last: 0.0,
             scu_users: 0.0,
             scu_avg: 0.0,

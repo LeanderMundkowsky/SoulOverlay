@@ -225,6 +225,20 @@ pub async fn api_search_locations(
 
 // ── Price endpoint ─────────────────────────────────────────────────────────
 
+/// Lookup prices from cache only. Returns empty data if not cached.
+fn price_lookup_cached(
+    entity_id: &str,
+    collection: Collection,
+    state: &AppState,
+) -> ApiResponse<Vec<PriceEntry>> {
+    let cache_key = collection.storage_key_with_id(entity_id);
+    match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
+        CacheResult::Fresh(prices) => ApiResponse::ok(prices),
+        CacheResult::Stale(prices) => ApiResponse::ok_stale(prices),
+        CacheResult::Missing => ApiResponse::ok(vec![]),
+    }
+}
+
 /// Fetch buy/sell prices for a commodity by its UEX ID.
 /// Serves from per-commodity cache key (e.g. `commodity_prices:42`).
 #[tauri::command]
@@ -235,31 +249,7 @@ pub async fn api_commodity_prices(
     if commodity_id.trim().is_empty() {
         return Ok(ApiResponse::err("commodity_id must not be empty"));
     }
-
-    let cache_key = Collection::CommodityPrices.storage_key_with_id(&commodity_id);
-
-    match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) => Ok(ApiResponse::ok(prices)),
-        CacheResult::Stale(prices) => Ok(ApiResponse::ok_stale(prices)),
-        CacheResult::Missing => Ok(ApiResponse::ok(vec![])),
-    }
-}
-
-// ── Generic price lookup helper ───────────────────────────────────────────
-
-/// Lookup prices from cache only. Returns empty data if not cached.
-fn price_lookup_cached(
-    entity_id: &str,
-    collection: Collection,
-    state: &AppState,
-) -> ApiResponse<Vec<PriceEntry>> {
-    let cache_key = collection.storage_key_with_id(entity_id);
-
-    match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) => ApiResponse::ok(prices),
-        CacheResult::Stale(prices) => ApiResponse::ok_stale(prices),
-        CacheResult::Missing => ApiResponse::ok(vec![]),
-    }
+    Ok(price_lookup_cached(&commodity_id, Collection::CommodityPrices, &state))
 }
 
 /// Fetch raw commodity prices by commodity ID.

@@ -70,7 +70,7 @@ watch(
     sortedPrices.value = sorted;
 
     showRentColumn.value = sorted.some((p) => p.rent_price > 0);
-    hasRichData.value = sorted.some((p) => p.orbit !== "" || p.price_avg > 0);
+    hasRichData.value = props.entityKind === "commodity" || props.entityKind === "raw_commodity";
   },
   { immediate: true }
 );

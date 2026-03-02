@@ -301,7 +301,32 @@ pub async fn get_raw_commodity_prices(
         .collect())
 }
 
-/// Fetch ALL commodity prices from UEX (bulk).
+/// Fetch commodity prices for each ID in `commodity_ids` using per-entity API calls
+/// in parallel. Unlike `fetch_all_commodity_prices`, per-entity calls return the full
+/// rich dataset including orbit, system, faction, and min/max stats.
+pub async fn fetch_all_commodity_prices_per_entity(
+    client: &UexClient,
+    commodity_ids: &[String],
+    api_key: &str,
+) -> Vec<PriceEntry> {
+    let handles: Vec<_> = commodity_ids
+        .iter()
+        .map(|id| {
+            let client = client.clone();
+            let id = id.clone();
+            let key = api_key.to_string();
+            tokio::spawn(async move { get_commodity_prices(&client, &id, &key).await })
+        })
+        .collect();
+
+    let mut all = Vec::new();
+    for handle in handles {
+        if let Ok(Ok(prices)) = handle.await {
+            all.extend(prices);
+        }
+    }
+    all
+}
 pub async fn fetch_all_commodity_prices(
     client: &UexClient,
     api_key: &str,

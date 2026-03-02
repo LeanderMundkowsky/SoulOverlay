@@ -194,6 +194,10 @@ pub(crate) struct VehiclePurchasePriceDto {
     #[serde(default)]
     pub planet_name: Option<String>,
     #[serde(default)]
+    pub orbit_name: Option<String>,
+    #[serde(default)]
+    pub faction_name: Option<String>,
+    #[serde(default)]
     pub terminal_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_terminal: String,
@@ -219,9 +223,9 @@ impl From<&VehiclePurchasePriceDto> for PriceEntry {
             rent_price: 0.0,
             scu_available: None,
             date_updated: timestamp_string(&dto.date_modified, &dto.date_added),
-            orbit: String::new(),
-            system: String::new(),
-            faction: String::new(),
+            orbit: dto.orbit_name.clone().unwrap_or_default(),
+            system: dto.star_system_name.clone().unwrap_or_default(),
+            faction: dto.faction_name.clone().unwrap_or_default(),
             scu_last: 0.0,
             scu_users: 0.0,
             scu_avg: 0.0,
@@ -251,6 +255,10 @@ pub(crate) struct VehicleRentalPriceDto {
     #[serde(default)]
     pub planet_name: Option<String>,
     #[serde(default)]
+    pub orbit_name: Option<String>,
+    #[serde(default)]
+    pub faction_name: Option<String>,
+    #[serde(default)]
     pub terminal_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_terminal: String,
@@ -276,9 +284,9 @@ impl From<&VehicleRentalPriceDto> for PriceEntry {
             rent_price: dto.price_rent.unwrap_or(0.0),
             scu_available: None,
             date_updated: timestamp_string(&dto.date_modified, &dto.date_added),
-            orbit: String::new(),
-            system: String::new(),
-            faction: String::new(),
+            orbit: dto.orbit_name.clone().unwrap_or_default(),
+            system: dto.star_system_name.clone().unwrap_or_default(),
+            faction: dto.faction_name.clone().unwrap_or_default(),
             scu_last: 0.0,
             scu_users: 0.0,
             scu_avg: 0.0,
@@ -368,7 +376,59 @@ pub async fn get_vehicle_rental_prices(
     Ok(dtos.iter().map(PriceEntry::from).collect())
 }
 
-/// Fetch ALL vehicle purchase prices from UEX (bulk).
+/// Fetch vehicle purchase prices for each ID in `vehicle_ids` using per-entity API calls
+/// in parallel. Returns the full rich dataset including orbit, system, and faction.
+pub async fn fetch_all_vehicle_purchase_prices_per_entity(
+    client: &UexClient,
+    vehicle_ids: &[String],
+    api_key: &str,
+) -> Vec<PriceEntry> {
+    let handles: Vec<_> = vehicle_ids
+        .iter()
+        .map(|id| {
+            let client = client.clone();
+            let id = id.clone();
+            let key = api_key.to_string();
+            tokio::spawn(async move { get_vehicle_purchase_prices(&client, &id, &key).await })
+        })
+        .collect();
+
+    let mut all = Vec::new();
+    for handle in handles {
+        if let Ok(Ok(prices)) = handle.await {
+            all.extend(prices);
+        }
+    }
+    all
+}
+
+/// Fetch vehicle rental prices for each ID in `vehicle_ids` using per-entity API calls
+/// in parallel. Returns the full rich dataset including orbit, system, and faction.
+pub async fn fetch_all_vehicle_rental_prices_per_entity(
+    client: &UexClient,
+    vehicle_ids: &[String],
+    api_key: &str,
+) -> Vec<PriceEntry> {
+    let handles: Vec<_> = vehicle_ids
+        .iter()
+        .map(|id| {
+            let client = client.clone();
+            let id = id.clone();
+            let key = api_key.to_string();
+            tokio::spawn(async move { get_vehicle_rental_prices(&client, &id, &key).await })
+        })
+        .collect();
+
+    let mut all = Vec::new();
+    for handle in handles {
+        if let Ok(Ok(prices)) = handle.await {
+            all.extend(prices);
+        }
+    }
+    all
+}
+
+
 pub async fn fetch_all_vehicle_purchase_prices(
     client: &UexClient,
     api_key: &str,
