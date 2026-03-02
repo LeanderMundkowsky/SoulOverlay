@@ -86,7 +86,11 @@ function focusInput() {
   searchBarRef.value?.focusInput();
 }
 
-defineExpose({ focusInput });
+function handleEsc(): boolean {
+  return searchBarRef.value?.handleEsc() ?? false;
+}
+
+defineExpose({ focusInput, handleEsc });
 </script>
 
 <template>

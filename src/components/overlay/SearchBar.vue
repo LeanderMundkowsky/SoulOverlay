@@ -46,11 +46,7 @@ function onInputKeydown(e: KeyboardEvent) {
     setActiveIndex(results.value.length - 1);
   } else if (e.key === "Escape") {
     e.preventDefault();
-    if (query.value || results.value.length) {
-      e.stopImmediatePropagation();
-      query.value = "";
-      results.value = [];
-    }
+    // Let App.vue's handleKeyDown → handleEsc() take care of it
   }
 }
 
@@ -71,10 +67,7 @@ function onRowKeydown(e: KeyboardEvent, index: number, result: UexResult) {
     selectResult(result);
   } else if (e.key === "Escape") {
     e.preventDefault();
-    e.stopImmediatePropagation();
-    // First ESC: deselect row, return focus to input (keeps results visible)
-    activeIndex.value = -1;
-    inputEl.value?.focus();
+    // Let App.vue's handleKeyDown → handleEsc() take care of it
   }
 }
 
@@ -95,7 +88,29 @@ function focusInput() {
   inputEl.value?.focus();
 }
 
-defineExpose({ focusInput, stale });
+// Returns true if ESC was consumed (had something to clear/deselect)
+function handleEsc(): boolean {
+  const inputFocused = document.activeElement === inputEl.value;
+
+  if (activeIndex.value >= 0) {
+    activeIndex.value = -1;
+    inputEl.value?.focus();
+    return true;
+  }
+  if (!inputFocused) {
+    // Focus back to search box without clearing
+    inputEl.value?.focus();
+    return true;
+  }
+  if (query.value || results.value.length) {
+    query.value = "";
+    results.value = [];
+    return true;
+  }
+  return false;
+}
+
+defineExpose({ focusInput, stale, handleEsc });
 </script>
 
 <template>

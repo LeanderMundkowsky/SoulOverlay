@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import IconCommodity from "@/components/icons/IconCommodity.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import IconPlane from "@/components/icons/IconPlane.vue";
@@ -6,6 +7,8 @@ import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconDollarSign from "@/components/icons/IconDollarSign.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
+import ContextMenu from "@/components/ui/ContextMenu.vue";
+import type { MenuItem, MenuSeparator } from "@/components/ui/ContextMenu.vue";
 import { useFavoritesStore } from "@/stores/favorites";
 import { useDetailsStore } from "@/stores/details";
 import type { UexResult } from "@/composables/useUex";
@@ -24,9 +27,43 @@ defineOptions({ inheritAttrs: false });
 const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
 
-import { ref } from "vue";
 const rootEl = ref<HTMLElement | null>(null);
 defineExpose({ rootEl });
+
+// Context menu
+const menuVisible = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault();
+  menuX.value = e.clientX;
+  menuY.value = e.clientY;
+  menuVisible.value = true;
+}
+
+function buildMenuItems(): (MenuItem | MenuSeparator)[] {
+  const isFav = favoritesStore.isFavorite(props.result.id, props.result.kind);
+  return [
+    {
+      label: props.result.kind === "commodity" ? "View Prices" : "View",
+      icon: props.result.kind === "commodity" ? "💰" : "🔍",
+      action: () => emit("select"),
+    },
+    {
+      label: "Open in Details",
+      icon: "ℹ️",
+      action: () => detailsStore.openEntity(props.result),
+    },
+    { separator: true },
+    {
+      label: isFav ? "Remove from Favorites" : "Add to Favorites",
+      icon: isFav ? "💔" : "❤️",
+      danger: isFav,
+      action: () => favoritesStore.toggleFavorite(props.result),
+    },
+  ];
+}
 
 function toggleFavorite() {
   favoritesStore.toggleFavorite(props.result);
@@ -44,6 +81,7 @@ function openInDetails() {
     class="group flex flex-col px-4 py-2 border-t border-white/5 transition-colors outline-none cursor-default"
     :class="isActive ? 'bg-white/8 ring-1 ring-inset ring-blue-500/30' : 'hover:bg-white/5 focus:bg-white/8'"
     @dblclick.stop="emit('select')"
+    @contextmenu="onContextMenu"
   >
     <!-- Row 1: icon + name + kind -->
     <div class="flex items-center gap-3">
@@ -71,12 +109,11 @@ function openInDetails() {
       >{{ result.kind }}</span>
     </div>
 
-    <!-- Row 2: action buttons — expand only when active (click/keyboard), no hover expansion -->
+    <!-- Row 2: action buttons — always occupy space, opacity-only on active (no height change) -->
     <div
-      class="overflow-hidden transition-all duration-150"
-      :class="isActive ? 'max-h-10 mt-1.5 opacity-100' : 'max-h-0 mt-0 opacity-0'"
+      class="flex items-center gap-1 pl-10 mt-1.5 transition-opacity duration-150"
+      :class="isActive ? 'opacity-100' : 'opacity-25 group-hover:opacity-100'"
     >
-      <div class="flex items-center gap-1 pl-10">
         <button
           @click.stop="toggleFavorite"
           class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs transition-colors"
@@ -107,7 +144,14 @@ function openInDetails() {
           {{ props.result.kind === 'commodity' ? 'Prices' : 'View' }}
           <span class="opacity-50 font-normal">↵</span>
         </button>
-      </div>
     </div>
   </div>
+
+  <ContextMenu
+    v-if="menuVisible"
+    :x="menuX"
+    :y="menuY"
+    :items="buildMenuItems()"
+    @close="menuVisible = false"
+  />
 </template>

@@ -11,6 +11,7 @@ import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
 import DebugPanel from "./components/panels/DebugPanel.vue";
 import ResizeHandle from "./components/ui/ResizeHandle.vue";
+import KeybindsModal from "./components/ui/KeybindsModal.vue";
 import { useGameStore } from "./stores/game";
 import { useSettingsStore } from "./stores/settings";
 import { useFavoritesStore } from "./stores/favorites";
@@ -26,6 +27,7 @@ const detailsStore = useDetailsStore();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
+const showKeybinds = ref(false);
 const showFavorites = ref(true);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
@@ -126,6 +128,7 @@ function blockBrowserShortcuts(e: KeyboardEvent) {
   if (e.code === "F12") { e.preventDefault(); return; } // devtools
   if (e.code === "F5")  { e.preventDefault(); return; } // reload
   if (e.code === "F3")  { e.preventDefault(); return; } // find-next (browser)
+  if (e.code === "F11") { e.preventDefault(); return; } // browser fullscreen
 
   if (!ctrl) return;
 
@@ -152,17 +155,23 @@ function blockBrowserShortcuts(e: KeyboardEvent) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (e.code === "F12") {
+  if (matchesHotkey(e, settingsStore.settings.keybinds.toggle_settings)) {
     onToggleSettings();
     return;
   }
 
+  if (matchesHotkey(e, settingsStore.settings.keybinds.toggle_debug)) {
+    onToggleDebug();
+    return;
+  }
+
   if (e.key === "Escape") {
-    if (showSettings.value) {
-      showSettings.value = false;
-    } else if (showDebug.value) {
-      showDebug.value = false;
-    } else if (settingsStore.settings.esc_closes_overlay) {
+    // On the search tab, let the search bar consume ESC first
+    // (deselect row → clear query → only then close overlay)
+    if (activeTab.value === "search" && searchTabRef.value?.handleEsc()) {
+      return;
+    }
+    if (settingsStore.settings.esc_closes_overlay) {
       invoke("hide_overlay_cmd");
     }
     return;
@@ -247,7 +256,7 @@ function onToggleDebug() {
         <Transition name="slide">
           <div
             v-if="showSettings"
-            class="relative flex-shrink-0 h-full"
+            class="relative z-50 flex-shrink-0 h-full"
             :style="{ width: settingsPanelPx + 'px' }"
           >
             <ResizeHandle
@@ -259,6 +268,7 @@ function onToggleDebug() {
             <SettingsPanel
               class="w-full"
               @close="showSettings = false"
+              @open-keybinds="showKeybinds = true"
             />
           </div>
         </Transition>
@@ -266,6 +276,9 @@ function onToggleDebug() {
 
       <StatusBar :sc-detected="scDetected" @toggle-debug="onToggleDebug" />
     </div>
+
+    <!-- Keybinds modal (Teleports to body, z-40; settings panel is z-50) -->
+    <KeybindsModal v-if="showKeybinds" @close="showKeybinds = false" />
   </div>
 </template>
 

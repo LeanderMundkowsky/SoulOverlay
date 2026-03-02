@@ -2,6 +2,11 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface Keybinds {
+  toggle_settings: string;
+  toggle_debug: string;
+}
+
 export interface LayoutWidths {
   left_panel_px: number;
   settings_panel_px: number;
@@ -21,6 +26,7 @@ export interface Settings {
   cache_ttl_catalog_secs: number;
   layout_widths: LayoutWidths;
   font_size: number;
+  keybinds: Keybinds;
 }
 
 const defaultSettings: Settings = {
@@ -40,6 +46,10 @@ const defaultSettings: Settings = {
     search_solo_pct: 50,
   },
   font_size: 14,
+  keybinds: {
+    toggle_settings: "F12",
+    toggle_debug: "F11",
+  },
 };
 
 export const useSettingsStore = defineStore("settings", () => {

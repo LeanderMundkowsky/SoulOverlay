@@ -11,6 +11,7 @@ import { useSettingsStore, type Settings } from "@/stores/settings";
 
 const emit = defineEmits<{
   (e: "close"): void;
+  (e: "open-keybinds"): void;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -27,6 +28,7 @@ const form = ref<Settings>({
   cache_ttl_catalog_secs: 86400,
   layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
   font_size: 14,
+  keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
 });
 
 const saving = ref(false);
@@ -68,6 +70,7 @@ function resetDefaults() {
     cache_ttl_catalog_secs: 86400,
     layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
     font_size: 14,
+    keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
   };
 }
 </script>
@@ -84,6 +87,19 @@ function resetDefaults() {
       >
         <HotkeyCapture v-model="form.hotkey" />
       </SettingsField>
+
+      <!-- Keybinds editor shortcut -->
+      <div>
+        <button
+          @click="emit('open-keybinds')"
+          class="w-full bg-white/5 border border-white/10 hover:border-white/20 rounded-lg px-3 py-2 text-sm text-white/70 hover:text-white text-left transition-colors flex items-center justify-between"
+        >
+          <span>Edit All Keybinds</span>
+          <svg class="w-4 h-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
 
       <!-- UEX API Key -->
       <div>
@@ -127,8 +143,8 @@ function resetDefaults() {
           <input
             v-model.number="form.font_size"
             type="range"
-            min="11"
-            max="18"
+            min="8"
+            max="32"
             step="1"
             class="flex-1 accent-blue-500"
           />

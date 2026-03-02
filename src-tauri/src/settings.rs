@@ -1,5 +1,28 @@
 use serde::{Deserialize, Serialize};
 
+/// Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Keybinds {
+    /// Key combo to toggle the Settings panel (default: "F12")
+    #[serde(default = "default_keybind_settings")]
+    pub toggle_settings: String,
+    /// Key combo to toggle the Debug panel (default: "F11")
+    #[serde(default = "default_keybind_debug")]
+    pub toggle_debug: String,
+}
+
+fn default_keybind_settings() -> String { "F12".to_string() }
+fn default_keybind_debug()   -> String { "F11".to_string() }
+
+impl Default for Keybinds {
+    fn default() -> Self {
+        Self {
+            toggle_settings: default_keybind_settings(),
+            toggle_debug:    default_keybind_debug(),
+        }
+    }
+}
+
 /// Per-panel layout widths persisted alongside other settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayoutWidths {
@@ -74,6 +97,9 @@ pub struct Settings {
     /// Base font size in pixels (default: 14)
     #[serde(default = "default_font_size")]
     pub font_size: u32,
+    /// In-app panel keybinds (not the global Rust hook hotkey)
+    #[serde(default)]
+    pub keybinds: Keybinds,
 }
 
 fn default_true() -> bool {
@@ -110,6 +136,7 @@ impl Default for Settings {
             cache_ttl_catalog_secs: 86400,
             layout_widths: LayoutWidths::default(),
             font_size: 14,
+            keybinds: Keybinds::default(),
         }
     }
 }
