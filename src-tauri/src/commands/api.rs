@@ -123,7 +123,7 @@ pub async fn api_search(
             }
             Err(e) => {
                 // Log but don't fail the entire search
-                log::warn!("Search failed for {:?}: {}", collection, e);
+                log::warn!("Search failed for {:?} (query={:?}): {}", collection, query, e);
             }
         }
     }

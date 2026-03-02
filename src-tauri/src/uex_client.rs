@@ -112,13 +112,35 @@ async fn uex_get(url: &str, query: &[(&str, &str)], api_key: &str) -> Result<ser
         req = req.header("Authorization", format!("Bearer {}", api_key));
     }
 
+    // Build a display URL with query params for logging
+    let display_url = if query.is_empty() {
+        url.to_string()
+    } else {
+        let params = query
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+        format!("{}?{}", url, params)
+    };
+    log::debug!("UEX GET {} (api_key={})", display_url, !api_key.is_empty());
+
     let resp = req
         .send()
         .await
         .map_err(|e| format!("UEX request failed: {}", e))?;
 
-    if !resp.status().is_success() {
-        return Err(format!("UEX API returned status: {}", resp.status()));
+    let status = resp.status();
+    if !status.is_success() {
+        // Read the body to surface the UEX error message
+        let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable body>".to_string());
+        log::warn!(
+            "UEX GET {} → {} | body: {}",
+            display_url,
+            status,
+            body_text
+        );
+        return Err(format!("UEX API returned status: {} — {}", status, body_text));
     }
 
     resp.json()
