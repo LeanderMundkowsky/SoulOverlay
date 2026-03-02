@@ -20,7 +20,7 @@ pub struct Settings {
     /// Maximum number of search results returned by api_search (default: 50)
     #[serde(default = "default_max_search_results")]
     pub max_search_results: u32,
-    /// Cache TTL in seconds for commodity/price collections (default: 600 = 10 min)
+    /// Cache TTL in seconds for price collections (default: 3600 = 1 h)
     #[serde(default = "default_ttl_prices")]
     pub cache_ttl_prices_secs: u32,
     /// Cache TTL in seconds for catalog collections: vehicles, items, locations (default: 86400 = 24 h)
@@ -37,7 +37,7 @@ fn default_max_search_results() -> u32 {
 }
 
 fn default_ttl_prices() -> u32 {
-    600
+    3600
 }
 
 fn default_ttl_catalog() -> u32 {
@@ -54,7 +54,7 @@ impl Default for Settings {
             esc_closes_overlay: true,
             reset_on_open: true,
             max_search_results: 50,
-            cache_ttl_prices_secs: 600,
+            cache_ttl_prices_secs: 3600,
             cache_ttl_catalog_secs: 86400,
         }
     }

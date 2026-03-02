@@ -23,7 +23,7 @@ const form = ref<Settings>({
   esc_closes_overlay: true,
   reset_on_open: true,
   max_search_results: 50,
-  cache_ttl_prices_secs: 600,
+  cache_ttl_prices_secs: 3600,
   cache_ttl_catalog_secs: 86400,
 });
 
@@ -62,7 +62,7 @@ function resetDefaults() {
     esc_closes_overlay: true,
     reset_on_open: true,
     max_search_results: 50,
-    cache_ttl_prices_secs: 600,
+    cache_ttl_prices_secs: 3600,
     cache_ttl_catalog_secs: 86400,
   };
 }

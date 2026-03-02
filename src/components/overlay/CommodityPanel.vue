@@ -5,19 +5,23 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import { useUex, type PriceEntry } from "@/composables/useUex";
 
 const props = defineProps<{
-  commodityId: string;
-  commodityName: string;
+  entityId: string;
+  entityName: string;
+  entityKind: string;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const { loading, error, prices, getPrices } = useUex();
+const { loading, error, prices, getEntityPrices } = useUex();
 
 const sortKey = ref<keyof PriceEntry>("sell_price");
 const sortAsc = ref(false);
 const sortedPrices = ref<PriceEntry[]>([]);
+
+const showRentColumn = ref(false);
+const showScuColumn = ref(false);
 
 watch(
   [prices, sortKey, sortAsc],
@@ -34,6 +38,9 @@ watch(
         : String(bVal).localeCompare(String(aVal));
     });
     sortedPrices.value = sorted;
+
+    showRentColumn.value = sorted.some((p) => p.rent_price > 0);
+    showScuColumn.value = sorted.some((p) => p.scu_available !== null && p.scu_available > 0);
   },
   { immediate: true }
 );
@@ -57,15 +64,19 @@ function formatPrice(val: number): string {
   return val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-onMounted(() => { getPrices(props.commodityId); });
-watch(() => props.commodityId, (newId) => { getPrices(newId); });
+function fetchPrices() {
+  getEntityPrices(props.entityKind, props.entityId);
+}
+
+onMounted(() => { fetchPrices(); });
+watch(() => props.entityId, () => { fetchPrices(); });
 </script>
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
-      <h2 class="text-white font-semibold text-sm">{{ commodityName }} — Prices</h2>
+      <h2 class="text-white font-semibold text-sm">{{ entityName }} — Prices</h2>
       <button @click="emit('close')" class="text-white/40 hover:text-white transition-colors">
         <IconClose class="w-4 h-4" />
       </button>
@@ -88,7 +99,8 @@ watch(() => props.commodityId, (newId) => { getPrices(newId); });
             <th @click="toggleSort('terminal')"  class="text-left px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Terminal{{ sortIndicator("terminal") }}</th>
             <th @click="toggleSort('buy_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Buy{{ sortIndicator("buy_price") }}</th>
             <th @click="toggleSort('sell_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Sell{{ sortIndicator("sell_price") }}</th>
-            <th @click="toggleSort('scu_available')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">SCU{{ sortIndicator("scu_available") }}</th>
+            <th v-if="showRentColumn" @click="toggleSort('rent_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Rent{{ sortIndicator("rent_price") }}</th>
+            <th v-if="showScuColumn" @click="toggleSort('scu_available')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">SCU{{ sortIndicator("scu_available") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -101,7 +113,8 @@ watch(() => props.commodityId, (newId) => { getPrices(newId); });
             <td class="px-4 py-2 text-white/60">{{ entry.terminal }}</td>
             <td class="px-4 py-2 text-right text-green-400">{{ formatPrice(entry.buy_price) }}</td>
             <td class="px-4 py-2 text-right text-blue-400">{{ formatPrice(entry.sell_price) }}</td>
-            <td class="px-4 py-2 text-right text-white/50">{{ entry.scu_available !== null ? entry.scu_available : "-" }}</td>
+            <td v-if="showRentColumn" class="px-4 py-2 text-right text-yellow-400">{{ formatPrice(entry.rent_price) }}</td>
+            <td v-if="showScuColumn" class="px-4 py-2 text-right text-white/50">{{ entry.scu_available !== null ? entry.scu_available : "-" }}</td>
           </tr>
         </tbody>
       </table>
@@ -109,7 +122,7 @@ watch(() => props.commodityId, (newId) => { getPrices(newId); });
 
     <!-- Empty state -->
     <div v-else class="px-4 py-8 text-center text-white/40 text-sm">
-      No price data available for this commodity.
+      No price data available.
     </div>
   </div>
 </template>

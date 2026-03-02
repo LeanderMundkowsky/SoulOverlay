@@ -83,7 +83,12 @@ async fn search_cached_or_fetch(
                 Collection::Vehicles => uex_client::search_vehicles(query, api_key).await?,
                 Collection::Items => uex_client::search_items(query, api_key).await?,
                 Collection::Locations => uex_client::search_locations(query, api_key).await?,
-                Collection::CommodityPrices => return Err("Use api_commodity_prices for prices".to_string()),
+                Collection::CommodityPrices
+                | Collection::RawCommodityPrices
+                | Collection::ItemPrices
+                | Collection::VehiclePurchasePrices
+                | Collection::VehicleRentalPrices
+                | Collection::FuelPrices => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }
@@ -252,7 +257,7 @@ pub async fn api_commodity_prices(
     }
 
     // Fetch from API
-    match uex_client::get_prices(&commodity_id, &api_key).await {
+    match uex_client::get_commodity_prices(&commodity_id, &api_key).await {
         Ok(prices) => {
             // Cache the result
             let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
@@ -261,4 +266,121 @@ pub async fn api_commodity_prices(
         }
         Err(e) => Ok(ApiResponse::err(e)),
     }
+}
+
+// ── Generic price lookup helper ───────────────────────────────────────────
+
+/// Lookup prices from cache, or live-fetch if stale/missing.
+async fn price_lookup(
+    entity_id: &str,
+    collection: Collection,
+    fetch_fn: impl std::future::Future<Output = Result<Vec<PriceEntry>, String>>,
+    state: &AppState,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    let cache_key = collection.storage_key_with_id(entity_id);
+
+    match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
+        CacheResult::Fresh(prices) => return Ok(ApiResponse::ok(prices)),
+        CacheResult::Stale(prices) => return Ok(ApiResponse::ok_stale(prices)),
+        CacheResult::Missing => {}
+    }
+
+    match fetch_fn.await {
+        Ok(prices) => {
+            let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
+            let _ = state.cache.put(&cache_key, ttl, &prices);
+            Ok(ApiResponse::ok(prices))
+        }
+        Err(e) => Ok(ApiResponse::err(e)),
+    }
+}
+
+/// Fetch raw commodity prices by commodity ID.
+#[tauri::command]
+pub async fn api_raw_commodity_prices(
+    commodity_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if commodity_id.trim().is_empty() {
+        return Ok(ApiResponse::err("commodity_id must not be empty"));
+    }
+    let key = api_key(&state);
+    price_lookup(
+        &commodity_id,
+        Collection::RawCommodityPrices,
+        uex_client::get_raw_commodity_prices(&commodity_id, &key),
+        &state,
+    ).await
+}
+
+/// Fetch item prices by item ID.
+#[tauri::command]
+pub async fn api_item_prices(
+    item_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if item_id.trim().is_empty() {
+        return Ok(ApiResponse::err("item_id must not be empty"));
+    }
+    let key = api_key(&state);
+    price_lookup(
+        &item_id,
+        Collection::ItemPrices,
+        uex_client::get_item_prices(&item_id, &key),
+        &state,
+    ).await
+}
+
+/// Fetch vehicle purchase prices by vehicle ID.
+#[tauri::command]
+pub async fn api_vehicle_purchase_prices(
+    vehicle_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if vehicle_id.trim().is_empty() {
+        return Ok(ApiResponse::err("vehicle_id must not be empty"));
+    }
+    let key = api_key(&state);
+    price_lookup(
+        &vehicle_id,
+        Collection::VehiclePurchasePrices,
+        uex_client::get_vehicle_purchase_prices(&vehicle_id, &key),
+        &state,
+    ).await
+}
+
+/// Fetch vehicle rental prices by vehicle ID.
+#[tauri::command]
+pub async fn api_vehicle_rental_prices(
+    vehicle_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if vehicle_id.trim().is_empty() {
+        return Ok(ApiResponse::err("vehicle_id must not be empty"));
+    }
+    let key = api_key(&state);
+    price_lookup(
+        &vehicle_id,
+        Collection::VehicleRentalPrices,
+        uex_client::get_vehicle_rental_prices(&vehicle_id, &key),
+        &state,
+    ).await
+}
+
+/// Fetch fuel prices by terminal ID.
+#[tauri::command]
+pub async fn api_fuel_prices(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if terminal_id.trim().is_empty() {
+        return Ok(ApiResponse::err("terminal_id must not be empty"));
+    }
+    let key = api_key(&state);
+    price_lookup(
+        &terminal_id,
+        Collection::FuelPrices,
+        uex_client::get_fuel_prices(&terminal_id, &key),
+        &state,
+    ).await
 }

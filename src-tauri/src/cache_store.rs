@@ -13,6 +13,11 @@ use std::sync::Mutex;
 pub enum Collection {
     Commodities,
     CommodityPrices,
+    RawCommodityPrices,
+    ItemPrices,
+    VehiclePurchasePrices,
+    VehicleRentalPrices,
+    FuelPrices,
     Vehicles,
     Items,
     Locations,
@@ -24,30 +29,41 @@ impl Collection {
         match self {
             Self::Commodities => "Commodities",
             Self::CommodityPrices => "Commodity Prices",
+            Self::RawCommodityPrices => "Raw Commodity Prices",
+            Self::ItemPrices => "Item Prices",
+            Self::VehiclePurchasePrices => "Vehicle Purchase Prices",
+            Self::VehicleRentalPrices => "Vehicle Rental Prices",
+            Self::FuelPrices => "Fuel Prices",
             Self::Vehicles => "Vehicles",
             Self::Items => "Items",
             Self::Locations => "Locations",
         }
     }
 
-    /// TTL for this collection in seconds.
+    /// Fallback TTL for this collection in seconds (used when no entry exists yet).
     pub fn ttl_secs(&self) -> i64 {
         match self {
-            Self::Commodities => 600,     // 10 min
-            Self::CommodityPrices => 600, // 10 min
-            Self::Vehicles => 86400,      // 24 hours
-            Self::Items => 86400,         // 24 hours
-            Self::Locations => 86400,     // 24 hours
+            Self::Commodities => 600,
+            Self::CommodityPrices
+            | Self::RawCommodityPrices
+            | Self::ItemPrices
+            | Self::VehiclePurchasePrices
+            | Self::VehicleRentalPrices
+            | Self::FuelPrices => 3600,
+            Self::Vehicles | Self::Items | Self::Locations => 86400,
         }
     }
 
     /// Storage key used in the SQLite table and in-memory map.
-    /// For per-ID collections (e.g. prices for a specific commodity),
-    /// use `storage_key_with_id` instead.
     pub fn storage_key(&self) -> String {
         match self {
             Self::Commodities => "commodities".to_string(),
             Self::CommodityPrices => "commodity_prices".to_string(),
+            Self::RawCommodityPrices => "raw_commodity_prices".to_string(),
+            Self::ItemPrices => "item_prices".to_string(),
+            Self::VehiclePurchasePrices => "vehicle_purchase_prices".to_string(),
+            Self::VehicleRentalPrices => "vehicle_rental_prices".to_string(),
+            Self::FuelPrices => "fuel_prices".to_string(),
             Self::Vehicles => "vehicles".to_string(),
             Self::Items => "items".to_string(),
             Self::Locations => "locations".to_string(),
@@ -66,6 +82,12 @@ impl Collection {
             Collection::Vehicles,
             Collection::Items,
             Collection::Locations,
+            Collection::CommodityPrices,
+            Collection::RawCommodityPrices,
+            Collection::ItemPrices,
+            Collection::VehiclePurchasePrices,
+            Collection::VehicleRentalPrices,
+            Collection::FuelPrices,
         ]
     }
 
@@ -74,10 +96,40 @@ impl Collection {
         &[
             Collection::Commodities,
             Collection::CommodityPrices,
+            Collection::RawCommodityPrices,
+            Collection::ItemPrices,
+            Collection::VehiclePurchasePrices,
+            Collection::VehicleRentalPrices,
+            Collection::FuelPrices,
             Collection::Vehicles,
             Collection::Items,
             Collection::Locations,
         ]
+    }
+
+    /// Price collections that use per-entity sub-keys.
+    pub fn price_collections() -> &'static [Collection] {
+        &[
+            Collection::CommodityPrices,
+            Collection::RawCommodityPrices,
+            Collection::ItemPrices,
+            Collection::VehiclePurchasePrices,
+            Collection::VehicleRentalPrices,
+            Collection::FuelPrices,
+        ]
+    }
+
+    /// Whether this collection uses per-entity sub-keys.
+    pub fn is_per_entity(&self) -> bool {
+        matches!(
+            self,
+            Self::CommodityPrices
+                | Self::RawCommodityPrices
+                | Self::ItemPrices
+                | Self::VehiclePurchasePrices
+                | Self::VehicleRentalPrices
+                | Self::FuelPrices
+        )
     }
 }
 
@@ -307,8 +359,8 @@ impl CacheStore {
             .map(|c| {
                 let key = c.storage_key();
 
-                // For per-ID collections (CommodityPrices), count all sub-entries
-                let (cached_at, is_expired, entry_count, ttl_secs) = if *c == Collection::CommodityPrices {
+                // For per-entity collections, count all sub-entries
+                let (cached_at, is_expired, entry_count, ttl_secs) = if c.is_per_entity() {
                     let prefix = format!("{}:", key);
                     let sub_entries: Vec<&MemoryEntry> = memory
                         .iter()
@@ -349,13 +401,27 @@ impl CacheStore {
             .collect()
     }
 
-    /// Check if a collection's main key is expired or missing.
+    /// Check if a key is expired or missing.
+    /// For per-entity price collections, pass the base key (e.g. "commodity_prices")
+    /// and this will check if ANY sub-entry exists and is fresh.
     pub fn is_expired(&self, key: &str) -> bool {
         let memory = self.memory.lock().unwrap();
-        match memory.get(key) {
-            Some(entry) => entry.is_expired(),
-            None => true,
+        // Check exact key first
+        if let Some(entry) = memory.get(key) {
+            return entry.is_expired();
         }
+        // Check for per-entity sub-keys (e.g. "commodity_prices:*")
+        let prefix = format!("{}:", key);
+        let sub_entries: Vec<&MemoryEntry> = memory
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v)
+            .collect();
+        if sub_entries.is_empty() {
+            return true;
+        }
+        // Expired if ANY sub-entry is expired
+        sub_entries.iter().any(|e| e.is_expired())
     }
 
     /// Total number of keys in the cache (for debug info).

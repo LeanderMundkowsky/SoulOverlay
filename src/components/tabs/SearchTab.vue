@@ -61,12 +61,13 @@ defineExpose({ focusInput });
       <!-- Detail panel: slides in from the right when a result is selected -->
       <Transition name="detail-panel">
         <div
-          v-if="selectedResult && selectedResult.kind === 'commodity'"
+          v-if="selectedResult"
           class="flex-1 min-w-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
         >
           <CommodityPanel
-            :commodity-id="selectedResult.id"
-            :commodity-name="selectedResult.name"
+            :entity-id="selectedResult.id"
+            :entity-name="selectedResult.name"
+            :entity-kind="selectedResult.kind"
             @close="selectedResult = null"
           />
         </div>

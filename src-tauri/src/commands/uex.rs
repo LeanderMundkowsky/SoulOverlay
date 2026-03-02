@@ -52,7 +52,12 @@ pub async fn uex_search_all(
                     Collection::Vehicles => uex_client::search_vehicles(&query, &api_key).await,
                     Collection::Items => uex_client::search_items(&query, &api_key).await,
                     Collection::Locations => uex_client::search_locations(&query, &api_key).await,
-                    Collection::CommodityPrices => Ok(vec![]),
+                    Collection::CommodityPrices
+                    | Collection::RawCommodityPrices
+                    | Collection::ItemPrices
+                    | Collection::VehiclePurchasePrices
+                    | Collection::VehicleRentalPrices
+                    | Collection::FuelPrices => Ok(vec![]),
                 };
                 if let Ok(mut v) = fetched {
                     results.append(&mut v);
@@ -81,7 +86,7 @@ pub async fn uex_prices(
     }
 
     // Fetch from API and cache
-    let prices = uex_client::get_prices(&commodity, &api_key).await?;
+    let prices = uex_client::get_commodity_prices(&commodity, &api_key).await?;
     let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
     let _ = state.cache.put(&cache_key, ttl, &prices);
     Ok(prices)

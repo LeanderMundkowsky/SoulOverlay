@@ -42,64 +42,154 @@ impl UexResult {
     }
 }
 
-/// A price entry from UEX API
+/// A price entry from UEX API.
+/// Unified across all price types — entity metadata identifies the source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceEntry {
+    pub entity_id: String,
+    pub entity_name: String,
+    pub price_type: String,
     pub location: String,
     pub terminal: String,
+    pub terminal_id: String,
     pub buy_price: f64,
     pub sell_price: f64,
+    pub rent_price: f64,
     pub scu_available: Option<f64>,
     pub date_updated: String,
 }
 
 impl PriceEntry {
-    /// Parse a single JSON object from the UEX API `data` array into a `PriceEntry`.
-    fn from_json(item: &serde_json::Value) -> Self {
-        let location = item
-            .get("star_system_name")
-            .or_else(|| item.get("planet_name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("Unknown")
-            .to_string();
-
-        let terminal = item
-            .get("terminal_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Unknown")
-            .to_string();
-
-        let buy_price = item
-            .get("price_buy")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
-        let sell_price = item
-            .get("price_sell")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
-        let scu_available = item
-            .get("scu_buy")
-            .or_else(|| item.get("scu_sell"))
-            .and_then(|v| v.as_f64());
-
-        let date_updated = item
-            .get("date_modified")
-            .or_else(|| item.get("date_added"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
+    /// Parse a commodity/raw-commodity price row.
+    fn from_commodity_json(item: &serde_json::Value, price_type: &str) -> Self {
+        let entity_id = json_str_or_u64(item, "id_commodity");
+        let entity_name = item.get("commodity_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
         Self {
-            location,
-            terminal,
-            buy_price,
-            sell_price,
-            scu_available,
-            date_updated,
+            entity_id,
+            entity_name,
+            price_type: price_type.to_string(),
+            location: location_from_json(item),
+            terminal: terminal_name_from_json(item),
+            terminal_id: json_str_or_u64(item, "id_terminal"),
+            buy_price: item.get("price_buy").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            sell_price: item.get("price_sell").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            rent_price: 0.0,
+            scu_available: item.get("scu_buy").or_else(|| item.get("scu_sell")).and_then(|v| v.as_f64()),
+            date_updated: json_timestamp(item),
         }
     }
+
+    /// Parse an item price row.
+    fn from_item_json(item: &serde_json::Value) -> Self {
+        let entity_id = json_str_or_u64(item, "id_item");
+        let entity_name = item.get("item_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        Self {
+            entity_id,
+            entity_name,
+            price_type: "item".to_string(),
+            location: location_from_json(item),
+            terminal: terminal_name_from_json(item),
+            terminal_id: json_str_or_u64(item, "id_terminal"),
+            buy_price: item.get("price_buy").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            sell_price: item.get("price_sell").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            rent_price: 0.0,
+            scu_available: None,
+            date_updated: json_timestamp(item),
+        }
+    }
+
+    /// Parse a vehicle purchase price row.
+    fn from_vehicle_purchase_json(item: &serde_json::Value) -> Self {
+        let entity_id = json_str_or_u64(item, "id_vehicle");
+        let entity_name = item.get("vehicle_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        Self {
+            entity_id,
+            entity_name,
+            price_type: "vehicle_purchase".to_string(),
+            location: location_from_json(item),
+            terminal: terminal_name_from_json(item),
+            terminal_id: json_str_or_u64(item, "id_terminal"),
+            buy_price: item.get("price_buy").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            sell_price: 0.0,
+            rent_price: 0.0,
+            scu_available: None,
+            date_updated: json_timestamp(item),
+        }
+    }
+
+    /// Parse a vehicle rental price row.
+    fn from_vehicle_rental_json(item: &serde_json::Value) -> Self {
+        let entity_id = json_str_or_u64(item, "id_vehicle");
+        let entity_name = item.get("vehicle_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        Self {
+            entity_id,
+            entity_name,
+            price_type: "vehicle_rental".to_string(),
+            location: location_from_json(item),
+            terminal: terminal_name_from_json(item),
+            terminal_id: json_str_or_u64(item, "id_terminal"),
+            buy_price: 0.0,
+            sell_price: 0.0,
+            rent_price: item.get("price_rent").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            scu_available: None,
+            date_updated: json_timestamp(item),
+        }
+    }
+
+    /// Parse a fuel price row.
+    fn from_fuel_json(item: &serde_json::Value) -> Self {
+        let entity_id = json_str_or_u64(item, "id_commodity");
+        let entity_name = item.get("commodity_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        Self {
+            entity_id,
+            entity_name,
+            price_type: "fuel".to_string(),
+            location: location_from_json(item),
+            terminal: terminal_name_from_json(item),
+            terminal_id: json_str_or_u64(item, "id_terminal"),
+            buy_price: item.get("price_buy").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            sell_price: 0.0,
+            rent_price: 0.0,
+            scu_available: None,
+            date_updated: json_timestamp(item),
+        }
+    }
+}
+
+/// Extract a string or u64 field as a String.
+fn json_str_or_u64(item: &serde_json::Value, field: &str) -> String {
+    item.get(field)
+        .and_then(|v| v.as_u64().map(|n| n.to_string()).or_else(|| v.as_str().map(|s| s.to_string())))
+        .unwrap_or_default()
+}
+
+/// Build a human-readable location string from a price row.
+fn location_from_json(item: &serde_json::Value) -> String {
+    item.get("star_system_name")
+        .or_else(|| item.get("planet_name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown")
+        .to_string()
+}
+
+/// Extract terminal_name from a price row.
+fn terminal_name_from_json(item: &serde_json::Value) -> String {
+    item.get("terminal_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown")
+        .to_string()
+}
+
+/// Extract a date string from a price row (timestamp or string).
+fn json_timestamp(item: &serde_json::Value) -> String {
+    item.get("date_modified")
+        .or_else(|| item.get("date_added"))
+        .map(|v| {
+            if let Some(n) = v.as_i64() { n.to_string() }
+            else if let Some(s) = v.as_str() { s.to_string() }
+            else { String::new() }
+        })
+        .unwrap_or_default()
 }
 
 const UEX_BASE_URL: &str = "https://uexcorp.space/api/2.0";
@@ -455,15 +545,135 @@ pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResul
 }
 
 /// Get prices for a specific commodity from UEX (direct API call, no cache).
-pub async fn get_prices(commodity_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+pub async fn get_commodity_prices(commodity_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
     let url = format!("{}/commodities_prices", UEX_BASE_URL);
     let body = uex_get(&url, &[("id_commodity", commodity_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_commodity_json(item, "commodity"))
+        .collect();
+    Ok(entries)
+}
 
-    let entries = body
-        .get("data")
-        .and_then(|d| d.as_array())
-        .map(|data| data.iter().map(PriceEntry::from_json).collect())
-        .unwrap_or_default();
+/// Get raw commodity prices for a specific commodity (direct API call, no cache).
+pub async fn get_raw_commodity_prices(commodity_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/commodities_raw_prices", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id_commodity", commodity_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_commodity_json(item, "raw_commodity"))
+        .collect();
+    Ok(entries)
+}
 
+/// Get item prices for a specific item (direct API call, no cache).
+pub async fn get_item_prices(item_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/items_prices", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id_item", item_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_item_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Get vehicle purchase prices for a specific vehicle (direct API call, no cache).
+pub async fn get_vehicle_purchase_prices(vehicle_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/vehicles_purchases_prices", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id_vehicle", vehicle_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_vehicle_purchase_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Get vehicle rental prices for a specific vehicle (direct API call, no cache).
+pub async fn get_vehicle_rental_prices(vehicle_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/vehicles_rentals_prices", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id_vehicle", vehicle_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_vehicle_rental_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Get fuel prices for a specific terminal (direct API call, no cache).
+pub async fn get_fuel_prices(terminal_id: &str, api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/fuel_prices", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id_terminal", terminal_id)], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_fuel_json(item))
+        .collect();
+    Ok(entries)
+}
+
+// ── Bulk-fetch price functions (all data, for cache prefetch) ──────────────
+
+/// Fetch ALL commodity prices from UEX.
+pub async fn fetch_all_commodity_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/commodities_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_commodity_json(item, "commodity"))
+        .collect();
+    Ok(entries)
+}
+
+/// Fetch ALL raw commodity prices from UEX.
+pub async fn fetch_all_raw_commodity_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/commodities_raw_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_commodity_json(item, "raw_commodity"))
+        .collect();
+    Ok(entries)
+}
+
+/// Fetch ALL item prices from UEX.
+pub async fn fetch_all_item_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/items_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_item_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Fetch ALL vehicle purchase prices from UEX.
+pub async fn fetch_all_vehicle_purchase_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/vehicles_purchases_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_vehicle_purchase_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Fetch ALL vehicle rental prices from UEX.
+pub async fn fetch_all_vehicle_rental_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/vehicles_rentals_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_vehicle_rental_json(item))
+        .collect();
+    Ok(entries)
+}
+
+/// Fetch ALL fuel prices from UEX.
+pub async fn fetch_all_fuel_prices(api_key: &str) -> Result<Vec<PriceEntry>, String> {
+    let url = format!("{}/fuel_prices_all", UEX_BASE_URL);
+    let body = uex_get(&url, &[], api_key).await?;
+    let entries = extract_data_array(&body)
+        .into_iter()
+        .map(|item| PriceEntry::from_fuel_json(item))
+        .collect();
     Ok(entries)
 }

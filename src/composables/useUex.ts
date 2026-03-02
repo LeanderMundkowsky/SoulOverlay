@@ -9,10 +9,15 @@ export interface UexResult {
 }
 
 export interface PriceEntry {
+  entity_id: string;
+  entity_name: string;
+  price_type: string;
   location: string;
   terminal: string;
+  terminal_id: string;
   buy_price: number;
   sell_price: number;
+  rent_price: number;
   scu_available: number | null;
   date_updated: string;
 }
@@ -107,12 +112,34 @@ export function useUex() {
   }
 
   async function getPrices(commodityId: string) {
+    return getEntityPrices("commodity", commodityId);
+  }
+
+  async function getEntityPrices(kind: string, entityId: string) {
     loading.value = true;
     error.value = null;
 
+    const commandMap: Record<string, { cmd: string; param: string }> = {
+      commodity: { cmd: "api_commodity_prices", param: "commodityId" },
+      raw_commodity: { cmd: "api_raw_commodity_prices", param: "commodityId" },
+      item: { cmd: "api_item_prices", param: "itemId" },
+      vehicle: { cmd: "api_vehicle_purchase_prices", param: "vehicleId" },
+      "ground vehicle": { cmd: "api_vehicle_purchase_prices", param: "vehicleId" },
+      vehicle_rental: { cmd: "api_vehicle_rental_prices", param: "vehicleId" },
+      fuel: { cmd: "api_fuel_prices", param: "terminalId" },
+      location: { cmd: "api_fuel_prices", param: "terminalId" },
+    };
+
+    const mapping = commandMap[kind];
+    if (!mapping) {
+      prices.value = [];
+      loading.value = false;
+      return;
+    }
+
     try {
-      const resp = await invoke<ApiResponse<PriceEntry[]>>("api_commodity_prices", {
-        commodityId,
+      const resp = await invoke<ApiResponse<PriceEntry[]>>(mapping.cmd, {
+        [mapping.param]: entityId,
       });
       if (resp.ok && resp.data) {
         prices.value = resp.data;
@@ -138,5 +165,6 @@ export function useUex() {
     stale,
     search,
     getPrices,
+    getEntityPrices,
   };
 }

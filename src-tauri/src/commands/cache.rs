@@ -1,11 +1,13 @@
 use log::{error, info};
 use serde::Serialize;
+use std::sync::Arc;
 use tauri::State;
 
-use crate::cache_store::{Collection, CollectionStatus};
+use crate::cache_store::{CacheStore, Collection, CollectionStatus};
 use crate::settings::Settings;
 use crate::state::AppState;
 use crate::uex_client;
+use crate::uex_client::PriceEntry;
 
 /// Response from cache refresh operations.
 #[derive(Debug, Serialize)]
@@ -67,6 +69,47 @@ pub async fn cache_refresh_all(
     Ok(results)
 }
 
+// ── Split helper ───────────────────────────────────────────────────────────
+
+/// Split a flat vec of price entries by entity_id and store each group
+/// as a separate per-entity cache entry (e.g. `commodity_prices:42`).
+fn store_prices_split(
+    cache: &CacheStore,
+    entries: &[PriceEntry],
+    collection: Collection,
+    ttl: i64,
+) -> Result<(), String> {
+    let mut groups: std::collections::HashMap<&str, Vec<PriceEntry>> = std::collections::HashMap::new();
+    for entry in entries {
+        groups.entry(&entry.entity_id).or_default().push(entry.clone());
+    }
+
+    let base_key = collection.storage_key();
+    let mut errors = Vec::new();
+    for (entity_id, group) in &groups {
+        let key = format!("{}:{}", base_key, entity_id);
+        if let Err(e) = cache.put(&key, ttl, group) {
+            errors.push(format!("{}: {}", key, e));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// Arc variant for use in spawned tasks.
+fn store_prices_split_arc(
+    cache: &Arc<CacheStore>,
+    entries: &[PriceEntry],
+    collection: Collection,
+    ttl: i64,
+) -> Result<(), String> {
+    store_prices_split(cache.as_ref(), entries, collection, ttl)
+}
+
 /// Internal helper: refresh a collection by its storage key name.
 async fn refresh_collection_by_name(
     name: &str,
@@ -115,11 +158,58 @@ async fn refresh_collection_by_name(
             }
         }
         "commodity_prices" => {
-            // Cannot refresh all prices without knowing which commodity IDs to fetch.
-            // Invalidate existing cached prices instead.
-            state.cache.invalidate_collection(Collection::CommodityPrices);
-            info!("Invalidated all cached commodity prices");
-            Ok(())
+            match uex_client::fetch_all_commodity_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed commodity prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::CommodityPrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "raw_commodity_prices" => {
+            match uex_client::fetch_all_raw_commodity_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed raw commodity prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::RawCommodityPrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "item_prices" => {
+            match uex_client::fetch_all_item_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed item prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::ItemPrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "vehicle_purchase_prices" => {
+            match uex_client::fetch_all_vehicle_purchase_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed vehicle purchase prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "vehicle_rental_prices" => {
+            match uex_client::fetch_all_vehicle_rental_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed vehicle rental prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "fuel_prices" => {
+            match uex_client::fetch_all_fuel_prices(api_key).await {
+                Ok(data) => {
+                    info!("Refreshed fuel prices: {} rows", data.len());
+                    store_prices_split(&state.cache, &data, Collection::FuelPrices, prices_ttl)
+                }
+                Err(e) => Err(e),
+            }
         }
         _ => Err(format!("Unknown collection: {}", name)),
     };
@@ -142,11 +232,18 @@ async fn refresh_collection_by_name(
 }
 
 /// Public helper used by app_setup to prefetch all collections on startup.
-/// Not a tauri command — called directly from Rust.
+/// Catalog collections run sequentially, then price collections in parallel.
 pub async fn prefetch_all(state: &AppState) {
     let settings = state.current_settings.lock().unwrap().clone();
 
-    for collection in Collection::prefetch_list() {
+    // Catalog collections first (sequential)
+    let catalog = [
+        Collection::Commodities,
+        Collection::Vehicles,
+        Collection::Items,
+        Collection::Locations,
+    ];
+    for collection in &catalog {
         let key = collection.storage_key();
         if state.cache.is_expired(&key) {
             info!("Prefetching expired collection: {}", key);
@@ -158,6 +255,52 @@ pub async fn prefetch_all(state: &AppState) {
             }
         } else {
             info!("Collection '{}' is still fresh, skipping prefetch", key);
+        }
+    }
+
+    // Price collections in parallel
+    let prices_ttl = settings.cache_ttl_prices_secs as i64;
+    let mut handles = Vec::new();
+
+    for collection in Collection::price_collections() {
+        let key = collection.storage_key();
+        if !state.cache.is_expired(&key) {
+            info!("Collection '{}' is still fresh, skipping prefetch", key);
+            continue;
+        }
+
+        info!("Prefetching expired collection: {}", key);
+        let api_key = settings.uex_api_key.clone();
+        let cache = state.cache_arc();
+        let coll = *collection;
+        let ttl = prices_ttl;
+
+        handles.push(tokio::spawn(async move {
+            let key = coll.storage_key();
+            let result: Result<(), String> = match key.as_str() {
+                "commodity_prices" => uex_client::fetch_all_commodity_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "raw_commodity_prices" => uex_client::fetch_all_raw_commodity_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched raw commodity prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "item_prices" => uex_client::fetch_all_item_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched item prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "vehicle_purchase_prices" => uex_client::fetch_all_vehicle_purchase_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched vehicle purchase prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "vehicle_rental_prices" => uex_client::fetch_all_vehicle_rental_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched vehicle rental prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                "fuel_prices" => uex_client::fetch_all_fuel_prices(&api_key).await
+                    .and_then(|data| { info!("Prefetched fuel prices: {} rows", data.len()); store_prices_split_arc(&cache, &data, coll, ttl) }),
+                _ => Ok(()),
+            };
+            (key, result)
+        }));
+    }
+
+    for handle in handles {
+        match handle.await {
+            Ok((key, Ok(()))) => info!("Prefetch complete for '{}'", key),
+            Ok((key, Err(e))) => error!("Prefetch failed for '{}': {}", key, e),
+            Err(e) => error!("Prefetch task panicked: {}", e),
         }
     }
 }
