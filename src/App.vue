@@ -10,6 +10,7 @@ import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
 import DebugPanel from "./components/panels/DebugPanel.vue";
+import ResizeHandle from "./components/ui/ResizeHandle.vue";
 import { useGameStore } from "./stores/game";
 import { useSettingsStore } from "./stores/settings";
 import { useFavoritesStore } from "./stores/favorites";
@@ -29,6 +30,43 @@ const showFavorites = ref(true);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
 
+// Panel widths — loaded from settings, updated on drag
+const leftPanelPx = ref(280);
+const settingsPanelPx = ref(448);
+
+let saveDebounce: ReturnType<typeof setTimeout> | null = null;
+function scheduleSave() {
+  if (saveDebounce) clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(() => {
+    const s = settingsStore.settings;
+    settingsStore.saveSettings({
+      ...s,
+      layout_widths: {
+        ...s.layout_widths,
+        left_panel_px: leftPanelPx.value,
+        settings_panel_px: settingsPanelPx.value,
+      },
+    });
+  }, 500);
+}
+
+function onLeftResize(newPx: number) {
+  leftPanelPx.value = Math.min(500, Math.max(180, newPx));
+  scheduleSave();
+}
+function onLeftReset() {
+  leftPanelPx.value = 280;
+  scheduleSave();
+}
+function onSettingsResize(newPx: number) {
+  settingsPanelPx.value = Math.min(700, Math.max(300, newPx));
+  scheduleSave();
+}
+function onSettingsReset() {
+  settingsPanelPx.value = 448;
+  scheduleSave();
+}
+
 useLogWatcher();
 
 // Watch for details store tab-switch requests
@@ -41,6 +79,8 @@ watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
 
 onMounted(async () => {
   await settingsStore.loadSettings();
+  leftPanelPx.value = settingsStore.settings.layout_widths.left_panel_px;
+  settingsPanelPx.value = settingsStore.settings.layout_widths.settings_panel_px;
   await favoritesStore.loadFavorites();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
@@ -69,7 +109,6 @@ useOverlayEvents({
 function onOverlayShown() {
   if (!settingsStore.settings.reset_on_open) return;
   activeTab.value = "search";
-  showSettings.value = false;
   nextTick(() => { searchTabRef.value?.focusInput(); });
 }
 
@@ -170,7 +209,8 @@ function onToggleDebug() {
         <Transition name="slide-left">
           <div
             v-if="showDebug || (showFavorites && (activeTab === 'search' || activeTab === 'details'))"
-            class="flex-shrink-0 flex flex-col gap-4 py-4 pl-4"
+            class="relative flex-shrink-0 flex flex-col gap-4 py-4 pl-4"
+            :style="{ width: leftPanelPx + 'px' }"
           >
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
@@ -181,6 +221,7 @@ function onToggleDebug() {
               class="flex-1 min-h-0"
               @close="showDebug = false"
             />
+            <ResizeHandle :default-px="280" @resize="onLeftResize" @reset="onLeftReset" />
           </div>
         </Transition>
 
@@ -199,11 +240,22 @@ function onToggleDebug() {
 
         <!-- Settings side panel -->
         <Transition name="slide">
-          <SettingsPanel
+          <div
             v-if="showSettings"
-            class="w-[28rem] flex-shrink-0"
-            @close="showSettings = false"
-          />
+            class="relative flex-shrink-0 h-full"
+            :style="{ width: settingsPanelPx + 'px' }"
+          >
+            <ResizeHandle
+              side="left"
+              :default-px="448"
+              @resize="onSettingsResize"
+              @reset="onSettingsReset"
+            />
+            <SettingsPanel
+              class="w-full"
+              @close="showSettings = false"
+            />
+          </div>
         </Transition>
       </div>
 

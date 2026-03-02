@@ -1,5 +1,47 @@
 use serde::{Deserialize, Serialize};
 
+/// Per-panel layout widths persisted alongside other settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayoutWidths {
+    /// Width of the left column (Favorites + Debug) in pixels
+    #[serde(default = "default_left_panel_px")]
+    pub left_panel_px: u32,
+    /// Width of the settings side panel in pixels
+    #[serde(default = "default_settings_panel_px")]
+    pub settings_panel_px: u32,
+    /// Width of the search column when detail panel is open, as a percentage (0–100)
+    #[serde(default = "default_search_split_pct")]
+    pub search_split_pct: u32,
+    /// Width of the search panel when it is the only element (centered), as a percentage (0–100)
+    #[serde(default = "default_search_solo_pct")]
+    pub search_solo_pct: u32,
+}
+
+fn default_left_panel_px() -> u32 {
+    280
+}
+fn default_settings_panel_px() -> u32 {
+    448
+}
+fn default_search_split_pct() -> u32 {
+    50
+}
+
+fn default_search_solo_pct() -> u32 {
+    50
+}
+
+impl Default for LayoutWidths {
+    fn default() -> Self {
+        Self {
+            left_panel_px: default_left_panel_px(),
+            settings_panel_px: default_settings_panel_px(),
+            search_split_pct: default_search_split_pct(),
+            search_solo_pct: default_search_solo_pct(),
+        }
+    }
+}
+
 /// Application settings persisted as JSON to `%APPDATA%\SoulOverlay\settings.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -26,6 +68,9 @@ pub struct Settings {
     /// Cache TTL in seconds for catalog collections: vehicles, items, locations (default: 86400 = 24 h)
     #[serde(default = "default_ttl_catalog")]
     pub cache_ttl_catalog_secs: u32,
+    /// User-adjusted panel layout widths
+    #[serde(default)]
+    pub layout_widths: LayoutWidths,
 }
 
 fn default_true() -> bool {
@@ -56,6 +101,7 @@ impl Default for Settings {
             max_search_results: 50,
             cache_ttl_prices_secs: 3600,
             cache_ttl_catalog_secs: 86400,
+            layout_widths: LayoutWidths::default(),
         }
     }
 }

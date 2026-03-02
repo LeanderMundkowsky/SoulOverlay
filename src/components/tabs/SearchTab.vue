@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import SearchBar from "@/components/overlay/SearchBar.vue";
 import CommodityPanel from "@/components/overlay/CommodityPanel.vue";
 import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
+import ResizeHandle from "@/components/ui/ResizeHandle.vue";
+import { useSettingsStore } from "@/stores/settings";
 
 defineProps<{
   scDetected: boolean;
@@ -15,8 +17,66 @@ interface SelectedResult {
   kind: string;
 }
 
+const settingsStore = useSettingsStore();
 const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null);
 const selectedResult = ref<SelectedResult | null>(null);
+const searchSplitPct = ref(50);  // width when detail panel is open
+const searchSoloPct = ref(50);   // width when search is the only panel
+const mainAreaRef = ref<HTMLElement | null>(null);
+const isDragging = ref(false);
+
+watch(
+  () => settingsStore.settings.layout_widths.search_split_pct,
+  (val) => { searchSplitPct.value = val; },
+  { immediate: true },
+);
+watch(
+  () => settingsStore.settings.layout_widths.search_solo_pct,
+  (val) => { searchSoloPct.value = val; },
+  { immediate: true },
+);
+
+let saveDebounce: ReturnType<typeof setTimeout> | null = null;
+function onSearchResize(containerEl: HTMLElement | null, newPx: number) {
+  if (!containerEl) return;
+  const containerW = containerEl.getBoundingClientRect().width;
+  if (containerW === 0) return;
+  const pct = Math.round((newPx / containerW) * 100);
+  const clamped = Math.min(80, Math.max(20, pct));
+  if (selectedResult.value) {
+    searchSplitPct.value = clamped;
+  } else {
+    searchSoloPct.value = clamped;
+  }
+  if (saveDebounce) clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(() => {
+    const s = settingsStore.settings;
+    settingsStore.saveSettings({
+      ...s,
+      layout_widths: {
+        ...s.layout_widths,
+        search_split_pct: searchSplitPct.value,
+        search_solo_pct: searchSoloPct.value,
+      },
+    });
+  }, 500);
+}
+function onSearchReset() {
+  if (selectedResult.value) {
+    searchSplitPct.value = 50;
+  } else {
+    searchSoloPct.value = 50;
+  }
+  const s = settingsStore.settings;
+  settingsStore.saveSettings({
+    ...s,
+    layout_widths: {
+      ...s.layout_widths,
+      search_split_pct: searchSplitPct.value,
+      search_solo_pct: searchSoloPct.value,
+    },
+  });
+}
 
 function onResultSelected(result: SelectedResult) {
   selectedResult.value = result;
@@ -45,18 +105,25 @@ defineExpose({ focusInput });
     />
 
     <!-- Main area: search centered → search left + detail right -->
-    <div class="flex-1 flex gap-3 overflow-hidden min-h-0">
-      <!-- Search column: animates from centered to left when a result is selected -->
+    <div ref="mainAreaRef" class="flex-1 flex gap-3 overflow-hidden min-h-0">
+      <!-- Search column: centered when solo, left when detail is open -->
       <div
-        class="flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
+        class="relative flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
         :style="{
-          width: selectedResult ? '36%' : 'min(100%, 32rem)',
+          width: (selectedResult ? searchSplitPct : searchSoloPct) + '%',
           marginLeft: selectedResult ? '0' : 'auto',
           marginRight: selectedResult ? '0' : 'auto',
-          transition: 'width 0.3s ease, margin-left 0.3s ease, margin-right 0.3s ease',
+          transition: isDragging ? 'none' : 'margin-left 0.3s ease, margin-right 0.3s ease',
         }"
       >
         <SearchBar ref="searchBarRef" @select="onResultSelected" />
+        <ResizeHandle
+          :default-px="0"
+          @resize="(px) => onSearchResize(mainAreaRef, px)"
+          @reset="onSearchReset"
+          @drag-start="isDragging = true"
+          @drag-end="isDragging = false"
+        />
       </div>
 
       <!-- Detail panel: slides in from the right when a result is selected -->

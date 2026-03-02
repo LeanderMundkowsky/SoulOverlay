@@ -168,7 +168,7 @@ function fmtMs(ms: number): string {
 </script>
 
 <template>
-  <div class="w-[220px] flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden text-xs font-mono">
+  <div class="w-full flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden text-xs font-mono">
     <!-- Header -->
     <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between flex-shrink-0">
       <span class="text-xs font-sans font-semibold text-white/50 uppercase tracking-widest">Debug</span>

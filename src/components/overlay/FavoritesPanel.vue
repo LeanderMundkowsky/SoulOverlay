@@ -51,7 +51,7 @@ async function removeFavorite(fav: Favorite) {
 </script>
 
 <template>
-  <div class="w-[280px] flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+  <div class="w-full flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
     <!-- Header -->
     <div class="px-3 py-2 border-b border-white/10">
       <span class="text-xs font-semibold text-white/50 uppercase tracking-widest">Favorites</span>

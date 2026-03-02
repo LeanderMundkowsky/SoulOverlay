@@ -2,6 +2,13 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface LayoutWidths {
+  left_panel_px: number;
+  settings_panel_px: number;
+  search_split_pct: number;
+  search_solo_pct: number;
+}
+
 export interface Settings {
   hotkey: string;
   uex_api_key: string;
@@ -12,6 +19,7 @@ export interface Settings {
   max_search_results: number;
   cache_ttl_prices_secs: number;
   cache_ttl_catalog_secs: number;
+  layout_widths: LayoutWidths;
 }
 
 const defaultSettings: Settings = {
@@ -24,6 +32,12 @@ const defaultSettings: Settings = {
   max_search_results: 50,
   cache_ttl_prices_secs: 3600,
   cache_ttl_catalog_secs: 86400,
+  layout_widths: {
+    left_panel_px: 280,
+    settings_panel_px: 448,
+    search_split_pct: 50,
+    search_solo_pct: 50,
+  },
 };
 
 export const useSettingsStore = defineStore("settings", () => {

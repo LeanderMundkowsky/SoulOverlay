@@ -25,6 +25,7 @@ const form = ref<Settings>({
   max_search_results: 50,
   cache_ttl_prices_secs: 3600,
   cache_ttl_catalog_secs: 86400,
+  layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
 });
 
 const saving = ref(false);
@@ -64,12 +65,13 @@ function resetDefaults() {
     max_search_results: 50,
     cache_ttl_prices_secs: 3600,
     cache_ttl_catalog_secs: 86400,
+    layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
   };
 }
 </script>
 
 <template>
-  <div class="bg-[#111318] border-l border-white/10 flex flex-col overflow-hidden">
+  <div class="h-full bg-[#111318] border-l border-white/10 flex flex-col overflow-hidden">
     <PanelHeader title="Settings" @close="emit('close')" />
 
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
