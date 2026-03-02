@@ -255,7 +255,8 @@ pub async fn api_commodity_prices(
     match uex_client::get_prices(&commodity_id, &api_key).await {
         Ok(prices) => {
             // Cache the result
-            let _ = state.cache.put(&cache_key, Collection::CommodityPrices, &prices);
+            let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
+            let _ = state.cache.put(&cache_key, ttl, &prices);
             Ok(ApiResponse::ok(prices))
         }
         Err(e) => Ok(ApiResponse::err(e)),

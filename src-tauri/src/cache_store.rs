@@ -200,14 +200,14 @@ impl CacheStore {
     pub fn put<T: Serialize>(
         &self,
         key: &str,
-        collection: Collection,
+        ttl_secs: i64,
         data: &T,
     ) -> Result<(), String> {
         let bytes = rmp_serde::to_vec(data)
             .map_err(|e| format!("Failed to serialize cache data: {}", e))?;
 
         let now = Utc::now();
-        let ttl = collection.ttl_secs();
+        let ttl = ttl_secs;
 
         // Write to SQLite
         {
@@ -308,7 +308,7 @@ impl CacheStore {
                 let key = c.storage_key();
 
                 // For per-ID collections (CommodityPrices), count all sub-entries
-                let (cached_at, is_expired, entry_count) = if *c == Collection::CommodityPrices {
+                let (cached_at, is_expired, entry_count, ttl_secs) = if *c == Collection::CommodityPrices {
                     let prefix = format!("{}:", key);
                     let sub_entries: Vec<&MemoryEntry> = memory
                         .iter()
@@ -317,24 +317,23 @@ impl CacheStore {
                         .collect();
 
                     if sub_entries.is_empty() {
-                        (None, true, 0)
+                        (None, true, 0, c.ttl_secs())
                     } else {
-                        // Use the most recent cached_at among sub-entries
                         let latest = sub_entries.iter().map(|e| e.cached_at).max();
                         let any_expired = sub_entries.iter().any(|e| e.is_expired());
-                        (latest, any_expired, sub_entries.len())
+                        let ttl = sub_entries.first().map(|e| e.ttl_secs).unwrap_or_else(|| c.ttl_secs());
+                        (latest, any_expired, sub_entries.len(), ttl)
                     }
                 } else {
                     match memory.get(&key) {
                         Some(entry) => {
-                            // Count items in the MessagePack array
                             let count =
                                 rmp_serde::from_slice::<Vec<serde_json::Value>>(&entry.data)
                                     .map(|v| v.len())
                                     .unwrap_or(0);
-                            (Some(entry.cached_at), entry.is_expired(), count)
+                            (Some(entry.cached_at), entry.is_expired(), count, entry.ttl_secs)
                         }
-                        None => (None, true, 0),
+                        None => (None, true, 0, c.ttl_secs()),
                     }
                 };
 
@@ -342,7 +341,7 @@ impl CacheStore {
                     collection: *c,
                     display_name: c.display_name().to_string(),
                     cached_at: cached_at.map(|t| t.to_rfc3339()),
-                    ttl_secs: c.ttl_secs(),
+                    ttl_secs,
                     is_expired,
                     entry_count,
                 }

@@ -76,6 +76,7 @@ pub fn run() {
             commands::cache::cache_status,
             commands::cache::cache_refresh,
             commands::cache::cache_refresh_all,
+            commands::cache::cache_refresh_expired,
             commands::uex::uex_search,
             commands::uex::uex_search_all,
             commands::uex::uex_prices,

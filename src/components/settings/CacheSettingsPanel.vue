@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import IconRefresh from "@/components/icons/IconRefresh.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import { useCache } from "@/composables/useCache";
@@ -7,24 +7,29 @@ import type { CollectionStatus } from "@/composables/useCache";
 
 const cache = useCache();
 
+// Ticks every second so formatAge re-evaluates reactively in the template.
+const now = ref(Date.now());
+let ticker: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
   cache.fetchStatus();
+  ticker = setInterval(() => { now.value = Date.now(); }, 1000);
+});
+
+onUnmounted(() => {
+  if (ticker !== null) clearInterval(ticker);
 });
 
 function formatAge(status: CollectionStatus): string {
   if (!status.cached_at) return "never";
-  const cached = new Date(status.cached_at);
-  const now = new Date();
-  const diffMs = now.getTime() - cached.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
+  const diffSec = Math.floor((now.value - new Date(status.cached_at).getTime()) / 1000);
 
   if (diffSec < 60) return `${diffSec}s ago`;
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
 }
 
 function formatTtl(secs: number): string {
