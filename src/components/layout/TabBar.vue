@@ -8,6 +8,8 @@ import IconHome from "@/components/icons/IconHome.vue";
 import IconUsers from "@/components/icons/IconUsers.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import IconSun from "@/components/icons/IconSun.vue";
+import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
+import IconHeart from "@/components/icons/IconHeart.vue";
 
 interface Tab {
   id: string;
@@ -20,6 +22,7 @@ interface Tab {
 defineProps<{
   activeTab: string;
   scDetected: boolean;
+  showFavorites: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -27,10 +30,12 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "toggle-settings"): void;
   (e: "toggle-debug"): void;
+  (e: "toggle-favorites"): void;
 }>();
 
 const tabs: Tab[] = [
   { id: "search",    label: "SEARCH",    shortcut: "F3",  disabled: false, action: "switch" },
+  { id: "details",   label: "DETAILS",   shortcut: null,  disabled: false, action: "switch" },
   { id: "close",     label: "CLOSE",     shortcut: null,  disabled: false, action: "close" },
   { id: "trade",     label: "TRADE",     shortcut: "F4",  disabled: true,  action: "switch" },
   { id: "mining",    label: "MINING",    shortcut: "F5",  disabled: true,  action: "switch" },
@@ -57,6 +62,19 @@ function handleTab(tab: Tab) {
 
 <template>
   <div class="flex-shrink-0 flex items-stretch bg-[#111318] border-b border-white/10 select-none">
+    <!-- Favorites toggle (far left) -->
+    <div
+      class="flex items-center pl-5 flex-shrink-0 cursor-pointer"
+      @click="emit('toggle-favorites')"
+      title="Toggle favorites panel"
+    >
+      <IconHeart
+        :filled="showFavorites"
+        class="w-4 h-4 transition-colors"
+        :class="showFavorites ? 'text-red-400' : 'text-white/30 hover:text-red-400'"
+      />
+    </div>
+
     <!-- Centered tab list -->
     <div class="flex items-stretch justify-center w-full">
       <div
@@ -84,6 +102,7 @@ function handleTab(tab: Tab) {
           ]"
         >
           <IconSearch    v-if="tab.id === 'search'"    class="w-4 h-4 flex-shrink-0" />
+          <IconInfoCircle v-else-if="tab.id === 'details'" class="w-4 h-4 flex-shrink-0" />
           <IconClose     v-else-if="tab.id === 'close'"     class="w-4 h-4 flex-shrink-0" />
           <IconMonitor   v-else-if="tab.id === 'trade'"     class="w-4 h-4 flex-shrink-0" />
           <IconFlag      v-else-if="tab.id === 'mining'"    class="w-4 h-4 flex-shrink-0" />

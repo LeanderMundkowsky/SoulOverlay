@@ -188,6 +188,11 @@ pub struct CacheStore {
 unsafe impl Sync for CacheStore {}
 
 impl CacheStore {
+    /// Expose the underlying database connection for non-cache queries (e.g. favorites).
+    pub fn db(&self) -> &Mutex<Connection> {
+        &self.db
+    }
+
     /// Create a new CacheStore backed by the given SQLite connection.
     /// Loads all existing cache entries from the database into memory.
     pub fn new(conn: Connection) -> Self {

@@ -2,7 +2,9 @@
 import { watch, onMounted } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
+import IconHeart from "@/components/icons/IconHeart.vue";
 import { useUex } from "@/composables/useUex";
+import { useFavoritesStore } from "@/stores/favorites";
 import type { EntityInfo } from "@/composables/useUex";
 
 const props = defineProps<{
@@ -11,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const { entityInfo, entityInfoLoading, entityInfoError, getEntityInfo } = useUex();
+const favoritesStore = useFavoritesStore();
 
 function fetchInfo() {
   getEntityInfo(props.entityKind, props.entityId);
@@ -18,6 +21,17 @@ function fetchInfo() {
 
 onMounted(() => { fetchInfo(); });
 watch(() => props.entityId, () => { fetchInfo(); });
+
+function toggleFavorite() {
+  if (!entityInfo.value) return;
+  favoritesStore.toggleFavorite({
+    id: entityInfo.value.id,
+    name: entityInfo.value.name,
+    kind: entityInfo.value.kind,
+    slug: entityInfo.value.slug,
+    uuid: "",
+  });
+}
 
 function formatDimensions(info: EntityInfo): string {
   const parts: string[] = [];
@@ -47,6 +61,9 @@ function formatPrice(val: number): string {
       <div class="px-4 py-3 space-y-2">
         <div class="flex items-center gap-2 flex-wrap text-xs">
           <span class="text-white font-semibold text-sm">{{ entityInfo.name }}</span>
+          <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'Remove from favorites' : 'Add to favorites'">
+            <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind)" />
+          </button>
           <span v-if="entityInfo.commodity_kind" class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium">{{ entityInfo.commodity_kind }}</span>
           <span v-if="entityInfo.code" class="text-white/40 font-mono">{{ entityInfo.code }}</span>
           <span v-if="entityInfo.is_illegal" class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">Illegal</span>
@@ -71,6 +88,9 @@ function formatPrice(val: number): string {
       <div class="px-4 py-3 space-y-2">
         <div class="flex items-center gap-2 flex-wrap text-xs">
           <span class="text-white font-semibold text-sm">{{ entityInfo.name }}</span>
+          <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'Remove from favorites' : 'Add to favorites'">
+            <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind)" />
+          </button>
           <span v-if="entityInfo.section" class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium">{{ entityInfo.section }}</span>
           <span v-if="entityInfo.category" class="px-2 py-0.5 rounded bg-white/8 text-white/50">{{ entityInfo.category }}</span>
         </div>
@@ -88,6 +108,9 @@ function formatPrice(val: number): string {
       <div class="px-4 py-3 space-y-2">
         <div class="flex items-center gap-2 flex-wrap text-xs">
           <span class="text-white font-semibold text-sm">{{ entityInfo.name_full ?? entityInfo.name }}</span>
+          <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'Remove from favorites' : 'Add to favorites'">
+            <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind)" />
+          </button>
           <span v-if="entityInfo.company_name" class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium">{{ entityInfo.company_name }}</span>
           <span v-if="entityInfo.pad_type" class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/80">Pad {{ entityInfo.pad_type }}</span>
         </div>

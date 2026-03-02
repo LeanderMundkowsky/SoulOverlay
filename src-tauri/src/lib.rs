@@ -94,6 +94,10 @@ pub fn run() {
             commands::overlay::show_overlay_cmd,
             commands::debug::get_debug_info,
             commands::debug::get_game_state,
+            commands::favorites::get_favorites,
+            commands::favorites::add_favorite,
+            commands::favorites::remove_favorite,
+            commands::favorites::is_favorite,
         ])
         .setup(|app| {
             // Disable WebView2 built-in devtools, context menu, and status bar

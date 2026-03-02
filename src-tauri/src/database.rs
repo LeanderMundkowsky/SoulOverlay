@@ -31,6 +31,18 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
                 ttl_secs   INTEGER NOT NULL
             );",
         ),
+        // v2: favorites table for user-bookmarked entities
+        M::up(
+            "CREATE TABLE IF NOT EXISTS favorites (
+                id       TEXT NOT NULL,
+                name     TEXT NOT NULL,
+                kind     TEXT NOT NULL,
+                slug     TEXT NOT NULL DEFAULT '',
+                uuid     TEXT NOT NULL DEFAULT '',
+                added_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_favorites_kind_id ON favorites(kind, id);",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

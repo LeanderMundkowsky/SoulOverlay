@@ -1,31 +1,47 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import TabBar from "./components/layout/TabBar.vue";
 import StatusBar from "./components/layout/StatusBar.vue";
 import SearchTab from "./components/tabs/SearchTab.vue";
+import DetailsTab from "./components/tabs/DetailsTab.vue";
 import InventoryTab from "./components/tabs/InventoryTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
+import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
 import DebugPanel from "./components/panels/DebugPanel.vue";
 import { useGameStore } from "./stores/game";
 import { useSettingsStore } from "./stores/settings";
+import { useFavoritesStore } from "./stores/favorites";
+import { useDetailsStore } from "./stores/details";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
+const favoritesStore = useFavoritesStore();
+const detailsStore = useDetailsStore();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
+const showFavorites = ref(true);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
 
 useLogWatcher();
 
+// Watch for details store tab-switch requests
+watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
+  if (shouldSwitch) {
+    activeTab.value = "details";
+    detailsStore.clearTabSwitchRequest();
+  }
+});
+
 onMounted(async () => {
   await settingsStore.loadSettings();
+  await favoritesStore.loadFavorites();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
 });
@@ -143,23 +159,34 @@ function onToggleDebug() {
       <TabBar
         :active-tab="activeTab"
         :sc-detected="scDetected"
+        :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
         @toggle-debug="onToggleDebug"
+        @toggle-favorites="showFavorites = !showFavorites"
       />
 
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
+        <!-- Favorites panel (left side, only on Search + Details) -->
+        <div
+          v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+          class="flex-shrink-0 py-4 pl-4"
+        >
+          <FavoritesPanel class="h-full" />
+        </div>
+
         <div class="flex-1 overflow-y-auto">
           <SearchTab
             v-show="activeTab === 'search'"
             ref="searchTabRef"
             :sc-detected="scDetected"
           />
+          <DetailsTab v-show="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'inventory'"
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory'"
           />
         </div>
 

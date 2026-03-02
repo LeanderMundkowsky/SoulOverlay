@@ -4,6 +4,10 @@ import IconPackage from "@/components/icons/IconPackage.vue";
 import IconPlane from "@/components/icons/IconPlane.vue";
 import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconDollarSign from "@/components/icons/IconDollarSign.vue";
+import IconHeart from "@/components/icons/IconHeart.vue";
+import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
+import { useFavoritesStore } from "@/stores/favorites";
+import { useDetailsStore } from "@/stores/details";
 import type { UexResult } from "@/composables/useUex";
 
 const props = defineProps<{
@@ -15,12 +19,22 @@ const emit = defineEmits<{
   (e: "select"): void;
 }>();
 
-// Forward all attrs (tabindex, @keydown, @focus, etc.) to the root div
 defineOptions({ inheritAttrs: false });
+
+const favoritesStore = useFavoritesStore();
+const detailsStore = useDetailsStore();
 
 import { ref } from "vue";
 const rootEl = ref<HTMLElement | null>(null);
 defineExpose({ rootEl });
+
+function toggleFavorite() {
+  favoritesStore.toggleFavorite(props.result);
+}
+
+function openInDetails() {
+  detailsStore.openEntity(props.result);
+}
 </script>
 
 <template>
@@ -54,6 +68,27 @@ defineExpose({ rootEl });
       class="flex items-center gap-1 flex-shrink-0 transition-opacity duration-150"
       :class="isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
     >
+      <!-- Favorite toggle -->
+      <button
+        @click.stop="toggleFavorite"
+        class="p-1.5 rounded-lg transition-colors"
+        :class="favoritesStore.isFavorite(props.result.id, props.result.kind)
+          ? 'text-red-400 hover:text-red-300'
+          : 'text-white/20 hover:text-red-400'"
+        :title="favoritesStore.isFavorite(props.result.id, props.result.kind) ? 'Remove from favorites' : 'Add to favorites'"
+      >
+        <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(props.result.id, props.result.kind)" />
+      </button>
+
+      <!-- Open in Details -->
+      <button
+        @click.stop="openInDetails"
+        class="p-1.5 rounded-lg text-white/20 hover:text-blue-400 transition-colors"
+        title="Open in Details tab"
+      >
+        <IconInfoCircle class="w-3.5 h-3.5" />
+      </button>
+
       <!-- View prices (commodities only) -->
       <button
         v-if="props.result.kind === 'commodity'"
