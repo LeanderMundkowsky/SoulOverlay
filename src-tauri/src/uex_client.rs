@@ -231,19 +231,65 @@ pub async fn fetch_all_vehicles(api_key: &str) -> Result<Vec<UexResult>, String>
     Ok(results)
 }
 
-/// Fetch ALL items from UEX. Returns parsed `UexResult` list.
+/// Fetch ALL items from UEX by iterating over all item categories in parallel.
+///
+/// The `/items` endpoint requires `id_category`, `id_company`, or `uuid` — there is no
+/// "fetch all" variant. We first fetch `/categories` (type=item), then fan-out one request
+/// per category and merge the results, deduplicating by item ID.
 pub async fn fetch_all_items(api_key: &str) -> Result<Vec<UexResult>, String> {
-    let url = format!("{}/items", UEX_BASE_URL);
-    let body = uex_get(&url, &[], api_key).await?;
-    let results = extract_data_array(&body)
+    // Step 1: fetch all categories and collect item category IDs
+    let categories_url = format!("{}/categories", UEX_BASE_URL);
+    let cat_body = uex_get(&categories_url, &[], api_key).await?;
+    let category_ids: Vec<u64> = cat_body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|c| c.get("type").and_then(|v| v.as_str()) == Some("item"))
+                .filter_map(|c| c.get("id").and_then(|v| v.as_u64()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    log::info!("Fetching items across {} categories in parallel", category_ids.len());
+
+    // Step 2: spawn one task per category
+    let api_key_arc = std::sync::Arc::new(api_key.to_string());
+    let handles: Vec<_> = category_ids
         .into_iter()
-        .map(|item| {
-            let mut r = UexResult::from_json(item);
-            r.kind = "item".to_string();
-            r
+        .map(|cat_id| {
+            let key = api_key_arc.clone();
+            tokio::spawn(async move {
+                let url = format!("{}/items", UEX_BASE_URL);
+                let id_str = cat_id.to_string();
+                uex_get(&url, &[("id_category", &id_str)], &key).await
+            })
         })
         .collect();
-    Ok(results)
+
+    // Step 3: collect results, deduplicating by numeric item ID
+    let mut seen_ids = std::collections::HashSet::<u64>::new();
+    let mut all_items: Vec<UexResult> = Vec::new();
+
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(body)) => {
+                for item in extract_data_array(&body) {
+                    let id = item.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if seen_ids.insert(id) {
+                        let mut r = UexResult::from_json(item);
+                        r.kind = "item".to_string();
+                        all_items.push(r);
+                    }
+                }
+            }
+            Ok(Err(e)) => log::warn!("Failed to fetch items for a category: {}", e),
+            Err(e) => log::warn!("Item fetch task panicked: {}", e),
+        }
+    }
+
+    log::info!("Total items fetched: {}", all_items.len());
+    Ok(all_items)
 }
 
 /// Fetch ALL locations (terminals) from UEX. Returns parsed `UexResult` list.
@@ -351,12 +397,15 @@ pub async fn search_vehicles(query: &str, api_key: &str) -> Result<Vec<UexResult
     Ok(results)
 }
 
-/// Search UEX for items by query string (direct API call, no cache).
+/// Search UEX for items by query string.
+///
+/// The `/items` endpoint requires `id_category`, `id_company`, or `uuid` and does not
+/// support a bare name search. This fallback performs a full fetch across all categories
+/// and filters client-side. It should only be reached when the items cache is completely
+/// absent; under normal operation the cache is populated on startup.
 pub async fn search_items(query: &str, api_key: &str) -> Result<Vec<UexResult>, String> {
-    let url = format!("{}/items", UEX_BASE_URL);
-    let body = uex_get(&url, &[("name_filter", query)], api_key).await?;
-    let query_lower = query.to_lowercase();
-    Ok(extract_results(&body, &query_lower, Some("item")))
+    let all = fetch_all_items(api_key).await?;
+    Ok(search_in_collection(&all, query))
 }
 
 /// Search UEX for locations (terminals) by query string (direct API call, no cache).
