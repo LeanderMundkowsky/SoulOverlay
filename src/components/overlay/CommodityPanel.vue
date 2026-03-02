@@ -62,7 +62,7 @@ watch(() => props.commodityId, (newId) => { getPrices(newId); });
 </script>
 
 <template>
-  <div class="overflow-hidden">
+  <div class="flex flex-col h-full overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
       <h2 class="text-white font-semibold text-sm">{{ commodityName }} — Prices</h2>
@@ -80,7 +80,7 @@ watch(() => props.commodityId, (newId) => { getPrices(newId); });
     <div v-else-if="error" class="px-4 py-4 text-red-400 text-sm">{{ error }}</div>
 
     <!-- Table -->
-    <div v-else-if="sortedPrices.length > 0" class="overflow-x-auto overflow-y-auto max-h-64">
+    <div v-else-if="sortedPrices.length > 0" class="overflow-x-auto overflow-y-auto flex-1">
       <table class="w-full text-sm">
         <thead>
           <tr class="text-white/50 text-xs uppercase tracking-wider sticky top-0 bg-[#1a1d24]">

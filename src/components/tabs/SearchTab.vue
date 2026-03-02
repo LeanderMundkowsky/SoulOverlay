@@ -29,34 +29,65 @@ defineExpose({ focusInput });
 </script>
 
 <template>
-  <div class="p-6 grid grid-cols-1 gap-4 max-w-4xl mx-auto w-full">
-    <!-- SC not detected notice -->
+  <div class="flex flex-col h-full overflow-hidden gap-3 p-4">
+    <!-- Alerts -->
     <AlertBanner
       v-if="!scDetected"
       variant="warning"
       title="Star Citizen not detected"
       message="Make sure Star Citizen is running in Borderless Windowed mode."
     />
-
-    <!-- Stale cache data notice -->
     <AlertBanner
       v-if="searchBarRef?.stale"
       variant="info"
       message="Showing cached data. Refreshing in the background..."
     />
 
-    <!-- Search card -->
-    <div class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
-      <SearchBar ref="searchBarRef" @select="onResultSelected" />
-    </div>
+    <!-- Main area: search centered → search left + detail right -->
+    <div class="flex-1 flex gap-3 overflow-hidden min-h-0">
+      <!-- Search column: animates from centered to left when a result is selected -->
+      <div
+        class="flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-y-auto"
+        :style="{
+          width: selectedResult ? '42%' : 'min(100%, 40rem)',
+          marginLeft: selectedResult ? '0' : 'auto',
+          marginRight: selectedResult ? '0' : 'auto',
+          transition: 'width 0.3s ease, margin-left 0.3s ease, margin-right 0.3s ease',
+        }"
+      >
+        <SearchBar ref="searchBarRef" @select="onResultSelected" />
+      </div>
 
-    <!-- Commodity prices card (only for commodities) -->
-    <div v-if="selectedResult && selectedResult.kind === 'commodity'" class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
-      <CommodityPanel
-        :commodity-id="selectedResult.id"
-        :commodity-name="selectedResult.name"
-        @close="selectedResult = null"
-      />
+      <!-- Detail panel: slides in from the right when a result is selected -->
+      <Transition name="detail-panel">
+        <div
+          v-if="selectedResult && selectedResult.kind === 'commodity'"
+          class="flex-1 min-w-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
+        >
+          <CommodityPanel
+            :commodity-id="selectedResult.id"
+            :commodity-name="selectedResult.name"
+            @close="selectedResult = null"
+          />
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
+
+<style scoped>
+.detail-panel-enter-active,
+.detail-panel-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.detail-panel-enter-from,
+.detail-panel-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
+.detail-panel-enter-to,
+.detail-panel-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+</style>
