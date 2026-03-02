@@ -48,7 +48,7 @@ defineExpose({ focusInput });
     <div class="flex-1 flex gap-3 overflow-hidden min-h-0">
       <!-- Search column: animates from centered to left when a result is selected -->
       <div
-        class="flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-y-auto"
+        class="flex-shrink-0 flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
         :style="{
           width: selectedResult ? '42%' : 'min(100%, 40rem)',
           marginLeft: selectedResult ? '0' : 'auto',

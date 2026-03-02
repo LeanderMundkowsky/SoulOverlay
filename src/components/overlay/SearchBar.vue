@@ -100,9 +100,9 @@ defineExpose({ focusInput, stale });
 </script>
 
 <template>
-  <div class="flex flex-col">
+  <div class="flex flex-col h-full">
     <!-- Search input -->
-    <div class="p-4 border-b border-white/5">
+    <div class="p-4 border-b border-white/5 flex-shrink-0">
       <div class="relative">
         <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
         <input
@@ -120,42 +120,45 @@ defineExpose({ focusInput, stale });
       <div v-if="error" class="mt-2 text-red-400 text-xs px-1">{{ error }}</div>
     </div>
 
-    <!-- Results list -->
-    <div v-if="results.length > 0 && query.trim()">
-      <div class="px-4 py-2 flex items-center gap-2">
-        <span class="text-white/30 text-xs uppercase tracking-widest">Results</span>
-        <span class="bg-white/10 text-white/50 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-          {{ total !== null && total > results.length ? `${results.length} / ${total}` : results.length }}
-        </span>
+    <!-- Results header (fixed, not scrollable) -->
+    <div v-if="results.length > 0 && query.trim()" class="px-4 py-2 flex items-center gap-2 flex-shrink-0 border-b border-white/5">
+      <span class="text-white/30 text-xs uppercase tracking-widest">Results</span>
+      <span class="bg-white/10 text-white/50 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+        {{ total !== null && total > results.length ? `${results.length} / ${total}` : results.length }}
+      </span>
+    </div>
+
+    <!-- Scrollable results list -->
+    <div class="flex-1 overflow-y-auto min-h-0">
+      <div v-if="results.length > 0 && query.trim()">
+        <SearchResultRow
+          v-for="(result, index) in results"
+          :key="result.id"
+          :ref="(el) => setRowRef(el as InstanceType<typeof SearchResultRow> | null, index)"
+          :result="result"
+          :is-active="activeIndex === index"
+          tabindex="0"
+          @keydown="(e: KeyboardEvent) => onRowKeydown(e, index, result)"
+          @focus="activeIndex = index"
+          @select="selectResult(result)"
+        />
       </div>
 
-      <SearchResultRow
-        v-for="(result, index) in results"
-        :key="result.id"
-        :ref="(el) => setRowRef(el as InstanceType<typeof SearchResultRow> | null, index)"
-        :result="result"
-        :is-active="activeIndex === index"
-        tabindex="0"
-        @keydown="(e: KeyboardEvent) => onRowKeydown(e, index, result)"
-        @focus="activeIndex = index"
-        @select="selectResult(result)"
-      />
-    </div>
+      <!-- No results -->
+      <div
+        v-else-if="!loading && query.trim().length > 2"
+        class="px-4 py-8 text-center text-white/30 text-sm"
+      >
+        No results found for "{{ query }}"
+      </div>
 
-    <!-- No results -->
-    <div
-      v-else-if="!loading && query.trim().length > 2"
-      class="px-4 py-8 text-center text-white/30 text-sm"
-    >
-      No results found for "{{ query }}"
-    </div>
-
-    <!-- Empty hint -->
-    <div
-      v-else-if="!query.trim()"
-      class="px-4 py-6 text-center text-white/20 text-xs select-none"
-    >
-      Type to search commodities, vehicles, items, locations&hellip;
+      <!-- Empty hint -->
+      <div
+        v-else-if="!query.trim()"
+        class="px-4 py-6 text-center text-white/20 text-xs select-none"
+      >
+        Type to search commodities, vehicles, items, locations&hellip;
+      </div>
     </div>
   </div>
 </template>

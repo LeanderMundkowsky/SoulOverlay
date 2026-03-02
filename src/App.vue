@@ -170,12 +170,14 @@ function onToggleDebug() {
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
         <!-- Favorites panel (left side, only on Search + Details) -->
-        <div
-          v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
-          class="flex-shrink-0 py-4 pl-4"
-        >
-          <FavoritesPanel class="h-full" />
-        </div>
+        <Transition name="slide-left">
+          <div
+            v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+            class="flex-shrink-0 py-4 pl-4"
+          >
+            <FavoritesPanel class="h-full" />
+          </div>
+        </Transition>
 
         <div class="flex-1 overflow-y-auto">
           <SearchTab
@@ -226,5 +228,17 @@ function onToggleDebug() {
 .slide-enter-to,
 .slide-leave-from {
   margin-right: 0;
+}
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: margin-left 0.2s ease;
+}
+.slide-left-enter-from,
+.slide-left-leave-to {
+  margin-left: -236px;
+}
+.slide-left-enter-to,
+.slide-left-leave-from {
+  margin-left: 0;
 }
 </style>
