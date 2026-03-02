@@ -87,6 +87,25 @@ pub fn run() {
             commands::debug::get_game_state,
         ])
         .setup(|app| {
+            // Disable WebView2 built-in devtools, context menu, and status bar
+            // on the overlay window before any page content loads.
+            use tauri::Manager;
+            if let Some(webview) = app.get_webview_window("overlay") {
+                let _ = webview.with_webview(|wv| {
+                    #[cfg(windows)]
+                    unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
+                        if let Ok(core) = wv.controller().CoreWebView2() {
+                            if let Ok(s) = core.Settings() {
+                                let s: ICoreWebView2Settings = s;
+                                let _ = s.SetAreDevToolsEnabled(false);
+                                let _ = s.SetAreDefaultContextMenusEnabled(false);
+                                let _ = s.SetIsStatusBarEnabled(false);
+                            }
+                        }
+                    }
+                });
+            }
             app_setup::initialize(app)?;
             info!("SoulOverlay initialized successfully");
             Ok(())

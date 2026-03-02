@@ -27,10 +27,12 @@ useLogWatcher();
 onMounted(async () => {
   await settingsStore.loadSettings();
   document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("keydown", blockBrowserShortcuts, true);
 });
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleKeyDown);
+  document.removeEventListener("keydown", blockBrowserShortcuts, true);
 });
 
 useOverlayEvents({
@@ -56,7 +58,46 @@ function onOverlayShown() {
   nextTick(() => { searchTabRef.value?.focusInput(); });
 }
 
+// Capture-phase handler: block all browser built-in shortcuts that make no
+// sense in an overlay context (devtools, reload, zoom, find, print, etc.).
+function blockBrowserShortcuts(e: KeyboardEvent) {
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  // F-keys with browser meaning
+  if (e.code === "F12") { e.preventDefault(); return; } // devtools
+  if (e.code === "F5")  { e.preventDefault(); return; } // reload
+  if (e.code === "F3")  { e.preventDefault(); return; } // find-next (browser)
+
+  if (!ctrl) return;
+
+  switch (e.code) {
+    case "KeyR":  // reload
+    case "KeyF":  // find
+    case "KeyP":  // print
+    case "KeyU":  // view source
+    case "KeyS":  // save page
+    case "KeyG":  // find next
+    case "KeyH":  // history (browser)
+    case "KeyJ":  // downloads (browser)
+    case "KeyL":  // address bar (browser)
+    case "Equal": // zoom in  (Ctrl++)
+    case "Minus": // zoom out (Ctrl+-)
+    case "Digit0": // reset zoom (Ctrl+0)
+      e.preventDefault();
+      break;
+    default:
+      if (e.shiftKey && e.code === "KeyI") e.preventDefault(); // Ctrl+Shift+I devtools
+      if (e.shiftKey && e.code === "KeyJ") e.preventDefault(); // Ctrl+Shift+J console
+      if (e.shiftKey && e.code === "KeyC") e.preventDefault(); // Ctrl+Shift+C inspector
+  }
+}
+
 function handleKeyDown(e: KeyboardEvent) {
+  if (e.code === "F12") {
+    onToggleSettings();
+    return;
+  }
+
   if (e.key === "Escape") {
     if (showSettings.value) {
       showSettings.value = false;
