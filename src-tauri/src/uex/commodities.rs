@@ -92,17 +92,63 @@ pub(crate) struct CommodityPriceDto {
     #[serde(default)]
     pub planet_name: Option<String>,
     #[serde(default)]
+    pub orbit_name: Option<String>,
+    #[serde(default)]
     pub terminal_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_terminal: String,
     #[serde(default)]
+    pub faction_name: Option<String>,
+    // Price fields
+    #[serde(default)]
     pub price_buy: Option<f64>,
+    #[serde(default)]
+    pub price_buy_min: Option<f64>,
+    #[serde(default)]
+    pub price_buy_max: Option<f64>,
+    #[serde(default)]
+    pub price_buy_avg: Option<f64>,
+    #[serde(default)]
+    pub price_buy_users: Option<f64>,
     #[serde(default)]
     pub price_sell: Option<f64>,
     #[serde(default)]
+    pub price_sell_min: Option<f64>,
+    #[serde(default)]
+    pub price_sell_max: Option<f64>,
+    #[serde(default)]
+    pub price_sell_avg: Option<f64>,
+    #[serde(default)]
+    pub price_sell_users: Option<f64>,
+    // SCU fields
+    #[serde(default)]
     pub scu_buy: Option<f64>,
     #[serde(default)]
+    pub scu_buy_min: Option<f64>,
+    #[serde(default)]
+    pub scu_buy_max: Option<f64>,
+    #[serde(default)]
+    pub scu_buy_avg: Option<f64>,
+    #[serde(default)]
+    pub scu_buy_users: Option<f64>,
+    #[serde(default)]
     pub scu_sell: Option<f64>,
+    #[serde(default)]
+    pub scu_sell_stock: Option<f64>,
+    #[serde(default)]
+    pub scu_sell_stock_avg: Option<f64>,
+    // Status / inventory
+    #[serde(default)]
+    pub status_buy: Option<f64>,
+    #[serde(default)]
+    pub status_buy_avg: Option<f64>,
+    #[serde(default)]
+    pub status_sell: Option<f64>,
+    #[serde(default)]
+    pub status_sell_avg: Option<f64>,
+    // Container sizes
+    #[serde(default)]
+    pub container_sizes: Option<String>,
     #[serde(default)]
     pub date_modified: Option<serde_json::Value>,
     #[serde(default)]
@@ -111,6 +157,40 @@ pub(crate) struct CommodityPriceDto {
 
 impl CommodityPriceDto {
     fn to_price_entry(&self, price_type: &str) -> PriceEntry {
+        // Determine if this location is a buy or sell location
+        let is_buy = self.price_buy.unwrap_or(0.0) > 0.0;
+
+        // Pick the relevant SCU/price stats based on direction
+        let (scu_last, scu_min, scu_max, scu_avg, scu_users) = if is_buy {
+            (self.scu_buy, self.scu_buy_min, self.scu_buy_max, self.scu_buy_avg, self.scu_buy_users)
+        } else {
+            (self.scu_sell_stock, None, None, self.scu_sell_stock_avg, None)
+        };
+
+        let (price_last, price_min, price_max, price_avg, price_users) = if is_buy {
+            (self.price_buy, self.price_buy_min, self.price_buy_max, self.price_buy_avg, self.price_buy_users)
+        } else {
+            (self.price_sell, self.price_sell_min, self.price_sell_max, self.price_sell_avg, self.price_sell_users)
+        };
+
+        let (status, status_avg) = if is_buy {
+            (self.status_buy, self.status_buy_avg)
+        } else {
+            (self.status_sell, self.status_sell_avg)
+        };
+
+        // Parse container_sizes (e.g. "1,2,4,8,16,24,32") into a range like "1-32"
+        let container_sizes_display = self.container_sizes.as_deref().map(|cs| {
+            let nums: Vec<u32> = cs.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+            if nums.is_empty() {
+                String::new()
+            } else {
+                let min = nums.iter().min().unwrap();
+                let max = nums.iter().max().unwrap();
+                if min == max { format!("{}", min) } else { format!("{}-{}", min, max) }
+            }
+        }).unwrap_or_default();
+
         PriceEntry {
             entity_id: self.id_commodity.clone(),
             entity_name: self.commodity_name.clone().unwrap_or_default(),
@@ -123,6 +203,24 @@ impl CommodityPriceDto {
             rent_price: 0.0,
             scu_available: self.scu_buy.or(self.scu_sell),
             date_updated: timestamp_string(&self.date_modified, &self.date_added),
+            // Rich fields
+            orbit: self.orbit_name.clone().unwrap_or_default(),
+            system: self.star_system_name.clone().unwrap_or_default(),
+            faction: self.faction_name.clone().unwrap_or_default(),
+            scu_last: scu_last.unwrap_or(0.0),
+            scu_users: scu_users.unwrap_or(0.0),
+            scu_avg: scu_avg.unwrap_or(0.0),
+            scu_min: scu_min.unwrap_or(0.0),
+            scu_max: scu_max.unwrap_or(0.0),
+            price_last: price_last.unwrap_or(0.0),
+            price_users: price_users.unwrap_or(0.0),
+            price_avg: price_avg.unwrap_or(0.0),
+            price_min: price_min.unwrap_or(0.0),
+            price_max: price_max.unwrap_or(0.0),
+            inventory_status: status.unwrap_or(0.0),
+            inventory_status_avg: status_avg.unwrap_or(0.0),
+            container_sizes: container_sizes_display,
+            is_buy_location: is_buy,
         }
     }
 }

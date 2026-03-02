@@ -108,6 +108,23 @@ impl From<&ItemPriceDto> for PriceEntry {
             rent_price: 0.0,
             scu_available: None,
             date_updated: timestamp_string(&dto.date_modified, &dto.date_added),
+            orbit: String::new(),
+            system: String::new(),
+            faction: String::new(),
+            scu_last: 0.0,
+            scu_users: 0.0,
+            scu_avg: 0.0,
+            scu_min: 0.0,
+            scu_max: 0.0,
+            price_last: dto.price_buy.or(dto.price_sell).unwrap_or(0.0),
+            price_users: 0.0,
+            price_avg: 0.0,
+            price_min: 0.0,
+            price_max: 0.0,
+            inventory_status: 0.0,
+            inventory_status_avg: 0.0,
+            container_sizes: String::new(),
+            is_buy_location: dto.price_buy.unwrap_or(0.0) > 0.0,
         }
     }
 }

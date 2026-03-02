@@ -21,6 +21,24 @@ export interface PriceEntry {
   rent_price: number;
   scu_available: number | null;
   date_updated: string;
+  // Rich fields (populated by per-entity endpoints)
+  orbit: string;
+  system: string;
+  faction: string;
+  scu_last: number;
+  scu_users: number;
+  scu_avg: number;
+  scu_min: number;
+  scu_max: number;
+  price_last: number;
+  price_users: number;
+  price_avg: number;
+  price_min: number;
+  price_max: number;
+  inventory_status: number;
+  inventory_status_avg: number;
+  container_sizes: string;
+  is_buy_location: boolean;
 }
 
 export interface EntityInfo {

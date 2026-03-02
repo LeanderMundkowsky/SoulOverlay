@@ -72,6 +72,41 @@ pub struct PriceEntry {
     pub rent_price: f64,
     pub scu_available: Option<f64>,
     pub date_updated: String,
+    // Rich fields (populated by per-entity endpoints, zeroed for bulk/other types)
+    #[serde(default)]
+    pub orbit: String,
+    #[serde(default)]
+    pub system: String,
+    #[serde(default)]
+    pub faction: String,
+    #[serde(default)]
+    pub scu_last: f64,
+    #[serde(default)]
+    pub scu_users: f64,
+    #[serde(default)]
+    pub scu_avg: f64,
+    #[serde(default)]
+    pub scu_min: f64,
+    #[serde(default)]
+    pub scu_max: f64,
+    #[serde(default)]
+    pub price_last: f64,
+    #[serde(default)]
+    pub price_users: f64,
+    #[serde(default)]
+    pub price_avg: f64,
+    #[serde(default)]
+    pub price_min: f64,
+    #[serde(default)]
+    pub price_max: f64,
+    #[serde(default)]
+    pub inventory_status: f64,
+    #[serde(default)]
+    pub inventory_status_avg: f64,
+    #[serde(default)]
+    pub container_sizes: String,
+    #[serde(default)]
+    pub is_buy_location: bool,
 }
 
 // ── Serde helpers ──────────────────────────────────────────────────────────

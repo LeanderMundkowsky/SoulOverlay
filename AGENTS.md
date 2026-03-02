@@ -5,6 +5,10 @@
 - Never use `2>nul` in bash commands — this creates a literal file named `nul` instead of
   redirecting stderr. Always use `2>/dev/null`.
 
+## Git Rules
+
+- Never run `git commit` or `git push`. The user manages all commits and pushes manually.
+
 SoulOverlay is a Tauri 2 + Vue 3 overlay for Star Citizen that shows UEX commodity
 prices. It runs on Windows x86_64 as a transparent, always-on-top window. Data from
 the UEX Corp API is cached in a local SQLite database with per-collection TTLs and
