@@ -403,10 +403,15 @@ pub async fn api_entity_info(
 
     let cache_key = format!("entity_info:{}:{}", kind, entity_id);
 
-    // Check cache
+    // Check cache — verify the cached entity's id matches to guard against
+    // stale entries left by earlier code that stored the wrong entity.
     match state.cache.get::<EntityInfo>(&cache_key) {
-        CacheResult::Fresh(info) => return Ok(ApiResponse::ok(info)),
-        CacheResult::Stale(info) => return Ok(ApiResponse::ok_stale(info)),
+        CacheResult::Fresh(info) if info.id == entity_id => return Ok(ApiResponse::ok(info)),
+        CacheResult::Stale(info) if info.id == entity_id => return Ok(ApiResponse::ok_stale(info)),
+        CacheResult::Fresh(_) | CacheResult::Stale(_) => {
+            log::warn!("Entity info cache mismatch for key '{}', invalidating", cache_key);
+            state.cache.invalidate(&cache_key);
+        }
         CacheResult::Missing => {}
     }
 
