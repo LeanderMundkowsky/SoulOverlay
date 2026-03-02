@@ -69,10 +69,10 @@ function resetDefaults() {
 </script>
 
 <template>
-  <div class="bg-[#111318] border-l border-white/10 flex flex-col overflow-y-auto">
+  <div class="bg-[#111318] border-l border-white/10 flex flex-col overflow-hidden">
     <PanelHeader title="Settings" @close="emit('close')" />
 
-    <div class="flex-1 px-5 py-4 space-y-5">
+    <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
       <!-- Hotkey -->
       <SettingsField
         label="Toggle Hotkey"

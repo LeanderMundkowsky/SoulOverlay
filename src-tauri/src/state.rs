@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use crate::cache_store::CacheStore;
@@ -19,6 +20,9 @@ pub struct AppState {
     pub current_settings: Mutex<Settings>,
     /// Holds the LL keyboard hook handle. Dropping it stops the hook thread.
     pub hotkey_handle: Mutex<Option<hotkey::HookHandle>>,
+    /// Tracks which collections are currently being refreshed in the background,
+    /// preventing duplicate concurrent refreshes from timer + search racing.
+    pub refreshing_collections: Mutex<HashSet<String>>,
 }
 
 impl AppState {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { listen } from "@tauri-apps/api/event";
 import IconRefresh from "@/components/icons/IconRefresh.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import { useCache } from "@/composables/useCache";
@@ -10,14 +11,19 @@ const cache = useCache();
 // Ticks every second so formatAge re-evaluates reactively in the template.
 const now = ref(Date.now());
 let ticker: ReturnType<typeof setInterval> | null = null;
+let unlistenCacheUpdated: (() => void) | null = null;
 
-onMounted(() => {
+onMounted(async () => {
   cache.fetchStatus();
   ticker = setInterval(() => { now.value = Date.now(); }, 1000);
+  unlistenCacheUpdated = await listen("cache-updated", () => {
+    cache.fetchStatus();
+  });
 });
 
 onUnmounted(() => {
   if (ticker !== null) clearInterval(ticker);
+  if (unlistenCacheUpdated !== null) unlistenCacheUpdated();
 });
 
 function formatAge(status: CollectionStatus): string {
@@ -103,7 +109,7 @@ function formatTtl(secs: number): string {
     </div>
 
     <p class="text-white/20 text-xs">
-      Collections are prefetched on startup. Searches use cached data for instant results.
+      Expired collections are automatically refreshed in the background every 30s.
     </p>
   </div>
 </template>

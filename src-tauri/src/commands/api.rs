@@ -225,24 +225,8 @@ pub async fn api_search_locations(
 
 // ── Price endpoint ─────────────────────────────────────────────────────────
 
-/// Returns true if the cached price data contains rich fields from the per-commodity endpoint.
-/// Bulk-prefetched data (from `/commodities_prices_all`) lacks orbit, min/max, etc.
-fn has_rich_data(prices: &[PriceEntry]) -> bool {
-    prices
-        .iter()
-        .any(|p| !p.orbit.is_empty() || p.price_min > 0.0 || p.scu_min > 0.0)
-}
-
-/// Returns true if any entry has real location data (not the "Unknown" fallback).
-/// Bulk `_all` endpoints omit `star_system_name`/`planet_name`, producing "Unknown".
-fn has_location_data(prices: &[PriceEntry]) -> bool {
-    prices
-        .iter()
-        .any(|p| !p.location.is_empty() && p.location != "Unknown")
-}
-
 /// Fetch buy/sell prices for a commodity by its UEX ID.
-/// Uses per-commodity cache key (e.g. `commodity_prices:42`).
+/// Serves from per-commodity cache key (e.g. `commodity_prices:42`).
 #[tauri::command]
 pub async fn api_commodity_prices(
     commodity_id: String,
@@ -253,60 +237,28 @@ pub async fn api_commodity_prices(
     }
 
     let cache_key = Collection::CommodityPrices.storage_key_with_id(&commodity_id);
-    let api_key = api_key(&state);
 
-    // Check cache first — but only use it if the data has rich fields (orbit, min/max).
-    // The bulk prefetch endpoint (/commodities_prices_all) stores per-commodity entries
-    // but lacks orbit/system/faction/min/max fields. Detect that and re-fetch.
     match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) if has_rich_data(&prices) => {
-            return Ok(ApiResponse::ok(prices));
-        }
-        CacheResult::Stale(prices) if has_rich_data(&prices) => {
-            return Ok(ApiResponse::ok_stale(prices));
-        }
-        _ => {
-            // Missing, or cached data lacks rich fields — fall through to fetch
-        }
-    }
-
-    // Fetch from API
-    match uex::get_commodity_prices(&state.uex, &commodity_id, &api_key).await {
-        Ok(prices) => {
-            // Cache the result
-            let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
-            let _ = state.cache.put(&cache_key, ttl, &prices);
-            Ok(ApiResponse::ok(prices))
-        }
-        Err(e) => Ok(ApiResponse::err(e)),
+        CacheResult::Fresh(prices) => Ok(ApiResponse::ok(prices)),
+        CacheResult::Stale(prices) => Ok(ApiResponse::ok_stale(prices)),
+        CacheResult::Missing => Ok(ApiResponse::ok(vec![])),
     }
 }
 
 // ── Generic price lookup helper ───────────────────────────────────────────
 
-/// Lookup prices from cache, or live-fetch if stale/missing.
-/// Skips cached data that lacks location info (e.g. from bulk `_all` endpoints).
-async fn price_lookup(
+/// Lookup prices from cache only. Returns empty data if not cached.
+fn price_lookup_cached(
     entity_id: &str,
     collection: Collection,
-    fetch_fn: impl std::future::Future<Output = Result<Vec<PriceEntry>, String>>,
     state: &AppState,
-) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+) -> ApiResponse<Vec<PriceEntry>> {
     let cache_key = collection.storage_key_with_id(entity_id);
 
     match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
-        CacheResult::Fresh(prices) if has_location_data(&prices) => return Ok(ApiResponse::ok(prices)),
-        CacheResult::Stale(prices) if has_location_data(&prices) => return Ok(ApiResponse::ok_stale(prices)),
-        _ => {}
-    }
-
-    match fetch_fn.await {
-        Ok(prices) => {
-            let ttl = state.current_settings.lock().unwrap().cache_ttl_prices_secs as i64;
-            let _ = state.cache.put(&cache_key, ttl, &prices);
-            Ok(ApiResponse::ok(prices))
-        }
-        Err(e) => Ok(ApiResponse::err(e)),
+        CacheResult::Fresh(prices) => ApiResponse::ok(prices),
+        CacheResult::Stale(prices) => ApiResponse::ok_stale(prices),
+        CacheResult::Missing => ApiResponse::ok(vec![]),
     }
 }
 
@@ -319,13 +271,7 @@ pub async fn api_raw_commodity_prices(
     if commodity_id.trim().is_empty() {
         return Ok(ApiResponse::err("commodity_id must not be empty"));
     }
-    let key = api_key(&state);
-    price_lookup(
-        &commodity_id,
-        Collection::RawCommodityPrices,
-        uex::get_raw_commodity_prices(&state.uex, &commodity_id, &key),
-        &state,
-    ).await
+    Ok(price_lookup_cached(&commodity_id, Collection::RawCommodityPrices, &state))
 }
 
 /// Fetch item prices by item ID.
@@ -337,13 +283,7 @@ pub async fn api_item_prices(
     if item_id.trim().is_empty() {
         return Ok(ApiResponse::err("item_id must not be empty"));
     }
-    let key = api_key(&state);
-    price_lookup(
-        &item_id,
-        Collection::ItemPrices,
-        uex::get_item_prices(&state.uex, &item_id, &key),
-        &state,
-    ).await
+    Ok(price_lookup_cached(&item_id, Collection::ItemPrices, &state))
 }
 
 /// Fetch vehicle purchase prices by vehicle ID.
@@ -355,13 +295,7 @@ pub async fn api_vehicle_purchase_prices(
     if vehicle_id.trim().is_empty() {
         return Ok(ApiResponse::err("vehicle_id must not be empty"));
     }
-    let key = api_key(&state);
-    price_lookup(
-        &vehicle_id,
-        Collection::VehiclePurchasePrices,
-        uex::get_vehicle_purchase_prices(&state.uex, &vehicle_id, &key),
-        &state,
-    ).await
+    Ok(price_lookup_cached(&vehicle_id, Collection::VehiclePurchasePrices, &state))
 }
 
 /// Fetch vehicle rental prices by vehicle ID.
@@ -373,13 +307,7 @@ pub async fn api_vehicle_rental_prices(
     if vehicle_id.trim().is_empty() {
         return Ok(ApiResponse::err("vehicle_id must not be empty"));
     }
-    let key = api_key(&state);
-    price_lookup(
-        &vehicle_id,
-        Collection::VehicleRentalPrices,
-        uex::get_vehicle_rental_prices(&state.uex, &vehicle_id, &key),
-        &state,
-    ).await
+    Ok(price_lookup_cached(&vehicle_id, Collection::VehicleRentalPrices, &state))
 }
 
 /// Fetch fuel prices by terminal ID.
@@ -391,13 +319,7 @@ pub async fn api_fuel_prices(
     if terminal_id.trim().is_empty() {
         return Ok(ApiResponse::err("terminal_id must not be empty"));
     }
-    let key = api_key(&state);
-    price_lookup(
-        &terminal_id,
-        Collection::FuelPrices,
-        uex::get_fuel_prices(&state.uex, &terminal_id, &key),
-        &state,
-    ).await
+    Ok(price_lookup_cached(&terminal_id, Collection::FuelPrices, &state))
 }
 
 // ── Entity info endpoint ──────────────────────────────────────────────────

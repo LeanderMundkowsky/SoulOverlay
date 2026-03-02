@@ -1,6 +1,6 @@
 use log::{error, info};
 use std::path::PathBuf;
-use tauri::{App, Manager};
+use tauri::{App, Emitter, Manager};
 
 use crate::commands;
 use crate::game_tracker;
@@ -101,6 +101,32 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         let state = prefetch_handle.state::<AppState>();
         commands::cache::prefetch_all(&state).await;
         info!("Background cache prefetch complete");
+    });
+
+    // Spawn a long-lived background timer that refreshes expired collections every 60s.
+    let timer_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        use crate::cache_store::Collection;
+
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        // The first tick fires immediately — skip it since prefetch_all just ran.
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+            let state = timer_handle.state::<AppState>();
+            let mut refreshed_any = false;
+
+            for collection in Collection::prefetch_list() {
+                if commands::cache::guarded_refresh(&state, collection).await {
+                    refreshed_any = true;
+                }
+            }
+
+            if refreshed_any {
+                let _ = timer_handle.emit("cache-updated", ());
+            }
+        }
     });
 
     Ok(())

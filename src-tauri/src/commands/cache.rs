@@ -73,12 +73,17 @@ pub async fn cache_refresh_all(
 
 /// Split a flat vec of price entries by entity_id and store each group
 /// as a separate per-entity cache entry (e.g. `commodity_prices:42`).
+/// Invalidates old sub-entries first so stale entity IDs don't linger.
 fn store_prices_split(
     cache: &CacheStore,
     entries: &[PriceEntry],
     collection: Collection,
     ttl: i64,
 ) -> Result<(), String> {
+    // Remove old sub-entries so entity IDs no longer in the API response don't
+    // cause the whole collection to appear stale.
+    cache.invalidate_collection(collection);
+
     let mut groups: std::collections::HashMap<&str, Vec<PriceEntry>> = std::collections::HashMap::new();
     for entry in entries {
         groups.entry(&entry.entity_id).or_default().push(entry.clone());
@@ -111,7 +116,7 @@ fn store_prices_split_arc(
 }
 
 /// Internal helper: refresh a collection by its storage key name.
-async fn refresh_collection_by_name(
+pub(crate) async fn refresh_collection_by_name(
     name: &str,
     api_key: &str,
     settings: &Settings,
@@ -305,4 +310,38 @@ pub async fn prefetch_all(state: &AppState) {
             Err(e) => error!("Prefetch task panicked: {}", e),
         }
     }
+}
+
+/// Try to acquire the refresh guard for `collection_key`. Returns `true` if the
+/// guard was acquired (caller should refresh), `false` if already in-flight.
+pub(crate) fn try_acquire_refresh(state: &AppState, collection_key: &str) -> bool {
+    let mut guard = state.refreshing_collections.lock().unwrap();
+    guard.insert(collection_key.to_string())
+}
+
+/// Release the refresh guard for `collection_key`.
+pub(crate) fn release_refresh(state: &AppState, collection_key: &str) {
+    let mut guard = state.refreshing_collections.lock().unwrap();
+    guard.remove(collection_key);
+}
+
+/// Refresh a single collection if expired, respecting the in-flight guard.
+/// Returns `true` if a refresh was performed.
+pub(crate) async fn guarded_refresh(state: &AppState, collection: &Collection) -> bool {
+    let key = collection.storage_key();
+    if !state.cache.is_expired(&key) {
+        return false;
+    }
+    if !try_acquire_refresh(state, &key) {
+        return false;
+    }
+    let settings = state.current_settings.lock().unwrap().clone();
+    let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state).await;
+    release_refresh(state, &key);
+    if !result.ok {
+        if let Some(e) = &result.error {
+            error!("Background refresh failed for '{}': {}", key, e);
+        }
+    }
+    result.ok
 }
