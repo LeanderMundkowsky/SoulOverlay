@@ -17,10 +17,17 @@ pub struct Settings {
     /// Whether opening the overlay resets to the search tab and focuses the search bar (default: true)
     #[serde(default = "default_true")]
     pub reset_on_open: bool,
+    /// Maximum number of search results returned by api_search (default: 50)
+    #[serde(default = "default_max_search_results")]
+    pub max_search_results: u32,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_max_search_results() -> u32 {
+    50
 }
 
 impl Default for Settings {
@@ -32,6 +39,7 @@ impl Default for Settings {
             overlay_opacity: 0.6,
             esc_closes_overlay: true,
             reset_on_open: true,
+            max_search_results: 50,
         }
     }
 }

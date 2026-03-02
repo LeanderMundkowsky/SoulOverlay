@@ -10,7 +10,7 @@ const emit = defineEmits<{
 }>();
 
 const query = ref("");
-const { loading, error, results, stale, search } = useUex();
+const { loading, error, results, total, stale, search } = useUex();
 const activeIndex = ref(-1);
 const inputEl = ref<HTMLInputElement | null>(null);
 const rowRefs = ref<InstanceType<typeof SearchResultRow>[]>([]);
@@ -125,7 +125,7 @@ defineExpose({ focusInput, stale });
       <div class="px-4 py-2 flex items-center gap-2">
         <span class="text-white/30 text-xs uppercase tracking-widest">Results</span>
         <span class="bg-white/10 text-white/50 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-          {{ results.length }}
+          {{ total !== null && total > results.length ? `${results.length} / ${total}` : results.length }}
         </span>
       </div>
 

@@ -9,6 +9,7 @@ export interface Settings {
   overlay_opacity: number;
   esc_closes_overlay: boolean;
   reset_on_open: boolean;
+  max_search_results: number;
 }
 
 const defaultSettings: Settings = {
@@ -18,6 +19,7 @@ const defaultSettings: Settings = {
   overlay_opacity: 0.85,
   esc_closes_overlay: true,
   reset_on_open: true,
+  max_search_results: 50,
 };
 
 export const useSettingsStore = defineStore("settings", () => {

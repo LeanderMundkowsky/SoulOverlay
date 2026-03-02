@@ -12,10 +12,10 @@ defineProps<{
   <div
     class="flex items-start gap-3 rounded-xl px-4 py-3 text-sm border"
     :class="{
-      'bg-yellow-500/10 border-yellow-500/30 text-yellow-200': variant === 'warning',
-      'bg-red-500/10 border-red-500/30 text-red-400': variant === 'error',
-      'bg-green-500/10 border-green-500/30 text-green-400': variant === 'success',
-      'bg-blue-500/10 border-blue-500/30 text-blue-200': variant === 'info',
+      'bg-yellow-900 border-yellow-500/60 text-yellow-100': variant === 'warning',
+      'bg-red-950 border-red-500/40 text-red-200': variant === 'error',
+      'bg-green-950 border-green-500/40 text-green-200': variant === 'success',
+      'bg-blue-950 border-blue-500/40 text-blue-200': variant === 'info',
     }"
   >
     <IconInfoCircle
@@ -29,7 +29,7 @@ defineProps<{
     />
     <div>
       <p v-if="title" class="font-semibold">{{ title }}</p>
-      <p :class="title ? 'text-xs mt-0.5 opacity-70' : ''">{{ message }}</p>
+      <p :class="title ? 'text-xs mt-0.5' : ''">{{ message }}</p>
     </div>
   </div>
 </template>

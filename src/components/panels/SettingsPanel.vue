@@ -22,6 +22,7 @@ const form = ref<Settings>({
   overlay_opacity: 1.0,
   esc_closes_overlay: true,
   reset_on_open: true,
+  max_search_results: 50,
 });
 
 const saving = ref(false);
@@ -58,6 +59,7 @@ function resetDefaults() {
     overlay_opacity: 0.85,
     esc_closes_overlay: true,
     reset_on_open: true,
+    max_search_results: 50,
   };
 }
 </script>
@@ -121,6 +123,21 @@ function resetDefaults() {
         label="Reset on open"
         description="Switch to Search tab and focus input when overlay opens"
       />
+
+      <!-- Max search results -->
+      <SettingsField
+        label="Max Search Results"
+        hint="Limits results returned per search query (1–500)"
+      >
+        <input
+          v-model.number="form.max_search_results"
+          type="number"
+          min="1"
+          max="500"
+          step="1"
+          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
+        />
+      </SettingsField>
 
       <!-- Divider -->
       <div class="border-t border-white/10"></div>

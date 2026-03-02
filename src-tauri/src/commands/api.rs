@@ -35,19 +35,21 @@ pub struct ApiResponse<T: Serialize> {
     /// Indicates the data was served from an expired cache entry.
     /// Frontend can show a "refreshing..." indicator when this is true.
     pub stale: bool,
+    /// Total number of matches before any limit was applied (None when not applicable).
+    pub total: Option<usize>,
 }
 
 impl<T: Serialize> ApiResponse<T> {
     fn ok(data: T) -> Self {
-        Self { ok: true, data: Some(data), error: None, stale: false }
+        Self { ok: true, data: Some(data), error: None, stale: false, total: None }
     }
 
     fn ok_stale(data: T) -> Self {
-        Self { ok: true, data: Some(data), error: None, stale: true }
+        Self { ok: true, data: Some(data), error: None, stale: true, total: None }
     }
 
     fn err(msg: impl Into<String>) -> Self {
-        Self { ok: false, data: None, error: Some(msg.into()), stale: false }
+        Self { ok: false, data: None, error: Some(msg.into()), stale: false, total: None }
     }
 }
 
@@ -105,6 +107,7 @@ pub async fn api_search(
     }
 
     let api_key = api_key(&state);
+    let max_results = state.current_settings.lock().unwrap().max_search_results as usize;
     let mut all_results = Vec::new();
     let mut any_stale = false;
 
@@ -128,11 +131,15 @@ pub async fn api_search(
         }
     }
 
-    if any_stale {
-        Ok(ApiResponse::ok_stale(all_results))
+    let total = all_results.len();
+    all_results.truncate(max_results);
+    let mut resp = if any_stale {
+        ApiResponse::ok_stale(all_results)
     } else {
-        Ok(ApiResponse::ok(all_results))
-    }
+        ApiResponse::ok(all_results)
+    };
+    resp.total = Some(total);
+    Ok(resp)
 }
 
 /// Search UEX commodities only.

@@ -22,6 +22,7 @@ interface ApiResponse<T> {
   data: T | null;
   error: string | null;
   stale: boolean;
+  total: number | null;
 }
 
 /**
@@ -32,12 +33,14 @@ export function useUex() {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const results = ref<UexResult[]>([]);
+  const total = ref<number | null>(null);
   const prices = ref<PriceEntry[]>([]);
   const stale = ref(false);
 
   async function search(query: string) {
     if (!query.trim()) {
       results.value = [];
+      total.value = null;
       stale.value = false;
       return;
     }
@@ -49,15 +52,18 @@ export function useUex() {
       const resp = await invoke<ApiResponse<UexResult[]>>("api_search", { query });
       if (resp.ok && resp.data) {
         results.value = resp.data;
+        total.value = resp.total ?? resp.data.length;
         stale.value = resp.stale;
       } else {
         error.value = resp.error ?? "Unknown error";
         results.value = [];
+        total.value = null;
         stale.value = false;
       }
     } catch (e) {
       error.value = String(e);
       results.value = [];
+      total.value = null;
       stale.value = false;
     } finally {
       loading.value = false;
@@ -91,6 +97,7 @@ export function useUex() {
     loading,
     error,
     results,
+    total,
     prices,
     stale,
     search,
