@@ -6,6 +6,7 @@ export interface UexResult {
   name: string;
   kind: string;
   slug: string;
+  uuid: string;
 }
 
 export interface PriceEntry {
@@ -20,6 +21,47 @@ export interface PriceEntry {
   rent_price: number;
   scu_available: number | null;
   date_updated: string;
+}
+
+export interface EntityInfo {
+  id: string;
+  name: string;
+  kind: string;
+  slug: string;
+  // Common
+  code: string | null;
+  company_name: string | null;
+  wiki: string | null;
+  game_version: string | null;
+  // Commodity
+  commodity_kind: string | null;
+  weight_scu: number | null;
+  avg_buy: number | null;
+  avg_sell: number | null;
+  is_illegal: boolean | null;
+  is_buyable: boolean | null;
+  is_sellable: boolean | null;
+  is_mineral: boolean | null;
+  is_raw: boolean | null;
+  is_refined: boolean | null;
+  is_harvestable: boolean | null;
+  // Item
+  section: string | null;
+  category: string | null;
+  size: string | null;
+  color: string | null;
+  // Vehicle
+  name_full: string | null;
+  scu: number | null;
+  crew: string | null;
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  mass: number | null;
+  pad_type: string | null;
+  url_photo: string | null;
+  url_store: string | null;
+  roles: string[];
 }
 
 interface ApiResponse<T> {
@@ -156,6 +198,32 @@ export function useUex() {
     }
   }
 
+  const entityInfo = ref<EntityInfo | null>(null);
+  const entityInfoLoading = ref(false);
+  const entityInfoError = ref<string | null>(null);
+
+  async function getEntityInfo(kind: string, entityId: string) {
+    entityInfoLoading.value = true;
+    entityInfoError.value = null;
+    entityInfo.value = null;
+
+    try {
+      const resp = await invoke<ApiResponse<EntityInfo>>("api_entity_info", {
+        kind,
+        entityId,
+      });
+      if (resp.ok && resp.data) {
+        entityInfo.value = resp.data;
+      } else {
+        entityInfoError.value = resp.error ?? "Unknown error";
+      }
+    } catch (e) {
+      entityInfoError.value = String(e);
+    } finally {
+      entityInfoLoading.value = false;
+    }
+  }
+
   return {
     loading,
     error,
@@ -166,5 +234,9 @@ export function useUex() {
     search,
     getPrices,
     getEntityPrices,
+    entityInfo,
+    entityInfoLoading,
+    entityInfoError,
+    getEntityInfo,
   };
 }

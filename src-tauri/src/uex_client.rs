@@ -7,6 +7,140 @@ pub struct UexResult {
     pub name: String,
     pub kind: String, // "commodity", "ship", "item", etc.
     pub slug: String,
+    /// UUID (items only). Used to fetch item details from the UEX API.
+    #[serde(default)]
+    pub uuid: String,
+}
+
+/// Detailed entity metadata from UEX API, with type-specific optional fields.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EntityInfo {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub slug: String,
+    // Common
+    pub code: Option<String>,
+    pub company_name: Option<String>,
+    pub wiki: Option<String>,
+    pub game_version: Option<String>,
+    // Commodity
+    pub commodity_kind: Option<String>,
+    pub weight_scu: Option<f64>,
+    pub avg_buy: Option<f64>,
+    pub avg_sell: Option<f64>,
+    pub is_illegal: Option<bool>,
+    pub is_buyable: Option<bool>,
+    pub is_sellable: Option<bool>,
+    pub is_mineral: Option<bool>,
+    pub is_raw: Option<bool>,
+    pub is_refined: Option<bool>,
+    pub is_harvestable: Option<bool>,
+    // Item
+    pub section: Option<String>,
+    pub category: Option<String>,
+    pub size: Option<String>,
+    pub color: Option<String>,
+    // Vehicle
+    pub name_full: Option<String>,
+    pub scu: Option<f64>,
+    pub crew: Option<String>,
+    pub length: Option<f64>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+    pub mass: Option<f64>,
+    pub pad_type: Option<String>,
+    pub url_photo: Option<String>,
+    pub url_store: Option<String>,
+    pub roles: Vec<String>,
+}
+
+impl EntityInfo {
+    fn from_commodity_json(item: &serde_json::Value) -> Self {
+        Self {
+            id: json_str_or_u64(item, "id"),
+            name: item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            kind: "commodity".to_string(),
+            slug: item.get("slug").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            code: item.get("code").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            wiki: item.get("wiki").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            commodity_kind: item.get("kind").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            weight_scu: item.get("weight_scu").and_then(|v| v.as_f64()),
+            avg_buy: item.get("price_buy").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            avg_sell: item.get("price_sell").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            is_illegal: json_bool(item, "is_illegal"),
+            is_buyable: json_bool(item, "is_buyable"),
+            is_sellable: json_bool(item, "is_sellable"),
+            is_mineral: json_bool(item, "is_mineral"),
+            is_raw: json_bool(item, "is_raw"),
+            is_refined: json_bool(item, "is_refined"),
+            is_harvestable: json_bool(item, "is_harvestable"),
+            ..Default::default()
+        }
+    }
+
+    fn from_item_json(item: &serde_json::Value) -> Self {
+        Self {
+            id: json_str_or_u64(item, "id"),
+            name: item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            kind: "item".to_string(),
+            slug: item.get("slug").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            section: item.get("section").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            category: item.get("category").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            company_name: item.get("company_name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            size: item.get("size").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            color: item.get("color").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            game_version: item.get("game_version").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn from_vehicle_json(item: &serde_json::Value) -> Self {
+        let mut roles = Vec::new();
+        let role_flags = [
+            ("is_boarding", "Boarding"), ("is_bomber", "Bomber"), ("is_cargo", "Cargo"),
+            ("is_carrier", "Carrier"), ("is_civilian", "Civilian"), ("is_construction", "Construction"),
+            ("is_datarunner", "Data Runner"), ("is_exploration", "Exploration"),
+            ("is_industrial", "Industrial"), ("is_interdiction", "Interdiction"),
+            ("is_medical", "Medical"), ("is_military", "Military"), ("is_mining", "Mining"),
+            ("is_passenger", "Passenger"), ("is_racing", "Racing"), ("is_refinery", "Refinery"),
+            ("is_refuel", "Refuel"), ("is_repair", "Repair"), ("is_research", "Research"),
+            ("is_salvage", "Salvage"), ("is_scanning", "Scanning"), ("is_science", "Science"),
+            ("is_stealth", "Stealth"),
+        ];
+        for (field, label) in role_flags {
+            if item.get(field).and_then(|v| v.as_u64()).unwrap_or(0) == 1 {
+                roles.push(label.to_string());
+            }
+        }
+
+        let kind = if item.get("is_ground_vehicle").and_then(|v| v.as_u64()).unwrap_or(0) == 1 {
+            "ground vehicle"
+        } else {
+            "vehicle"
+        };
+
+        Self {
+            id: json_str_or_u64(item, "id"),
+            name: item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            kind: kind.to_string(),
+            slug: item.get("slug").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            name_full: item.get("name_full").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            company_name: item.get("company_name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            scu: item.get("scu").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            crew: item.get("crew").and_then(|v| v.as_str()).filter(|s| !s.is_empty() && *s != "0").map(|s| s.to_string()),
+            length: item.get("length").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            width: item.get("width").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            height: item.get("height").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            mass: item.get("mass").and_then(|v| v.as_f64()).filter(|&v| v > 0.0),
+            pad_type: item.get("pad_type").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            url_photo: item.get("url_photo").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            url_store: item.get("url_store").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            game_version: item.get("game_version").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            roles,
+            ..Default::default()
+        }
+    }
 }
 
 impl UexResult {
@@ -38,7 +172,7 @@ impl UexResult {
             .unwrap_or("commodity")
             .to_string();
 
-        Self { id, name, kind, slug }
+        Self { id, name, kind, slug, uuid: String::new() }
     }
 }
 
@@ -161,6 +295,11 @@ fn json_str_or_u64(item: &serde_json::Value, field: &str) -> String {
     item.get(field)
         .and_then(|v| v.as_u64().map(|n| n.to_string()).or_else(|| v.as_str().map(|s| s.to_string())))
         .unwrap_or_default()
+}
+
+/// Extract an integer field as Option<bool> (0 = false, 1 = true, absent = None).
+fn json_bool(item: &serde_json::Value, field: &str) -> Option<bool> {
+    item.get(field).and_then(|v| v.as_u64()).map(|v| v == 1)
 }
 
 /// Build a human-readable location string from a price row.
@@ -315,7 +454,7 @@ pub async fn fetch_all_vehicles(api_key: &str) -> Result<Vec<UexResult>, String>
                 "vehicle"
             };
 
-            UexResult { id, name, kind: kind.to_string(), slug }
+            UexResult { id, name, kind: kind.to_string(), slug, uuid: String::new() }
         })
         .collect();
     Ok(results)
@@ -369,6 +508,7 @@ pub async fn fetch_all_items(api_key: &str) -> Result<Vec<UexResult>, String> {
                     if seen_ids.insert(id) {
                         let mut r = UexResult::from_json(item);
                         r.kind = "item".to_string();
+                        r.uuid = item.get("uuid").and_then(|v| v.as_str()).unwrap_or("").to_string();
                         all_items.push(r);
                     }
                 }
@@ -413,7 +553,7 @@ pub async fn fetch_all_locations(api_key: &str) -> Result<Vec<UexResult>, String
                 .unwrap_or("")
                 .to_string();
 
-            UexResult { id, name, kind: "location".to_string(), slug }
+            UexResult { id, name, kind: "location".to_string(), slug, uuid: String::new() }
         })
         .collect();
     Ok(results)
@@ -477,7 +617,7 @@ pub async fn search_vehicles(query: &str, api_key: &str) -> Result<Vec<UexResult
                         "vehicle"
                     };
 
-                    UexResult { id, name, kind: kind.to_string(), slug }
+                    UexResult { id, name, kind: kind.to_string(), slug, uuid: String::new() }
                 })
                 .filter(|r| r.name.to_lowercase().contains(&query_lower))
                 .collect()
@@ -534,7 +674,7 @@ pub async fn search_locations(query: &str, api_key: &str) -> Result<Vec<UexResul
                         .unwrap_or("")
                         .to_string();
 
-                    UexResult { id, name, kind: "location".to_string(), slug }
+                    UexResult { id, name, kind: "location".to_string(), slug, uuid: String::new() }
                 })
                 .filter(|r| r.name.to_lowercase().contains(&query_lower))
                 .collect()
@@ -676,4 +816,36 @@ pub async fn fetch_all_fuel_prices(api_key: &str) -> Result<Vec<PriceEntry>, Str
         .map(|item| PriceEntry::from_fuel_json(item))
         .collect();
     Ok(entries)
+}
+
+// ── Entity info functions ──────────────────────────────────────────────────
+
+/// Fetch commodity details by id.
+pub async fn get_commodity_info(commodity_id: &str, api_key: &str) -> Result<EntityInfo, String> {
+    let url = format!("{}/commodities", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id", commodity_id)], api_key).await?;
+    extract_data_array(&body)
+        .first()
+        .map(|item| EntityInfo::from_commodity_json(item))
+        .ok_or_else(|| format!("Commodity {} not found", commodity_id))
+}
+
+/// Fetch vehicle details by id.
+pub async fn get_vehicle_info(vehicle_id: &str, api_key: &str) -> Result<EntityInfo, String> {
+    let url = format!("{}/vehicles", UEX_BASE_URL);
+    let body = uex_get(&url, &[("id", vehicle_id)], api_key).await?;
+    extract_data_array(&body)
+        .first()
+        .map(|item| EntityInfo::from_vehicle_json(item))
+        .ok_or_else(|| format!("Vehicle {} not found", vehicle_id))
+}
+
+/// Fetch item details by uuid.
+pub async fn get_item_info(uuid: &str, api_key: &str) -> Result<EntityInfo, String> {
+    let url = format!("{}/items", UEX_BASE_URL);
+    let body = uex_get(&url, &[("uuid", uuid)], api_key).await?;
+    extract_data_array(&body)
+        .first()
+        .map(|item| EntityInfo::from_item_json(item))
+        .ok_or_else(|| format!("Item with uuid {} not found", uuid))
 }

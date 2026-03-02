@@ -23,6 +23,21 @@ const sortedPrices = ref<PriceEntry[]>([]);
 const showRentColumn = ref(false);
 const showScuColumn = ref(false);
 
+const bestBuy = ref(0);
+const bestSell = ref(0);
+const locationCount = ref(0);
+
+const kindLabels: Record<string, string> = {
+  commodity: "Commodity",
+  raw_commodity: "Raw Commodity",
+  item: "Item",
+  vehicle: "Vehicle",
+  "ground vehicle": "Ground Vehicle",
+  vehicle_rental: "Vehicle Rental",
+  fuel: "Fuel",
+  location: "Location",
+};
+
 watch(
   [prices, sortKey, sortAsc],
   () => {
@@ -41,6 +56,12 @@ watch(
 
     showRentColumn.value = sorted.some((p) => p.rent_price > 0);
     showScuColumn.value = sorted.some((p) => p.scu_available !== null && p.scu_available > 0);
+
+    const buys = sorted.map((p) => p.buy_price).filter((v) => v > 0);
+    const sells = sorted.map((p) => p.sell_price).filter((v) => v > 0);
+    bestBuy.value = buys.length > 0 ? Math.min(...buys) : 0;
+    bestSell.value = sells.length > 0 ? Math.max(...sells) : 0;
+    locationCount.value = new Set(sorted.map((p) => p.terminal_id)).size;
   },
   { immediate: true }
 );
@@ -80,6 +101,14 @@ watch(() => props.entityId, () => { fetchPrices(); });
       <button @click="emit('close')" class="text-white/40 hover:text-white transition-colors">
         <IconClose class="w-4 h-4" />
       </button>
+    </div>
+
+    <!-- Item Info -->
+    <div v-if="!loading && !error && sortedPrices.length > 0" class="px-4 py-2 bg-white/[0.03] border-b border-white/10 flex items-center gap-3 text-xs">
+      <span class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium uppercase tracking-wide">{{ kindLabels[entityKind] ?? entityKind }}</span>
+      <span v-if="bestBuy > 0" class="text-white/50">Best Buy <span class="text-green-400 font-medium">{{ formatPrice(bestBuy) }}</span></span>
+      <span v-if="bestSell > 0" class="text-white/50">Best Sell <span class="text-blue-400 font-medium">{{ formatPrice(bestSell) }}</span></span>
+      <span class="text-white/50">{{ locationCount }} {{ locationCount === 1 ? "location" : "locations" }}</span>
     </div>
 
     <!-- Loading -->

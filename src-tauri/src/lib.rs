@@ -65,6 +65,7 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_opener::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::api::api_search,
@@ -78,6 +79,7 @@ pub fn run() {
             commands::api::api_vehicle_purchase_prices,
             commands::api::api_vehicle_rental_prices,
             commands::api::api_fuel_prices,
+            commands::api::api_entity_info,
             commands::cache::cache_status,
             commands::cache::cache_refresh,
             commands::cache::cache_refresh_all,

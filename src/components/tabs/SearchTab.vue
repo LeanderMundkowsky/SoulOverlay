@@ -3,6 +3,7 @@ import { ref } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import SearchBar from "@/components/overlay/SearchBar.vue";
 import CommodityPanel from "@/components/overlay/CommodityPanel.vue";
+import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
 
 defineProps<{
   scDetected: boolean;
@@ -62,14 +63,23 @@ defineExpose({ focusInput });
       <Transition name="detail-panel">
         <div
           v-if="selectedResult"
-          class="flex-1 min-w-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
+          class="flex-1 min-w-0 flex flex-col gap-3 overflow-hidden"
         >
-          <CommodityPanel
+          <!-- Entity info card -->
+          <EntityInfoCard
             :entity-id="selectedResult.id"
-            :entity-name="selectedResult.name"
             :entity-kind="selectedResult.kind"
-            @close="selectedResult = null"
           />
+
+          <!-- Prices card -->
+          <div class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+            <CommodityPanel
+              :entity-id="selectedResult.id"
+              :entity-name="selectedResult.name"
+              :entity-kind="selectedResult.kind"
+              @close="selectedResult = null"
+            />
+          </div>
         </div>
       </Transition>
     </div>
