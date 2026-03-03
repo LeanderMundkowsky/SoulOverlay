@@ -249,7 +249,9 @@ Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides a
 
 **Auto-refresh**: `app_setup.rs` runs a 30-second timer that calls `cache_refresh_expired`
 to refresh all collections whose TTL has elapsed. Initial prefetch on startup also uses
-this path.
+this path. All collection refreshes run in parallel via `futures::future::join_all` — catalogs
+first (commodities, vehicles, items, locations), then price/fleet collections in a second
+parallel batch (prices depend on catalog IDs being in cache).
 
 **Favorites** bypass `CacheStore` entirely — plain SQLite table in `commands/favorites.rs`,
 keyed by `(id, kind)`. No TTL.

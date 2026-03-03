@@ -29,6 +29,7 @@ rmp-serde = "1"
 specta = { version = "=2.0.0-rc.22", features = ["derive"] }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript"] }
 specta-typescript = "=0.0.9"
+futures = "0.3.32"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

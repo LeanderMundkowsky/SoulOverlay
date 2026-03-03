@@ -48,15 +48,19 @@ pub async fn cache_refresh_expired(
     state: State<'_, AppState>,
 ) -> Result<Vec<CacheRefreshResult>, String> {
     let settings = state.current_settings.lock().unwrap().clone();
-    let mut results = Vec::new();
-    for collection in Collection::all() {
-        let key = collection.storage_key();
-        if state.cache.is_expired(&key) {
-            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, &state, "manual").await;
-            results.push(result);
-        }
+    let expired: Vec<String> = Collection::all()
+        .iter()
+        .map(|c| c.storage_key())
+        .filter(|key| state.cache.is_expired(key))
+        .collect();
+    if !expired.is_empty() {
+        info!("Refreshing {} expired collections in parallel: {}", expired.len(), expired.join(", "));
     }
-    Ok(results)
+    let futures: Vec<_> = expired
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .collect();
+    Ok(futures::future::join_all(futures).await)
 }
 
 /// Refresh all prefetchable collections.
@@ -66,12 +70,32 @@ pub async fn cache_refresh_all(
     state: State<'_, AppState>,
 ) -> Result<Vec<CacheRefreshResult>, String> {
     let settings = state.current_settings.lock().unwrap().clone();
-    let mut results = Vec::new();
-    for collection in Collection::all() {
-        let name = collection.storage_key();
-        let result = refresh_collection_by_name(&name, &settings.uex_api_key, &settings, &state, "manual").await;
-        results.push(result);
-    }
+    // Catalogs first (prices depend on their IDs in cache).
+    let catalogs = [
+        Collection::Commodities,
+        Collection::Vehicles,
+        Collection::Items,
+        Collection::Locations,
+    ];
+    let catalog_keys: Vec<String> = catalogs.iter().map(|c| c.storage_key()).collect();
+    info!("Refreshing {} catalog collections in parallel: {}", catalog_keys.len(), catalog_keys.join(", "));
+    let catalog_futures: Vec<_> = catalog_keys
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .collect();
+    let mut results = futures::future::join_all(catalog_futures).await;
+
+    let rest_keys: Vec<String> = Collection::all()
+        .iter()
+        .filter(|c| !catalogs.contains(c))
+        .map(|c| c.storage_key())
+        .collect();
+    info!("Refreshing {} remaining collections in parallel: {}", rest_keys.len(), rest_keys.join(", "));
+    let rest_futures: Vec<_> = rest_keys
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .collect();
+    results.extend(futures::future::join_all(rest_futures).await);
     Ok(results)
 }
 
@@ -319,7 +343,8 @@ pub(crate) async fn refresh_collection_by_name(
 }
 
 /// Public helper used by app_setup to prefetch all collections on startup.
-/// Catalog collections run first (prices depend on their IDs), then the rest.
+/// Catalog collections run first in parallel (prices depend on their IDs),
+/// then remaining collections run in parallel.
 pub async fn prefetch_all(state: &AppState) {
     let settings = state.current_settings.lock().unwrap().clone();
 
@@ -330,37 +355,61 @@ pub async fn prefetch_all(state: &AppState) {
         Collection::Items,
         Collection::Locations,
     ];
-    for collection in &catalogs {
-        let key = collection.storage_key();
-        if state.cache.is_expired(&key) {
-            info!("Prefetching expired collection: {}", key);
-            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "startup").await;
-            if !result.ok {
-                if let Some(e) = &result.error {
-                    error!("Prefetch failed for {}: {}", key, e);
-                }
+    let catalog_keys: Vec<String> = catalogs
+        .iter()
+        .filter(|c| {
+            let key = c.storage_key();
+            if state.cache.is_expired(&key) {
+                true
+            } else {
+                info!("Collection '{}' is still fresh, skipping prefetch", key);
+                false
             }
-        } else {
-            info!("Collection '{}' is still fresh, skipping prefetch", key);
+        })
+        .map(|c| c.storage_key())
+        .collect();
+    if !catalog_keys.is_empty() {
+        info!("Prefetching {} catalog collections in parallel: {}", catalog_keys.len(), catalog_keys.join(", "));
+    }
+    let catalog_futures: Vec<_> = catalog_keys
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
+        .collect();
+    for result in futures::future::join_all(catalog_futures).await {
+        if !result.ok {
+            if let Some(e) = &result.error {
+                error!("Prefetch failed for {}: {}", result.collection, e);
+            }
         }
     }
 
-    // Remaining collections (prices, fleet, etc.)
-    for collection in Collection::all() {
-        if catalogs.contains(collection) {
-            continue;
-        }
-        let key = collection.storage_key();
-        if state.cache.is_expired(&key) {
-            info!("Prefetching expired collection: {}", key);
-            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "startup").await;
-            if !result.ok {
-                if let Some(e) = &result.error {
-                    error!("Prefetch failed for {}: {}", key, e);
-                }
+    // Remaining collections in parallel (prices, fleet, etc.)
+    let rest_keys: Vec<String> = Collection::all()
+        .iter()
+        .filter(|c| !catalogs.contains(c))
+        .filter(|c| {
+            let key = c.storage_key();
+            if state.cache.is_expired(&key) {
+                true
+            } else {
+                info!("Collection '{}' is still fresh, skipping prefetch", key);
+                false
             }
-        } else {
-            info!("Collection '{}' is still fresh, skipping prefetch", key);
+        })
+        .map(|c| c.storage_key())
+        .collect();
+    if !rest_keys.is_empty() {
+        info!("Prefetching {} remaining collections in parallel: {}", rest_keys.len(), rest_keys.join(", "));
+    }
+    let rest_futures: Vec<_> = rest_keys
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
+        .collect();
+    for result in futures::future::join_all(rest_futures).await {
+        if !result.ok {
+            if let Some(e) = &result.error {
+                error!("Prefetch failed for {}: {}", result.collection, e);
+            }
         }
     }
 }
