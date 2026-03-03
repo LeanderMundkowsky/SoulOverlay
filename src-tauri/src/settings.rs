@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
@@ -88,12 +90,10 @@ pub struct Settings {
     /// Maximum number of search results returned by api_search (default: 50)
     #[serde(default = "default_max_search_results")]
     pub max_search_results: u32,
-    /// Cache TTL in seconds for price collections (default: 3600 = 1 h)
-    #[serde(default = "default_ttl_prices")]
-    pub cache_ttl_prices_secs: u32,
-    /// Cache TTL in seconds for catalog collections: vehicles, items, locations (default: 86400 = 24 h)
-    #[serde(default = "default_ttl_catalog")]
-    pub cache_ttl_catalog_secs: u32,
+    /// Per-collection cache TTL overrides in seconds, keyed by Collection::storage_key().
+    /// Missing entries fall back to Collection::ttl_secs().
+    #[serde(default)]
+    pub cache_ttls: HashMap<String, u32>,
     /// User-adjusted panel layout widths
     #[serde(default)]
     pub layout_widths: LayoutWidths,
@@ -113,14 +113,6 @@ fn default_max_search_results() -> u32 {
     50
 }
 
-fn default_ttl_prices() -> u32 {
-    3600
-}
-
-fn default_ttl_catalog() -> u32 {
-    86400
-}
-
 fn default_font_size() -> u32 {
     14
 }
@@ -136,8 +128,7 @@ impl Default for Settings {
             esc_closes_overlay: true,
             reset_on_open: true,
             max_search_results: 50,
-            cache_ttl_prices_secs: 3600,
-            cache_ttl_catalog_secs: 86400,
+            cache_ttls: HashMap::new(),
             layout_widths: LayoutWidths::default(),
             font_size: 14,
             keybinds: Keybinds::default(),

@@ -51,8 +51,7 @@ interface DebugInfo {
   esc_closes_overlay: boolean;
   reset_on_open: boolean;
   max_search_results: number;
-  cache_ttl_prices_secs: number;
-  cache_ttl_catalog_secs: number;
+  cache_ttls: Record<string, number>;
   log_watcher_active: boolean;
   hotkey_registered: boolean;
   refreshing_collections: string[];
@@ -301,12 +300,8 @@ function fmtMs(ms: number): string {
             <span class="text-white/55">{{ info.max_search_results }}</span>
           </div>
           <div class="flex justify-between gap-1">
-            <span class="text-white/40">TTL prices</span>
-            <span class="text-white/55">{{ info.cache_ttl_prices_secs }}s</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">TTL catalog</span>
-            <span class="text-white/55">{{ info.cache_ttl_catalog_secs }}s</span>
+            <span class="text-white/40">Cache TTLs</span>
+            <span class="text-white/55">{{ Object.keys(info.cache_ttls).length }} overrides</span>
           </div>
         </div>
       </div>

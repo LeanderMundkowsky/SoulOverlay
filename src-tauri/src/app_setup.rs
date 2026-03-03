@@ -100,6 +100,10 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         info!("Starting background cache prefetch...");
         let state = prefetch_handle.state::<AppState>();
         commands::cache::prefetch_all(&state).await;
+        // Seed the timer so the debug panel countdown starts immediately
+        if let Ok(mut log) = state.activity.lock() {
+            log.last_bg_check_at = Some(chrono::Utc::now());
+        }
         info!("Background cache prefetch complete");
     });
 
@@ -125,7 +129,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
             let mut refreshed_any = false;
 
-            for collection in Collection::prefetch_list() {
+            for collection in Collection::all() {
                 if commands::cache::guarded_refresh(&state, collection).await {
                     refreshed_any = true;
                 }

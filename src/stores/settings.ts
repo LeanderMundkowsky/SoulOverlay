@@ -23,8 +23,7 @@ export interface Settings {
   esc_closes_overlay: boolean;
   reset_on_open: boolean;
   max_search_results: number;
-  cache_ttl_prices_secs: number;
-  cache_ttl_catalog_secs: number;
+  cache_ttls: Record<string, number>;
   layout_widths: LayoutWidths;
   font_size: number;
   keybinds: Keybinds;
@@ -39,8 +38,7 @@ const defaultSettings: Settings = {
   esc_closes_overlay: true,
   reset_on_open: true,
   max_search_results: 50,
-  cache_ttl_prices_secs: 3600,
-  cache_ttl_catalog_secs: 86400,
+  cache_ttls: {},
   layout_widths: {
     left_panel_px: 280,
     settings_panel_px: 448,

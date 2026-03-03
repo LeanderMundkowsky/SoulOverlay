@@ -10,6 +10,11 @@ from an in-memory mirror for instant search.
 - Never use `2>nul` in commands — creates a literal file named `nul`. Use `2>/dev/null`.
 - Never run `git commit` or `git push`. The user manages all commits and pushes manually.
 
+## Communication
+
+- Prefer asking questions over "implement first, rework later". When facing design decisions,
+  ambiguous requirements, or multiple valid approaches, stop and ask with predefined choices.
+
 ## Build & Quality Gates
 
 ```powershell
@@ -168,13 +173,23 @@ F3/F5/F11/F12 regardless of configured keybind, to prevent browser fullscreen/de
 `CacheStore` lives on `AppState.cache` (not behind a `Mutex` — manages its own internal
 locks). Key methods: `put<T>`, `get<T> → Fresh|Stale|Missing`, `invalidate*`, `status`.
 
-| Collection | TTL | Key pattern | Prefetched |
-|------------|-----|-------------|------------|
+| Collection | Default TTL | Key pattern | Prefetched |
+|------------|-------------|-------------|------------|
 | `Commodities` | 10 min | `commodities` | Yes |
-| `CommodityPrices` | 10 min | `commodity_prices:{id}` | No |
+| `CommodityPrices` | 1 h | `commodity_prices:{id}` | Yes |
+| `RawCommodityPrices` | 1 h | `raw_commodity_prices:{id}` | Yes |
+| `ItemPrices` | 1 h | `item_prices:{id}` | Yes |
+| `VehiclePurchasePrices` | 1 h | `vehicle_purchase_prices:{id}` | Yes |
+| `VehicleRentalPrices` | 1 h | `vehicle_rental_prices:{id}` | Yes |
+| `FuelPrices` | 1 h | `fuel_prices:{id}` | Yes |
 | `Vehicles` | 24 h | `vehicles` | Yes |
 | `Items` | 24 h | `items` | Yes |
 | `Locations` | 24 h | `locations` | Yes |
+| `Fleet` | 10 min | `fleet` | No |
+
+Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides are stored in
+`settings.cache_ttls` (`HashMap<String, u32>`) keyed by `Collection::storage_key()`.
+`Collection::ttl_for(&Settings)` resolves: user override → fallback default, min 60s.
 
 **Favorites** bypass `CacheStore` entirely — plain SQLite table in `commands/favorites.rs`,
 keyed by `(id, kind)`. No TTL.

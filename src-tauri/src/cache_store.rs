@@ -1,3 +1,4 @@
+use crate::settings::Settings;
 use chrono::{DateTime, Duration, Utc};
 use log::{info, warn};
 use rusqlite::Connection;
@@ -79,22 +80,6 @@ impl Collection {
         format!("{}:{}", self.storage_key(), id)
     }
 
-    /// All collections that should be prefetched on startup.
-    pub fn prefetch_list() -> &'static [Collection] {
-        &[
-            Collection::Commodities,
-            Collection::Vehicles,
-            Collection::Items,
-            Collection::Locations,
-            Collection::CommodityPrices,
-            Collection::RawCommodityPrices,
-            Collection::ItemPrices,
-            Collection::VehiclePurchasePrices,
-            Collection::VehicleRentalPrices,
-            Collection::FuelPrices,
-        ]
-    }
-
     /// All known collection variants.
     pub fn all() -> &'static [Collection] {
         &[
@@ -112,16 +97,9 @@ impl Collection {
         ]
     }
 
-    /// Price collections that use per-entity sub-keys.
-    pub fn price_collections() -> &'static [Collection] {
-        &[
-            Collection::CommodityPrices,
-            Collection::RawCommodityPrices,
-            Collection::ItemPrices,
-            Collection::VehiclePurchasePrices,
-            Collection::VehicleRentalPrices,
-            Collection::FuelPrices,
-        ]
+    /// Look up a Collection by its storage key string.
+    pub fn from_storage_key(key: &str) -> Option<Collection> {
+        Collection::all().iter().find(|c| c.storage_key() == key).copied()
     }
 
     /// Whether this collection uses per-entity sub-keys.
@@ -135,6 +113,18 @@ impl Collection {
                 | Self::VehicleRentalPrices
                 | Self::FuelPrices
         )
+    }
+
+    /// Resolve the TTL for this collection from user settings, falling back to
+    /// the hardcoded default. Enforces a minimum of 60 seconds.
+    pub fn ttl_for(&self, settings: &Settings) -> i64 {
+        let key = self.storage_key();
+        let raw = settings
+            .cache_ttls
+            .get(&key)
+            .map(|&v| v as i64)
+            .unwrap_or_else(|| self.ttl_secs());
+        raw.max(60)
     }
 }
 
@@ -437,5 +427,31 @@ impl CacheStore {
     /// Total number of keys in the cache (for debug info).
     pub fn len(&self) -> usize {
         self.memory.lock().unwrap().len()
+    }
+
+    /// Update the TTL for all entries belonging to `collection` (both in-memory and SQLite).
+    /// This does NOT reset `cached_at` — it only changes the TTL so expiry is recalculated.
+    pub fn update_collection_ttl(&self, collection: Collection, new_ttl: i64) {
+        let key = collection.storage_key();
+        let prefix = format!("{}:", key);
+
+        // Update in-memory entries
+        {
+            let mut memory = self.memory.lock().unwrap();
+            for (k, entry) in memory.iter_mut() {
+                if k == &key || k.starts_with(&prefix) {
+                    entry.ttl_secs = new_ttl;
+                }
+            }
+        }
+
+        // Update in SQLite
+        {
+            let db = self.db.lock().unwrap();
+            let _ = db.execute(
+                "UPDATE cache_entries SET ttl_secs = ?1 WHERE collection = ?2 OR collection LIKE ?3",
+                rusqlite::params![new_ttl, key, format!("{}:%", key)],
+            );
+        }
     }
 }

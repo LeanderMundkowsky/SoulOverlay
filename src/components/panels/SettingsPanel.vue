@@ -24,8 +24,7 @@ const form = ref<Settings>({
   esc_closes_overlay: true,
   reset_on_open: true,
   max_search_results: 50,
-  cache_ttl_prices_secs: 3600,
-  cache_ttl_catalog_secs: 86400,
+  cache_ttls: {},
   layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
   font_size: 14,
   keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
@@ -67,8 +66,7 @@ function resetDefaults() {
     esc_closes_overlay: true,
     reset_on_open: true,
     max_search_results: 50,
-    cache_ttl_prices_secs: 3600,
-    cache_ttl_catalog_secs: 86400,
+    cache_ttls: {},
     layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
     font_size: 14,
     keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
@@ -191,36 +189,6 @@ function resetDefaults() {
           class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
         />
       </SettingsField>
-
-      <!-- Cache TTLs -->
-      <SettingsField
-        label="Prices Cache TTL (seconds)"
-        hint="Commodities and commodity prices — default 600 (10 min)"
-      >
-        <input
-          v-model.number="form.cache_ttl_prices_secs"
-          type="number"
-          min="60"
-          step="60"
-          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
-        />
-      </SettingsField>
-
-      <SettingsField
-        label="Catalog Cache TTL (seconds)"
-        hint="Vehicles, items, locations — default 86400 (24 h)"
-      >
-        <input
-          v-model.number="form.cache_ttl_catalog_secs"
-          type="number"
-          min="60"
-          step="60"
-          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
-        />
-      </SettingsField>
-
-      <!-- Divider -->
-      <div class="border-t border-white/10"></div>
 
       <!-- Cache Management -->
       <CacheSettingsPanel />

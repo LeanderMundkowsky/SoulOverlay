@@ -1,6 +1,5 @@
 use log::{error, info};
 use serde::Serialize;
-use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
@@ -46,7 +45,7 @@ pub async fn cache_refresh_expired(
 ) -> Result<Vec<CacheRefreshResult>, String> {
     let settings = state.current_settings.lock().unwrap().clone();
     let mut results = Vec::new();
-    for collection in Collection::prefetch_list() {
+    for collection in Collection::all() {
         let key = collection.storage_key();
         if state.cache.is_expired(&key) {
             let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, &state, "manual").await;
@@ -63,7 +62,7 @@ pub async fn cache_refresh_all(
 ) -> Result<Vec<CacheRefreshResult>, String> {
     let settings = state.current_settings.lock().unwrap().clone();
     let mut results = Vec::new();
-    for collection in Collection::prefetch_list() {
+    for collection in Collection::all() {
         let name = collection.storage_key();
         let result = refresh_collection_by_name(&name, &settings.uex_api_key, &settings, &state, "manual").await;
         results.push(result);
@@ -107,16 +106,6 @@ fn store_prices_split(
     }
 }
 
-/// Arc variant for use in spawned tasks.
-fn store_prices_split_arc(
-    cache: &Arc<CacheStore>,
-    entries: &[PriceEntry],
-    collection: Collection,
-    ttl: i64,
-) -> Result<(), String> {
-    store_prices_split(cache.as_ref(), entries, collection, ttl)
-}
-
 /// Read entity IDs from a catalog collection in cache (Fresh or Stale).
 /// Returns an empty vec if the catalog is not cached yet.
 fn catalog_ids_from_cache(cache: &CacheStore, collection: Collection) -> Vec<String> {
@@ -137,49 +126,52 @@ pub(crate) async fn refresh_collection_by_name(
     state: &AppState,
     triggered_by: &str,
 ) -> CacheRefreshResult {
-    let prices_ttl = settings.cache_ttl_prices_secs as i64;
-    let catalog_ttl = settings.cache_ttl_catalog_secs as i64;
     let client = &state.uex;
     let start = Instant::now();
 
     let result = match name {
         "commodities" => {
+            let ttl = Collection::Commodities.ttl_for(settings);
             match uex::fetch_all_commodities(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed commodities: {} entries", data.len());
-                    state.cache.put(&Collection::Commodities.storage_key(), prices_ttl, &data)
+                    state.cache.put(&Collection::Commodities.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
             }
         }
         "vehicles" => {
+            let ttl = Collection::Vehicles.ttl_for(settings);
             match uex::fetch_all_vehicles(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed vehicles: {} entries", data.len());
-                    state.cache.put(&Collection::Vehicles.storage_key(), catalog_ttl, &data)
+                    state.cache.put(&Collection::Vehicles.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
             }
         }
         "items" => {
+            let ttl = Collection::Items.ttl_for(settings);
             match uex::fetch_all_items(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed items: {} entries", data.len());
-                    state.cache.put(&Collection::Items.storage_key(), catalog_ttl, &data)
+                    state.cache.put(&Collection::Items.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
             }
         }
         "locations" => {
+            let ttl = Collection::Locations.ttl_for(settings);
             match uex::fetch_all_locations(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed locations: {} entries", data.len());
-                    state.cache.put(&Collection::Locations.storage_key(), catalog_ttl, &data)
+                    state.cache.put(&Collection::Locations.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
             }
         }
         "commodity_prices" => {
+            let ttl = Collection::CommodityPrices.ttl_for(settings);
             let ids = catalog_ids_from_cache(&state.cache, Collection::Commodities);
             if ids.is_empty() {
                 return CacheRefreshResult {
@@ -190,27 +182,30 @@ pub(crate) async fn refresh_collection_by_name(
             }
             let data = uex::fetch_all_commodity_prices_per_entity(client, &ids, api_key).await;
             info!("Refreshed commodity prices: {} rows across {} commodities", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::CommodityPrices, prices_ttl)
+            store_prices_split(&state.cache, &data, Collection::CommodityPrices, ttl)
         }
         "raw_commodity_prices" => {
+            let ttl = Collection::RawCommodityPrices.ttl_for(settings);
             match uex::fetch_all_raw_commodity_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed raw commodity prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::RawCommodityPrices, prices_ttl)
+                    store_prices_split(&state.cache, &data, Collection::RawCommodityPrices, ttl)
                 }
                 Err(e) => Err(e),
             }
         }
         "item_prices" => {
+            let ttl = Collection::ItemPrices.ttl_for(settings);
             match uex::fetch_all_item_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed item prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::ItemPrices, prices_ttl)
+                    store_prices_split(&state.cache, &data, Collection::ItemPrices, ttl)
                 }
                 Err(e) => Err(e),
             }
         }
         "vehicle_purchase_prices" => {
+            let ttl = Collection::VehiclePurchasePrices.ttl_for(settings);
             let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
             if ids.is_empty() {
                 return CacheRefreshResult {
@@ -221,9 +216,10 @@ pub(crate) async fn refresh_collection_by_name(
             }
             let data = uex::fetch_all_vehicle_purchase_prices_per_entity(client, &ids, api_key).await;
             info!("Refreshed vehicle purchase prices: {} rows across {} vehicles", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, prices_ttl)
+            store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, ttl)
         }
         "vehicle_rental_prices" => {
+            let ttl = Collection::VehicleRentalPrices.ttl_for(settings);
             let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
             if ids.is_empty() {
                 return CacheRefreshResult {
@@ -234,13 +230,31 @@ pub(crate) async fn refresh_collection_by_name(
             }
             let data = uex::fetch_all_vehicle_rental_prices_per_entity(client, &ids, api_key).await;
             info!("Refreshed vehicle rental prices: {} rows across {} vehicles", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, prices_ttl)
+            store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, ttl)
         }
         "fuel_prices" => {
+            let ttl = Collection::FuelPrices.ttl_for(settings);
             match uex::fetch_all_fuel_prices(client, api_key).await {
                 Ok(data) => {
                     info!("Refreshed fuel prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::FuelPrices, prices_ttl)
+                    store_prices_split(&state.cache, &data, Collection::FuelPrices, ttl)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "fleet" => {
+            if settings.uex_secret_key.is_empty() {
+                return CacheRefreshResult {
+                    ok: false,
+                    collection: name.to_string(),
+                    error: Some("UEX secret key not configured; skipping fleet refresh".to_string()),
+                };
+            }
+            let ttl = Collection::Fleet.ttl_for(settings);
+            match uex::fetch_fleet(client, api_key, &settings.uex_secret_key).await {
+                Ok(data) => {
+                    info!("Refreshed fleet: {} entries", data.len());
+                    state.cache.put(&Collection::Fleet.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
             }
@@ -300,18 +314,18 @@ pub(crate) async fn refresh_collection_by_name(
 }
 
 /// Public helper used by app_setup to prefetch all collections on startup.
-/// Catalog collections run sequentially, then price collections in parallel.
+/// Catalog collections run first (prices depend on their IDs), then the rest.
 pub async fn prefetch_all(state: &AppState) {
     let settings = state.current_settings.lock().unwrap().clone();
 
-    // Catalog collections first (sequential)
-    let catalog = [
+    // Catalog collections first (prices need their IDs for per-entity fetching).
+    let catalogs = [
         Collection::Commodities,
         Collection::Vehicles,
         Collection::Items,
         Collection::Locations,
     ];
-    for collection in &catalog {
+    for collection in &catalogs {
         let key = collection.storage_key();
         if state.cache.is_expired(&key) {
             info!("Prefetching expired collection: {}", key);
@@ -326,100 +340,22 @@ pub async fn prefetch_all(state: &AppState) {
         }
     }
 
-    // Price collections in parallel
-    // Read catalog IDs needed for per-entity price fetching (catalogs were just prefetched above).
-    let commodity_ids: Vec<String> = catalog_ids_from_cache(&state.cache, Collection::Commodities);
-    let vehicle_ids: Vec<String> = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
-
-    let prices_ttl = settings.cache_ttl_prices_secs as i64;
-    let mut handles = Vec::new();
-
-    for collection in Collection::price_collections() {
-        let key = collection.storage_key();
-        if !state.cache.is_expired(&key) {
-            info!("Collection '{}' is still fresh, skipping prefetch", key);
+    // Remaining collections (prices, fleet, etc.)
+    for collection in Collection::all() {
+        if catalogs.contains(collection) {
             continue;
         }
-
-        info!("Prefetching expired collection: {}", key);
-        let api_key = settings.uex_api_key.clone();
-        let cache = state.cache_arc();
-        let activity = state.activity.clone();
-        let client = state.uex.clone();
-        let coll = *collection;
-        let ttl = prices_ttl;
-        let c_ids = commodity_ids.clone();
-        let v_ids = vehicle_ids.clone();
-
-        handles.push(tokio::spawn(async move {
-            let key = coll.storage_key();
-            let start = Instant::now();
-            let (result, row_count, endpoint): (Result<(), String>, usize, &str) = match key.as_str() {
-                "commodity_prices" => {
-                    let data = uex::fetch_all_commodity_prices_per_entity(&client, &c_ids, &api_key).await;
-                    let n = data.len();
-                    info!("Prefetched commodity prices: {} rows across {} commodities", n, c_ids.len());
-                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/commodities_prices (per-entity)")
-                }
-                "raw_commodity_prices" => {
-                    match uex::fetch_all_raw_commodity_prices(&client, &api_key).await {
-                        Ok(data) => { let n = data.len(); info!("Prefetched raw commodity prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/commodities_raw_prices_all") }
-                        Err(e) => (Err(e), 0, "/commodities_raw_prices_all"),
-                    }
-                }
-                "item_prices" => {
-                    match uex::fetch_all_item_prices(&client, &api_key).await {
-                        Ok(data) => { let n = data.len(); info!("Prefetched item prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/items_prices_all") }
-                        Err(e) => (Err(e), 0, "/items_prices_all"),
-                    }
-                }
-                "vehicle_purchase_prices" => {
-                    let data = uex::fetch_all_vehicle_purchase_prices_per_entity(&client, &v_ids, &api_key).await;
-                    let n = data.len();
-                    info!("Prefetched vehicle purchase prices: {} rows across {} vehicles", n, v_ids.len());
-                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/vehicles_purchases_prices (per-entity)")
-                }
-                "vehicle_rental_prices" => {
-                    let data = uex::fetch_all_vehicle_rental_prices_per_entity(&client, &v_ids, &api_key).await;
-                    let n = data.len();
-                    info!("Prefetched vehicle rental prices: {} rows across {} vehicles", n, v_ids.len());
-                    (store_prices_split_arc(&cache, &data, coll, ttl), n, "/vehicles_rentals_prices (per-entity)")
-                }
-                "fuel_prices" => {
-                    match uex::fetch_all_fuel_prices(&client, &api_key).await {
-                        Ok(data) => { let n = data.len(); info!("Prefetched fuel prices: {} rows", n); (store_prices_split_arc(&cache, &data, coll, ttl), n, "/fuel_prices_all") }
-                        Err(e) => (Err(e), 0, "/fuel_prices_all"),
-                    }
-                }
-                _ => (Ok(()), 0, ""),
-            };
-            let duration_ms = start.elapsed().as_millis() as u64;
-            let ok = result.is_ok();
-            let err = result.err();
-            if !endpoint.is_empty() {
-                let event = FetchEvent {
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                    collection: key.clone(),
-                    endpoint: endpoint.to_string(),
-                    row_count,
-                    duration_ms,
-                    triggered_by: "startup".to_string(),
-                    ok,
-                    error: err.clone(),
-                };
-                if let Ok(mut log) = activity.lock() {
-                    log.push_fetch(event);
+        let key = collection.storage_key();
+        if state.cache.is_expired(&key) {
+            info!("Prefetching expired collection: {}", key);
+            let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "startup").await;
+            if !result.ok {
+                if let Some(e) = &result.error {
+                    error!("Prefetch failed for {}: {}", key, e);
                 }
             }
-            (key, if ok { Ok(()) } else { Err(err.unwrap_or_default()) })
-        }));
-    }
-
-    for handle in handles {
-        match handle.await {
-            Ok((key, Ok(()))) => info!("Prefetch complete for '{}'", key),
-            Ok((key, Err(e))) => error!("Prefetch failed for '{}': {}", key, e),
-            Err(e) => error!("Prefetch task panicked: {}", e),
+        } else {
+            info!("Collection '{}' is still fresh, skipping prefetch", key);
         }
     }
 }

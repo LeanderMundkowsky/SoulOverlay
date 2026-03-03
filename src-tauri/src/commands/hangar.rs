@@ -7,14 +7,13 @@ use crate::uex::{self, HangarVehicle};
 
 /// Fetch the authenticated user's fleet from UEX.
 /// Requires both `uex_api_key` and `uex_secret_key` to be configured.
-/// Results are cached in SQLite with a 10-minute TTL.
 #[tauri::command]
 pub async fn hangar_get_fleet(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<HangarVehicle>>, String> {
-    let (api_key, secret_key) = {
-        let settings = state.current_settings.lock().unwrap();
-        (settings.uex_api_key.clone(), settings.uex_secret_key.clone())
+    let (api_key, secret_key, settings) = {
+        let s = state.current_settings.lock().unwrap();
+        (s.uex_api_key.clone(), s.uex_secret_key.clone(), s.clone())
     };
 
     if api_key.is_empty() {
@@ -25,6 +24,7 @@ pub async fn hangar_get_fleet(
     }
 
     let cache_key = Collection::Fleet.storage_key();
+    let ttl = Collection::Fleet.ttl_for(&settings);
 
     // Serve from cache if fresh
     match state.cache.get::<Vec<HangarVehicle>>(&cache_key) {
@@ -35,7 +35,6 @@ pub async fn hangar_get_fleet(
             let cache = state.cache_arc();
             let ak = api_key.clone();
             let sk = secret_key.clone();
-            let ttl = Collection::Fleet.ttl_secs();
             tokio::spawn(async move {
                 if let Ok(fleet) = uex::fetch_fleet(&uex, &ak, &sk).await {
                     let key = Collection::Fleet.storage_key();
@@ -52,7 +51,6 @@ pub async fn hangar_get_fleet(
     // No cache — fetch directly
     match uex::fetch_fleet(&state.uex, &api_key, &secret_key).await {
         Ok(fleet) => {
-            let ttl = Collection::Fleet.ttl_secs();
             let _ = state.cache.put(&cache_key, ttl, &fleet);
             Ok(ApiResponse::ok(fleet))
         }

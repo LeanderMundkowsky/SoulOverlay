@@ -1,7 +1,8 @@
 use log::{error, info};
 use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
+use crate::cache_store::Collection;
 use crate::hotkey;
 use crate::log_watcher;
 use crate::settings::Settings;
@@ -55,6 +56,23 @@ pub async fn save_settings(
         let mut watcher = state.log_watcher.lock().unwrap();
         if let Some(ref mut w) = *watcher {
             let _ = w.update_path(new_path);
+        }
+    }
+
+    // Side effects: update cache entry TTLs for any changed values
+    {
+        let old_ttls = &old_settings.cache_ttls;
+        let new_ttls = &new_settings.cache_ttls;
+        for collection in Collection::all() {
+            let old_val = collection.ttl_for(&old_settings);
+            let new_val = collection.ttl_for(&new_settings);
+            if old_val != new_val {
+                info!("Updating cached TTL for '{}': {}s → {}s", collection.storage_key(), old_val, new_val);
+                state.cache.update_collection_ttl(*collection, new_val);
+            }
+        }
+        if old_ttls != new_ttls {
+            let _ = app.emit("cache-updated", ());
         }
     }
 
