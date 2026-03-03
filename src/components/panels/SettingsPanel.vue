@@ -4,7 +4,6 @@ import PanelHeader from "@/components/ui/PanelHeader.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import ToggleSwitch from "@/components/ui/ToggleSwitch.vue";
 import SettingsField from "@/components/settings/SettingsField.vue";
-import HotkeyCapture from "@/components/settings/HotkeyCapture.vue";
 import OpacitySlider from "@/components/settings/OpacitySlider.vue";
 import CacheSettingsPanel from "@/components/settings/CacheSettingsPanel.vue";
 import { useSettingsStore, type Settings } from "@/stores/settings";
@@ -80,14 +79,6 @@ function resetDefaults() {
     <PanelHeader title="Settings" @close="emit('close')" />
 
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-      <!-- Hotkey -->
-      <SettingsField
-        label="Toggle Hotkey"
-        hint="Click the field, then press your desired key combination"
-      >
-        <HotkeyCapture v-model="form.hotkey" />
-      </SettingsField>
-
       <!-- Keybinds editor shortcut -->
       <div>
         <button

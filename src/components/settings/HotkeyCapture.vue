@@ -34,7 +34,6 @@ function keyToToken(e: KeyboardEvent): string | null {
   const map: Record<string, string> = {
     Space: "Space",
     Tab: "Tab",
-    Escape: "Escape",
     Insert: "Insert",
     Delete: "Delete",
     Home: "Home",
@@ -55,6 +54,12 @@ function handleCaptureKeyDown(e: KeyboardEvent) {
   e.stopImmediatePropagation();
 
   if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+
+  // ESC cancels capture without assigning
+  if (e.code === "Escape") {
+    stopCapture();
+    return;
+  }
 
   const token = keyToToken(e);
   if (!token) return;

@@ -158,13 +158,6 @@ function blockBrowserShortcuts(e: KeyboardEvent) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (showKeybinds.value) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      showKeybinds.value = false;
-    }
-    return;
-  }
 
   if (matchesHotkey(e, settingsStore.settings.keybinds.toggle_settings)) {
     onToggleSettings();
@@ -235,7 +228,7 @@ function onToggleDebug() {
           <div
             v-if="showDebug || (showFavorites && (activeTab === 'search' || activeTab === 'details'))"
             class="relative flex-shrink-0 flex flex-col gap-4 py-4 pl-4"
-            :style="{ width: leftPanelPx + 'px' }"
+            :style="{ width: leftPanelPx + 'px', '--panel-w': leftPanelPx + 'px' }"
           >
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
@@ -263,12 +256,23 @@ function onToggleDebug() {
           />
         </div>
 
+        <!-- Keybinds side panel (left of settings) -->
+        <Transition name="slide">
+          <div
+            v-if="showKeybinds && showSettings"
+            class="relative z-50 flex-shrink-0 h-full"
+            :style="{ width: '300px', '--panel-w': '300px' }"
+          >
+            <KeybindsModal @close="showKeybinds = false" />
+          </div>
+        </Transition>
+
         <!-- Settings side panel -->
         <Transition name="slide">
           <div
             v-if="showSettings"
             class="relative z-50 flex-shrink-0 h-full"
-            :style="{ width: settingsPanelPx + 'px' }"
+            :style="{ width: settingsPanelPx + 'px', '--panel-w': settingsPanelPx + 'px' }"
           >
             <ResizeHandle
               side="left"
@@ -278,8 +282,8 @@ function onToggleDebug() {
             />
             <SettingsPanel
               class="w-full"
-              @close="showSettings = false"
-              @open-keybinds="showKeybinds = true"
+              @close="showSettings = false; showKeybinds = false"
+              @open-keybinds="showKeybinds = !showKeybinds"
             />
           </div>
         </Transition>
@@ -287,9 +291,6 @@ function onToggleDebug() {
 
       <StatusBar :sc-detected="scDetected" @toggle-debug="onToggleDebug" />
     </div>
-
-    <!-- Keybinds modal (Teleports to body, z-40; settings panel is z-50) -->
-    <KeybindsModal v-if="showKeybinds" :width-px="settingsPanelPx" @close="showKeybinds = false" />
   </div>
 </template>
 
@@ -300,7 +301,7 @@ function onToggleDebug() {
 }
 .slide-enter-from,
 .slide-leave-to {
-  margin-right: -384px;
+  margin-right: calc(-1 * var(--panel-w, 384px));
 }
 .slide-enter-to,
 .slide-leave-from {
@@ -312,7 +313,7 @@ function onToggleDebug() {
 }
 .slide-left-enter-from,
 .slide-left-leave-to {
-  margin-left: -236px;
+  margin-left: calc(-1 * var(--panel-w, 280px));
 }
 .slide-left-enter-to,
 .slide-left-leave-from {
