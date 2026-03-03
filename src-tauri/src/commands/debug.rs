@@ -1,17 +1,19 @@
 use chrono::Utc;
 use serde::Serialize;
+use specta::Type;
 use tauri::State;
 
 use crate::activity::{FetchEvent, LastUserAction};
 use crate::state::AppState;
 
 /// Initial game connection state returned to the frontend on mount.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct GameState {
     pub sc_detected: bool,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_game_state(state: State<'_, AppState>) -> Result<GameState, String> {
     let gs = state.game_state.lock().unwrap();
     Ok(GameState {
@@ -20,25 +22,25 @@ pub async fn get_game_state(state: State<'_, AppState>) -> Result<GameState, Str
 }
 
 /// Per-collection debug status (CollectionStatus extended with is_refreshing + expires_at).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct CollectionDebugInfo {
     pub key: String,
     pub display_name: String,
     pub cached_at: Option<String>,
     pub expires_at: Option<String>,
-    pub ttl_secs: i64,
+    pub ttl_secs: i32,
     pub is_expired: bool,
     pub is_refreshing: bool,
-    pub entry_count: usize,
+    pub entry_count: u32,
 }
 
 /// Comprehensive runtime snapshot returned to the debug panel.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct DebugInfo {
     // ── Game ──────────────────────────────────────────────────────────────────
     pub sc_detected: bool,
     pub sc_focused: bool,
-    pub sc_hwnd: Option<isize>,
+    pub sc_hwnd: Option<i32>,
     pub sc_window_x: i32,
     pub sc_window_y: i32,
     pub sc_window_w: u32,
@@ -57,15 +59,15 @@ pub struct DebugInfo {
     pub hotkey_registered: bool,
     pub refreshing_collections: Vec<String>,
     // ── Cache ─────────────────────────────────────────────────────────────────
-    pub cache_total_keys: usize,
+    pub cache_total_keys: u32,
     pub cache_collections: Vec<CollectionDebugInfo>,
     // ── Background timer ──────────────────────────────────────────────────────
     /// ISO8601 timestamp of the last background check tick.
     pub last_bg_check_at: Option<String>,
     /// Seconds until the next background check (30s interval).
-    pub next_bg_check_in_secs: i64,
+    pub next_bg_check_in_secs: i32,
     /// How long ago the last background check ran (seconds).
-    pub last_bg_check_ago_secs: Option<i64>,
+    pub last_bg_check_ago_secs: Option<i32>,
     // ── Last user price lookup ─────────────────────────────────────────────────
     pub last_user_action: Option<LastUserAction>,
     // ── Activity log ──────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ pub struct DebugInfo {
 const BG_TIMER_INTERVAL_SECS: i64 = 30;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, String> {
     let gs = state.game_state.lock().unwrap();
     let settings = state.current_settings.lock().unwrap().clone();
@@ -90,7 +93,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         .map(|s| {
             let expires_at = s.cached_at.as_deref().and_then(|ts| {
                 ts.parse::<chrono::DateTime<Utc>>().ok()
-                    .map(|t| (t + chrono::Duration::seconds(s.ttl_secs)).to_rfc3339())
+                    .map(|t| (t + chrono::Duration::seconds(s.ttl_secs as i64)).to_rfc3339())
             });
             let is_refreshing = refreshing.contains(&s.collection.storage_key());
             CollectionDebugInfo {
@@ -132,7 +135,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
     Ok(DebugInfo {
         sc_detected: gs.sc_hwnd.is_some(),
         sc_focused: gs.is_focused,
-        sc_hwnd: gs.sc_hwnd,
+        sc_hwnd: gs.sc_hwnd.map(|h| h as i32),
         sc_window_x: gs.window_x,
         sc_window_y: gs.window_y,
         sc_window_w: gs.window_w,
@@ -148,11 +151,11 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         log_watcher_active,
         hotkey_registered,
         refreshing_collections: refreshing,
-        cache_total_keys: state.cache.len(),
+        cache_total_keys: state.cache.len() as u32,
         cache_collections,
         last_bg_check_at,
-        next_bg_check_in_secs,
-        last_bg_check_ago_secs,
+        next_bg_check_in_secs: next_bg_check_in_secs as i32,
+        last_bg_check_ago_secs: last_bg_check_ago_secs.map(|s| s as i32),
         last_user_action,
         fetch_log: fetch_log_rev,
     })

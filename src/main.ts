@@ -18,4 +18,10 @@ const app = createApp(App);
 const pinia = createPinia();
 
 app.use(pinia);
-app.mount("#app");
+
+// Load settings from Rust before mounting so every component sees valid data.
+import { useSettingsStore } from "./stores/settings";
+const settingsStore = useSettingsStore(pinia);
+settingsStore.loadSettings().finally(() => {
+  app.mount("#app");
+});

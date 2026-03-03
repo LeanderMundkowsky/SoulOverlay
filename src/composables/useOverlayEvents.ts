@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted } from "vue";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 
 interface OverlayEventCallbacks {
   onWindowFound: () => void;
@@ -24,8 +24,8 @@ export function useOverlayEvents(callbacks: OverlayEventCallbacks): void {
     unlistenOverlayShown = await listen("overlay-shown", callbacks.onOverlayShown);
 
     try {
-      const gs = await invoke<{ sc_detected: boolean }>("get_game_state");
-      if (gs.sc_detected) {
+      const result = await commands.getGameState();
+      if (result.status === "ok" && result.data.sc_detected) {
         callbacks.onWindowFound();
       }
     } catch (e) {

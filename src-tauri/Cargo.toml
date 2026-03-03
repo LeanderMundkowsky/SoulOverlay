@@ -26,6 +26,9 @@ regex = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rusqlite_migration = "1"
 rmp-serde = "1"
+specta = { version = "=2.0.0-rc.22", features = ["derive"] }
+tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript"] }
+specta-typescript = "=0.0.9"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

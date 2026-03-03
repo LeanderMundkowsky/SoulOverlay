@@ -1,5 +1,6 @@
 use log::{error, info};
 use serde::Serialize;
+use specta::Type;
 use std::time::Instant;
 use tauri::State;
 
@@ -11,7 +12,7 @@ use crate::uex;
 use crate::uex::PriceEntry;
 
 /// Response from cache refresh operations.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct CacheRefreshResult {
     pub ok: bool,
     pub collection: String,
@@ -20,6 +21,7 @@ pub struct CacheRefreshResult {
 
 /// Get status for all cached collections.
 #[tauri::command]
+#[specta::specta]
 pub async fn cache_status(
     state: State<'_, AppState>,
 ) -> Result<Vec<CollectionStatus>, String> {
@@ -28,6 +30,7 @@ pub async fn cache_status(
 
 /// Refresh a single collection by name.
 #[tauri::command]
+#[specta::specta]
 pub async fn cache_refresh(
     collection: String,
     state: State<'_, AppState>,
@@ -40,6 +43,7 @@ pub async fn cache_refresh(
 /// Refresh all prefetchable collections, but only those whose TTL has expired.
 /// This is the same logic used on startup.
 #[tauri::command]
+#[specta::specta]
 pub async fn cache_refresh_expired(
     state: State<'_, AppState>,
 ) -> Result<Vec<CacheRefreshResult>, String> {
@@ -57,6 +61,7 @@ pub async fn cache_refresh_expired(
 
 /// Refresh all prefetchable collections.
 #[tauri::command]
+#[specta::specta]
 pub async fn cache_refresh_all(
     state: State<'_, AppState>,
 ) -> Result<Vec<CacheRefreshResult>, String> {
@@ -262,7 +267,7 @@ pub(crate) async fn refresh_collection_by_name(
         _ => Err(format!("Unknown collection: {}", name)),
     };
 
-    let duration_ms = start.elapsed().as_millis() as u64;
+    let duration_ms = start.elapsed().as_millis() as u32;
     let (ok, err_msg) = match &result {
         Ok(()) => (true, None),
         Err(e) => (false, Some(e.clone())),

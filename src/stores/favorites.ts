@@ -1,15 +1,9 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { Favorite } from "@/bindings";
 
-export interface Favorite {
-  id: string;
-  name: string;
-  kind: string;
-  slug: string;
-  uuid: string;
-  added_at: string;
-}
+export type { Favorite };
 
 export const useFavoritesStore = defineStore("favorites", () => {
   const favorites = ref<Favorite[]>([]);
@@ -20,7 +14,9 @@ export const useFavoritesStore = defineStore("favorites", () => {
     loading.value = true;
     error.value = null;
     try {
-      favorites.value = await invoke<Favorite[]>("get_favorites");
+      const result = await commands.getFavorites();
+      if (result.status === "error") throw result.error;
+      favorites.value = result.data;
     } catch (e) {
       error.value = String(e);
       console.error("Failed to load favorites:", e);
@@ -34,16 +30,17 @@ export const useFavoritesStore = defineStore("favorites", () => {
     name: string;
     kind: string;
     slug: string;
-    uuid: string;
+    uuid?: string;
   }) {
     try {
-      await invoke("add_favorite", {
-        id: entity.id,
-        name: entity.name,
-        kind: entity.kind,
-        slug: entity.slug,
-        uuid: entity.uuid,
-      });
+      const result = await commands.addFavorite(
+        entity.id,
+        entity.name,
+        entity.kind,
+        entity.slug,
+        entity.uuid ?? "",
+      );
+      if (result.status === "error") throw result.error;
       await loadFavorites();
     } catch (e) {
       console.error("Failed to add favorite:", e);
@@ -53,7 +50,8 @@ export const useFavoritesStore = defineStore("favorites", () => {
 
   async function removeFavorite(id: string, kind: string) {
     try {
-      await invoke("remove_favorite", { id, kind });
+      const result = await commands.removeFavorite(id, kind);
+      if (result.status === "error") throw result.error;
       await loadFavorites();
     } catch (e) {
       console.error("Failed to remove favorite:", e);
@@ -70,7 +68,7 @@ export const useFavoritesStore = defineStore("favorites", () => {
     name: string;
     kind: string;
     slug: string;
-    uuid: string;
+    uuid?: string;
   }) {
     if (isFavorite(entity.id, entity.kind)) {
       await removeFavorite(entity.id, entity.kind);

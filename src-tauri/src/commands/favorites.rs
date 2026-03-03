@@ -1,10 +1,11 @@
 use log::info;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use tauri::State;
 
 use crate::state::AppState;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct Favorite {
     pub id: String,
     pub name: String,
@@ -15,6 +16,7 @@ pub struct Favorite {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_favorites(state: State<'_, AppState>) -> Result<Vec<Favorite>, String> {
     let db = state.cache.db().lock().unwrap();
     let mut stmt = db
@@ -42,6 +44,7 @@ pub async fn get_favorites(state: State<'_, AppState>) -> Result<Vec<Favorite>, 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn add_favorite(
     id: String,
     name: String,
@@ -62,6 +65,7 @@ pub async fn add_favorite(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn remove_favorite(
     id: String,
     kind: String,
@@ -79,6 +83,7 @@ pub async fn remove_favorite(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn is_favorite(
     id: String,
     kind: String,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import TabBar from "./components/layout/TabBar.vue";
 import StatusBar from "./components/layout/StatusBar.vue";
 import SearchTab from "./components/tabs/SearchTab.vue";
@@ -85,7 +85,7 @@ watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
 });
 
 onMounted(async () => {
-  await settingsStore.loadSettings();
+  // Settings already loaded in main.ts before mount; just apply layout values.
   leftPanelPx.value = settingsStore.settings.layout_widths.left_panel_px;
   settingsPanelPx.value = settingsStore.settings.layout_widths.settings_panel_px;
   document.documentElement.style.fontSize = settingsStore.settings.font_size + "px";
@@ -177,19 +177,19 @@ function handleKeyDown(e: KeyboardEvent) {
       return;
     }
     if (settingsStore.settings.esc_closes_overlay) {
-      invoke("hide_overlay_cmd");
+      commands.hideOverlayCmd();
     }
     return;
   }
 
   if (matchesHotkey(e, settingsStore.settings.hotkey)) {
     e.preventDefault();
-    invoke("hide_overlay_cmd");
+    commands.hideOverlayCmd();
   }
 }
 
 function onTabClose() {
-  invoke("hide_overlay_cmd");
+  commands.hideOverlayCmd();
 }
 
 function onToggleSettings() {

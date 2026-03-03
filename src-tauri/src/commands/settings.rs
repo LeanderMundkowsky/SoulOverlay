@@ -9,12 +9,20 @@ use crate::settings::Settings;
 use crate::state::AppState;
 
 #[tauri::command]
+#[specta::specta]
+pub async fn get_default_settings() -> Result<Settings, String> {
+    Ok(Settings::default())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
     let settings = state.current_settings.lock().unwrap().clone();
     Ok(settings)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn save_settings(
     new_settings: Settings,
     app: AppHandle,

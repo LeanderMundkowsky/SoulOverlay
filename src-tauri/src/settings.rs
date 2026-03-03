@@ -1,120 +1,81 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 /// Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(default)]
 pub struct Keybinds {
     /// Key combo to toggle the Settings panel (default: "F12")
-    #[serde(default = "default_keybind_settings")]
     pub toggle_settings: String,
     /// Key combo to toggle the Debug panel (default: "F11")
-    #[serde(default = "default_keybind_debug")]
     pub toggle_debug: String,
 }
-
-fn default_keybind_settings() -> String { "F12".to_string() }
-fn default_keybind_debug()   -> String { "F11".to_string() }
 
 impl Default for Keybinds {
     fn default() -> Self {
         Self {
-            toggle_settings: default_keybind_settings(),
-            toggle_debug:    default_keybind_debug(),
+            toggle_settings: "F12".to_string(),
+            toggle_debug:    "F11".to_string(),
         }
     }
 }
 
 /// Per-panel layout widths persisted alongside other settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(default)]
 pub struct LayoutWidths {
     /// Width of the left column (Favorites + Debug) in pixels
-    #[serde(default = "default_left_panel_px")]
     pub left_panel_px: u32,
     /// Width of the settings side panel in pixels
-    #[serde(default = "default_settings_panel_px")]
     pub settings_panel_px: u32,
     /// Width of the search column when detail panel is open, as a percentage (0–100)
-    #[serde(default = "default_search_split_pct")]
     pub search_split_pct: u32,
     /// Width of the search panel when it is the only element (centered), as a percentage (0–100)
-    #[serde(default = "default_search_solo_pct")]
     pub search_solo_pct: u32,
-}
-
-fn default_left_panel_px() -> u32 {
-    280
-}
-fn default_settings_panel_px() -> u32 {
-    448
-}
-fn default_search_split_pct() -> u32 {
-    50
-}
-
-fn default_search_solo_pct() -> u32 {
-    50
 }
 
 impl Default for LayoutWidths {
     fn default() -> Self {
         Self {
-            left_panel_px: default_left_panel_px(),
-            settings_panel_px: default_settings_panel_px(),
-            search_split_pct: default_search_split_pct(),
-            search_solo_pct: default_search_solo_pct(),
+            left_panel_px: 280,
+            settings_panel_px: 448,
+            search_split_pct: 50,
+            search_solo_pct: 50,
         }
     }
 }
 
 /// Application settings persisted as JSON to `%APPDATA%\SoulOverlay\settings.json`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(default)]
 pub struct Settings {
     /// Global hotkey string (e.g., "Alt+Shift+S")
     pub hotkey: String,
     /// UEX Corp API key
     pub uex_api_key: String,
     /// UEX Corp secret key (for user-specific endpoints like fleet)
-    #[serde(default)]
     pub uex_secret_key: String,
     /// Optional custom log file path (None = use default)
     pub log_path: Option<String>,
     /// Overlay opacity (0.0 - 1.0)
     pub overlay_opacity: f32,
     /// Whether pressing Escape closes the overlay (default: true)
-    #[serde(default = "default_true")]
     pub esc_closes_overlay: bool,
     /// Whether opening the overlay resets to the search tab and focuses the search bar (default: true)
-    #[serde(default = "default_true")]
     pub reset_on_open: bool,
     /// Maximum number of search results returned by api_search (default: 50)
-    #[serde(default = "default_max_search_results")]
     pub max_search_results: u32,
     /// Per-collection cache TTL overrides in seconds, keyed by Collection::storage_key().
     /// Missing entries fall back to Collection::ttl_secs().
-    #[serde(default)]
     pub cache_ttls: HashMap<String, u32>,
     /// User-adjusted panel layout widths
-    #[serde(default)]
     pub layout_widths: LayoutWidths,
     /// Base font size in pixels (default: 14)
-    #[serde(default = "default_font_size")]
     pub font_size: u32,
     /// In-app panel keybinds (not the global Rust hook hotkey)
-    #[serde(default)]
     pub keybinds: Keybinds,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_max_search_results() -> u32 {
-    50
-}
-
-fn default_font_size() -> u32 {
-    14
 }
 
 impl Default for Settings {

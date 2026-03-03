@@ -1,27 +1,9 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { HangarVehicle } from "@/bindings";
 
-export interface HangarVehicle {
-  id: string;
-  id_vehicle: string;
-  name: string;
-  model_name: string;
-  serial: string | null;
-  description: string | null;
-  organization_name: string | null;
-  is_hidden: boolean;
-  is_pledged: boolean;
-  date_added: string;
-}
-
-interface ApiResponse<T> {
-  ok: boolean;
-  data: T | null;
-  error: string | null;
-  stale: boolean;
-  total: number | null;
-}
+export type { HangarVehicle };
 
 export const useHangarStore = defineStore("hangar", () => {
   const fleet = ref<HangarVehicle[]>([]);
@@ -33,7 +15,9 @@ export const useHangarStore = defineStore("hangar", () => {
     loading.value = true;
     error.value = null;
     try {
-      const resp = await invoke<ApiResponse<HangarVehicle[]>>("hangar_get_fleet");
+      const result = await commands.hangarGetFleet();
+      if (result.status === "error") throw result.error;
+      const resp = result.data;
       if (resp.ok && resp.data) {
         fleet.value = resp.data;
         stale.value = resp.stale;

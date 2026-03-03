@@ -5,6 +5,7 @@ use crate::state::AppState;
 use crate::window;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn hide_overlay_cmd(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let game_state = state.game_state.lock().unwrap();
 
@@ -25,6 +26,7 @@ pub async fn hide_overlay_cmd(app: AppHandle, state: State<'_, AppState>) -> Res
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn show_overlay_cmd(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let game_state = state.game_state.lock().unwrap();
 

@@ -1,59 +1,14 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { Settings, Keybinds, LayoutWidths } from "@/bindings";
 
-export interface Keybinds {
-  toggle_settings: string;
-  toggle_debug: string;
-}
-
-export interface LayoutWidths {
-  left_panel_px: number;
-  settings_panel_px: number;
-  search_split_pct: number;
-  search_solo_pct: number;
-}
-
-export interface Settings {
-  hotkey: string;
-  uex_api_key: string;
-  uex_secret_key: string;
-  log_path: string | null;
-  overlay_opacity: number;
-  esc_closes_overlay: boolean;
-  reset_on_open: boolean;
-  max_search_results: number;
-  cache_ttls: Record<string, number>;
-  layout_widths: LayoutWidths;
-  font_size: number;
-  keybinds: Keybinds;
-}
-
-const defaultSettings: Settings = {
-  hotkey: "Alt+Shift+S",
-  uex_api_key: "",
-  uex_secret_key: "",
-  log_path: null,
-  overlay_opacity: 0.85,
-  esc_closes_overlay: true,
-  reset_on_open: true,
-  max_search_results: 50,
-  cache_ttls: {},
-  layout_widths: {
-    left_panel_px: 280,
-    settings_panel_px: 448,
-    search_split_pct: 50,
-    search_solo_pct: 50,
-  },
-  font_size: 14,
-  keybinds: {
-    toggle_settings: "F12",
-    toggle_debug: "F11",
-  },
-};
+export type { Settings, Keybinds, LayoutWidths };
 
 export const useSettingsStore = defineStore("settings", () => {
-  const settings = ref<Settings>({ ...defaultSettings });
+  // Populated by loadSettings() in main.ts before app.mount(), so always non-null.
+  const settings = ref({} as Settings);
+  const defaults = ref({} as Settings);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -61,8 +16,14 @@ export const useSettingsStore = defineStore("settings", () => {
     loading.value = true;
     error.value = null;
     try {
-      const result = await invoke<Settings>("get_settings");
-      settings.value = result;
+      const [settingsResult, defaultsResult] = await Promise.all([
+        commands.getSettings(),
+        commands.getDefaultSettings(),
+      ]);
+      if (settingsResult.status === "error") throw settingsResult.error;
+      if (defaultsResult.status === "error") throw defaultsResult.error;
+      settings.value = settingsResult.data;
+      defaults.value = defaultsResult.data;
     } catch (e) {
       error.value = String(e);
       console.error("Failed to load settings:", e);
@@ -75,7 +36,8 @@ export const useSettingsStore = defineStore("settings", () => {
     loading.value = true;
     error.value = null;
     try {
-      await invoke("save_settings", { newSettings });
+      const result = await commands.saveSettings(newSettings);
+      if (result.status === "error") throw result.error;
       settings.value = { ...newSettings };
     } catch (e) {
       error.value = String(e);
@@ -88,6 +50,7 @@ export const useSettingsStore = defineStore("settings", () => {
 
   return {
     settings,
+    defaults,
     loading,
     error,
     loadSettings,

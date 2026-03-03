@@ -1,9 +1,10 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use specta::Type;
 
 // ── Public app-level types ─────────────────────────────────────────────────
 
 /// A search result from UEX API.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct UexResult {
     pub id: String,
     pub name: String,
@@ -15,7 +16,7 @@ pub struct UexResult {
 }
 
 /// Detailed entity metadata from UEX API, with type-specific optional fields.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct EntityInfo {
     pub id: String,
     pub name: String,
@@ -59,7 +60,7 @@ pub struct EntityInfo {
 
 /// A price entry from UEX API.
 /// Unified across all price types — entity metadata identifies the source.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct PriceEntry {
     pub entity_id: String,
     pub entity_name: String,
@@ -110,7 +111,7 @@ pub struct PriceEntry {
 }
 
 /// A vehicle in the user's hangar/fleet from UEX API.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct HangarVehicle {
     pub id: String,
     pub id_vehicle: String,

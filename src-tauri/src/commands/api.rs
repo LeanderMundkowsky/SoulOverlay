@@ -18,6 +18,7 @@
 /// | `api_search_locations`   | `"api_search_locations"`   | Search locations (terminals)               |
 /// | `api_commodity_prices`   | `"api_commodity_prices"`   | Fetch buy/sell prices for a commodity ID   |
 use serde::Serialize;
+use specta::Type;
 use tauri::State;
 
 use crate::activity::LastUserAction;
@@ -28,7 +29,7 @@ use crate::uex::{self, EntityInfo, PriceEntry, UexResult};
 // ── Response envelope ──────────────────────────────────────────────────────
 
 /// Uniform response wrapper returned by every API command.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct ApiResponse<T: Serialize> {
     pub ok: bool,
     pub data: Option<T>,
@@ -37,7 +38,7 @@ pub struct ApiResponse<T: Serialize> {
     /// Frontend can show a "refreshing..." indicator when this is true.
     pub stale: bool,
     /// Total number of matches before any limit was applied (None when not applicable).
-    pub total: Option<usize>,
+    pub total: Option<u32>,
 }
 
 impl<T: Serialize> ApiResponse<T> {
@@ -105,6 +106,7 @@ async fn search_cached_or_fetch(
 /// Parameters:
 /// - `query`: free-text search string
 #[tauri::command]
+#[specta::specta]
 pub async fn api_search(
     query: String,
     state: State<'_, AppState>,
@@ -145,12 +147,13 @@ pub async fn api_search(
     } else {
         ApiResponse::ok(all_results)
     };
-    resp.total = Some(total);
+    resp.total = Some(total as u32);
     Ok(resp)
 }
 
 /// Search UEX commodities only.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_search_commodities(
     query: String,
     state: State<'_, AppState>,
@@ -170,6 +173,7 @@ pub async fn api_search_commodities(
 
 /// Search UEX vehicles (ships + ground vehicles).
 #[tauri::command]
+#[specta::specta]
 pub async fn api_search_vehicles(
     query: String,
     state: State<'_, AppState>,
@@ -189,6 +193,7 @@ pub async fn api_search_vehicles(
 
 /// Search UEX items.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_search_items(
     query: String,
     state: State<'_, AppState>,
@@ -208,6 +213,7 @@ pub async fn api_search_items(
 
 /// Search UEX locations (terminals / stations).
 #[tauri::command]
+#[specta::specta]
 pub async fn api_search_locations(
     query: String,
     state: State<'_, AppState>,
@@ -237,11 +243,11 @@ fn price_lookup_cached(
     let cache_key = collection.storage_key_with_id(entity_id);
     let (response, source, row_count) = match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
         CacheResult::Fresh(prices) => {
-            let n = prices.len();
+            let n = prices.len() as u32;
             (ApiResponse::ok(prices), "fresh", n)
         }
         CacheResult::Stale(prices) => {
-            let n = prices.len();
+            let n = prices.len() as u32;
             (ApiResponse::ok_stale(prices), "stale", n)
         }
         CacheResult::Missing => (ApiResponse::ok(vec![]), "missing", 0),
@@ -264,6 +270,7 @@ fn price_lookup_cached(
 /// Fetch buy/sell prices for a commodity by its UEX ID.
 /// Serves from per-commodity cache key (e.g. `commodity_prices:42`).
 #[tauri::command]
+#[specta::specta]
 pub async fn api_commodity_prices(
     commodity_id: String,
     state: State<'_, AppState>,
@@ -276,6 +283,7 @@ pub async fn api_commodity_prices(
 
 /// Fetch raw commodity prices by commodity ID.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_raw_commodity_prices(
     commodity_id: String,
     state: State<'_, AppState>,
@@ -288,6 +296,7 @@ pub async fn api_raw_commodity_prices(
 
 /// Fetch item prices by item ID.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_item_prices(
     item_id: String,
     state: State<'_, AppState>,
@@ -300,6 +309,7 @@ pub async fn api_item_prices(
 
 /// Fetch vehicle purchase prices by vehicle ID.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_vehicle_purchase_prices(
     vehicle_id: String,
     state: State<'_, AppState>,
@@ -312,6 +322,7 @@ pub async fn api_vehicle_purchase_prices(
 
 /// Fetch vehicle rental prices by vehicle ID.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_vehicle_rental_prices(
     vehicle_id: String,
     state: State<'_, AppState>,
@@ -324,6 +335,7 @@ pub async fn api_vehicle_rental_prices(
 
 /// Fetch fuel prices by terminal ID.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_fuel_prices(
     terminal_id: String,
     state: State<'_, AppState>,
@@ -341,6 +353,7 @@ const ENTITY_INFO_TTL_SECS: i64 = 86400; // 24 hours
 /// Fetch detailed entity metadata by kind and id.
 /// Caches results for 24 hours under `entity_info:{kind}:{id}`.
 #[tauri::command]
+#[specta::specta]
 pub async fn api_entity_info(
     kind: String,
     entity_id: String,

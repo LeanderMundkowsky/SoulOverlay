@@ -1,20 +1,8 @@
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { CollectionStatus, CacheRefreshResult } from "@/bindings";
 
-export interface CollectionStatus {
-  collection: string;
-  display_name: string;
-  cached_at: string | null;
-  ttl_secs: number;
-  is_expired: boolean;
-  entry_count: number;
-}
-
-export interface CacheRefreshResult {
-  ok: boolean;
-  collection: string;
-  error: string | null;
-}
+export type { CollectionStatus, CacheRefreshResult };
 
 /**
  * Composable for cache status and refresh operations.
@@ -30,7 +18,9 @@ export function useCache() {
     error.value = null;
 
     try {
-      collections.value = await invoke<CollectionStatus[]>("cache_status");
+      const result = await commands.cacheStatus();
+      if (result.status === "error") throw result.error;
+      collections.value = result.data;
     } catch (e) {
       error.value = String(e);
       console.error("Failed to fetch cache status:", e);
@@ -44,9 +34,10 @@ export function useCache() {
     error.value = null;
 
     try {
-      const result = await invoke<CacheRefreshResult>("cache_refresh", { collection });
-      if (!result.ok && result.error) {
-        error.value = result.error;
+      const result = await commands.cacheRefresh(collection);
+      if (result.status === "error") throw result.error;
+      if (!result.data.ok && result.data.error) {
+        error.value = result.data.error;
       }
       // Refresh status after update
       await fetchStatus();
@@ -63,8 +54,9 @@ export function useCache() {
     error.value = null;
 
     try {
-      const results = await invoke<CacheRefreshResult[]>("cache_refresh_all");
-      const failures = results.filter((r) => !r.ok);
+      const result = await commands.cacheRefreshAll();
+      if (result.status === "error") throw result.error;
+      const failures = result.data.filter((r) => !r.ok);
       if (failures.length > 0) {
         error.value = failures
           .map((f) => `${f.collection}: ${f.error}`)

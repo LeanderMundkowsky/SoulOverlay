@@ -5,6 +5,7 @@ use crate::state::AppState;
 use crate::uex;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn uex_search(
     query: String,
     api_key: String,
@@ -24,6 +25,7 @@ pub async fn uex_search(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn uex_search_all(
     query: String,
     api_key: String,
@@ -71,6 +73,7 @@ pub async fn uex_search_all(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn uex_prices(
     commodity: String,
     api_key: String,

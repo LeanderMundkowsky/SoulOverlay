@@ -8,6 +8,7 @@ use crate::uex::{self, HangarVehicle};
 /// Fetch the authenticated user's fleet from UEX.
 /// Requires both `uex_api_key` and `uex_secret_key` to be configured.
 #[tauri::command]
+#[specta::specta]
 pub async fn hangar_get_fleet(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<HangarVehicle>>, String> {

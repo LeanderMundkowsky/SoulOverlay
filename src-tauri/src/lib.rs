@@ -60,6 +60,18 @@ pub fn run() {
         activity: std::sync::Arc::new(Mutex::new(activity::ActivityLog::new())),
     };
 
+    // Build the tauri-specta invoke handler + export TS bindings in dev mode.
+    let builder = create_specta_builder();
+
+    #[cfg(debug_assertions)]
+    builder
+        .export(
+            specta_typescript::Typescript::default()
+                .header("// @ts-nocheck\n"),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
@@ -71,7 +83,39 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
+            // Disable WebView2 built-in devtools, context menu, and status bar
+            // on the overlay window before any page content loads.
+            use tauri::Manager;
+            if let Some(webview) = app.get_webview_window("overlay") {
+                let _ = webview.with_webview(|wv| {
+                    #[cfg(windows)]
+                    unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
+                        if let Ok(core) = wv.controller().CoreWebView2() {
+                            if let Ok(s) = core.Settings() {
+                                let s: ICoreWebView2Settings = s;
+                                let _ = s.SetAreDevToolsEnabled(cfg!(debug_assertions));
+                                let _ = s.SetAreDefaultContextMenusEnabled(false);
+                                let _ = s.SetIsStatusBarEnabled(false);
+                            }
+                        }
+                    }
+                });
+            }
+            app_setup::initialize(app)?;
+            info!("SoulOverlay initialized successfully");
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
             commands::api::api_search,
             commands::api::api_search_commodities,
             commands::api::api_search_vehicles,
@@ -91,6 +135,7 @@ pub fn run() {
             commands::uex::uex_search,
             commands::uex::uex_search_all,
             commands::uex::uex_prices,
+            commands::settings::get_default_settings,
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::overlay::hide_overlay_cmd,
@@ -103,30 +148,20 @@ pub fn run() {
             commands::favorites::is_favorite,
             commands::hangar::hangar_get_fleet,
         ])
-        .setup(|app| {
-            // Disable WebView2 built-in devtools, context menu, and status bar
-            // on the overlay window before any page content loads.
-            use tauri::Manager;
-            if let Some(webview) = app.get_webview_window("overlay") {
-                let _ = webview.with_webview(|wv| {
-                    #[cfg(windows)]
-                    unsafe {
-                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
-                        if let Ok(core) = wv.controller().CoreWebView2() {
-                            if let Ok(s) = core.Settings() {
-                                let s: ICoreWebView2Settings = s;
-                                let _ = s.SetAreDevToolsEnabled(false);
-                                let _ = s.SetAreDefaultContextMenusEnabled(false);
-                                let _ = s.SetIsStatusBarEnabled(false);
-                            }
-                        }
-                    }
-                });
-            }
-            app_setup::initialize(app)?;
-            info!("SoulOverlay initialized successfully");
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_bindings() {
+        create_specta_builder()
+            .export(
+                specta_typescript::Typescript::default()
+                    .header("// @ts-nocheck\n"),
+                "../src/bindings.ts",
+            )
+            .expect("Failed to export typescript bindings");
+    }
 }

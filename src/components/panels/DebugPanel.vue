@@ -1,68 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { DebugInfo, CollectionDebugInfo } from "@/bindings";
 import IconClose from "@/components/icons/IconClose.vue";
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface CollectionDebugInfo {
-  key: string;
-  display_name: string;
-  cached_at: string | null;
-  expires_at: string | null;
-  ttl_secs: number;
-  is_expired: boolean;
-  is_refreshing: boolean;
-  entry_count: number;
-}
-
-interface LastUserAction {
-  timestamp: string;
-  kind: string;
-  entity_id: string;
-  collection: string;
-  source: "fresh" | "stale" | "missing";
-  row_count: number;
-}
-
-interface FetchEvent {
-  timestamp: string;
-  collection: string;
-  endpoint: string;
-  row_count: number;
-  duration_ms: number;
-  triggered_by: "startup" | "timer" | "manual";
-  ok: boolean;
-  error: string | null;
-}
-
-interface DebugInfo {
-  sc_detected: boolean;
-  sc_focused: boolean;
-  sc_hwnd: number | null;
-  sc_window_x: number;
-  sc_window_y: number;
-  sc_window_w: number;
-  sc_window_h: number;
-  hotkey: string;
-  log_path: string | null;
-  overlay_opacity: number;
-  uex_api_key_set: boolean;
-  esc_closes_overlay: boolean;
-  reset_on_open: boolean;
-  max_search_results: number;
-  cache_ttls: Record<string, number>;
-  log_watcher_active: boolean;
-  hotkey_registered: boolean;
-  refreshing_collections: string[];
-  cache_total_keys: number;
-  cache_collections: CollectionDebugInfo[];
-  last_bg_check_at: string | null;
-  next_bg_check_in_secs: number;
-  last_bg_check_ago_secs: number | null;
-  last_user_action: LastUserAction | null;
-  fetch_log: FetchEvent[];
-}
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -77,7 +17,9 @@ let intervalId: ReturnType<typeof setInterval> | null = null;
 
 async function refresh() {
   try {
-    info.value = await invoke<DebugInfo>("get_debug_info");
+    const result = await commands.getDebugInfo();
+    if (result.status === "error") throw result.error;
+    info.value = result.data;
     lastUpdated.value = new Date();
     error.value = null;
   } catch (e) {

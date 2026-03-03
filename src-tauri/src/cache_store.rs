@@ -9,7 +9,7 @@ use std::sync::Mutex;
 // ── Collection definitions ─────────────────────────────────────────────────
 
 /// Known collection names used as cache keys.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum Collection {
     Commodities,
@@ -149,14 +149,14 @@ impl MemoryEntry {
 // ── Status info returned to frontend ───────────────────────────────────────
 
 /// Per-collection status info for the cache management UI.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct CollectionStatus {
     pub collection: Collection,
     pub display_name: String,
     pub cached_at: Option<String>,
-    pub ttl_secs: i64,
+    pub ttl_secs: i32,
     pub is_expired: bool,
-    pub entry_count: usize,
+    pub entry_count: u32,
 }
 
 /// Result of a cache `get` operation, distinguishing fresh vs stale data.
@@ -374,14 +374,14 @@ impl CacheStore {
                         let latest = sub_entries.iter().map(|e| e.cached_at).max();
                         let any_expired = sub_entries.iter().any(|e| e.is_expired());
                         let ttl = sub_entries.first().map(|e| e.ttl_secs).unwrap_or_else(|| c.ttl_secs());
-                        (latest, any_expired, sub_entries.len(), ttl)
+                        (latest, any_expired, sub_entries.len() as u32, ttl)
                     }
                 } else {
                     match memory.get(&key) {
                         Some(entry) => {
                             let count =
                                 rmp_serde::from_slice::<Vec<serde_json::Value>>(&entry.data)
-                                    .map(|v| v.len())
+                                    .map(|v| v.len() as u32)
                                     .unwrap_or(0);
                             (Some(entry.cached_at), entry.is_expired(), count, entry.ttl_secs)
                         }
@@ -393,7 +393,7 @@ impl CacheStore {
                     collection: *c,
                     display_name: c.display_name().to_string(),
                     cached_at: cached_at.map(|t| t.to_rfc3339()),
-                    ttl_secs,
+                    ttl_secs: ttl_secs as i32,
                     is_expired,
                     entry_count,
                 }

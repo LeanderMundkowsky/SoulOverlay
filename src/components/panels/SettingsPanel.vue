@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, toRaw } from "vue";
 import PanelHeader from "@/components/ui/PanelHeader.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import ToggleSwitch from "@/components/ui/ToggleSwitch.vue";
 import SettingsField from "@/components/settings/SettingsField.vue";
 import OpacitySlider from "@/components/settings/OpacitySlider.vue";
 import CacheSettingsPanel from "@/components/settings/CacheSettingsPanel.vue";
-import { useSettingsStore, type Settings } from "@/stores/settings";
+import { useSettingsStore } from "@/stores/settings";
+import type { Settings } from "@/stores/settings";
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -15,27 +16,14 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore();
 
-const form = ref<Settings>({
-  hotkey: "",
-  uex_api_key: "",
-  uex_secret_key: "",
-  log_path: null,
-  overlay_opacity: 1.0,
-  esc_closes_overlay: true,
-  reset_on_open: true,
-  max_search_results: 50,
-  cache_ttls: {},
-  layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
-  font_size: 14,
-  keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
-});
+const form = ref<Settings>(structuredClone(toRaw(settingsStore.settings)));
 
 const saving = ref(false);
 const saveError = ref<string | null>(null);
 const saveSuccess = ref(false);
 
 onMounted(() => {
-  form.value = { ...settingsStore.settings };
+  form.value = structuredClone(toRaw(settingsStore.settings));
 });
 
 async function handleSave() {
@@ -57,20 +45,7 @@ async function handleSave() {
 }
 
 function resetDefaults() {
-  form.value = {
-    hotkey: "Alt+Shift+S",
-    uex_api_key: "",
-    uex_secret_key: "",
-    log_path: null,
-    overlay_opacity: 0.85,
-    esc_closes_overlay: true,
-    reset_on_open: true,
-    max_search_results: 50,
-    cache_ttls: {},
-    layout_widths: { left_panel_px: 280, settings_panel_px: 448, search_split_pct: 50, search_solo_pct: 50 },
-    font_size: 14,
-    keybinds: { toggle_settings: "F12", toggle_debug: "F11" },
-  };
+  form.value = structuredClone(settingsStore.defaults);
 }
 </script>
 

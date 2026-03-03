@@ -106,20 +106,20 @@ function sortIndicator(key: keyof PriceEntry): string {
   return sortAsc.value ? " ▲" : " ▼";
 }
 
-function formatScu(val: number): string {
-  if (val === 0) return "-";
+function formatScu(val: number | undefined): string {
+  if (!val || val === 0) return "-";
   if (val >= 1000) return (val / 1000).toFixed(1).replace(/\.0$/, "") + "K";
   return val.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function formatPrice(val: number): string {
-  if (val === 0) return "-";
+function formatPrice(val: number | undefined): string {
+  if (!val || val === 0) return "-";
   return val.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function inventoryPercent(entry: PriceEntry): number {
-  if (entry.scu_max <= 0) return 0;
-  return Math.round((entry.scu_avg / entry.scu_max) * 100);
+  if (!entry.scu_max || entry.scu_max <= 0) return 0;
+  return Math.round(((entry.scu_avg ?? 0) / entry.scu_max) * 100);
 }
 
 function inventoryBarColor(pct: number): string {
@@ -141,7 +141,8 @@ function relativeAge(timestamp: string): string {
   return Math.floor(diff / 86400) + "d";
 }
 
-function shortSystem(system: string): string {
+function shortSystem(system: string | undefined): string {
+  if (!system) return "—";
   const map: Record<string, string> = {
     Stanton: "ST",
     Pyro: "PY",
@@ -150,7 +151,8 @@ function shortSystem(system: string): string {
   return map[system] ?? system.substring(0, 3).toUpperCase();
 }
 
-function shortFaction(faction: string): string {
+function shortFaction(faction: string | undefined): string {
+  if (!faction) return "—";
   const map: Record<string, string> = {
     "United Empire of Earth": "UEE",
     "Citizens for Prosperity": "CitPro",

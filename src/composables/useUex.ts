@@ -1,94 +1,8 @@
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
+import type { UexResult, PriceEntry, EntityInfo, ApiResponse, Result } from "@/bindings";
 
-export interface UexResult {
-  id: string;
-  name: string;
-  kind: string;
-  slug: string;
-  uuid: string;
-}
-
-export interface PriceEntry {
-  entity_id: string;
-  entity_name: string;
-  price_type: string;
-  location: string;
-  terminal: string;
-  terminal_id: string;
-  buy_price: number;
-  sell_price: number;
-  rent_price: number;
-  scu_available: number | null;
-  date_updated: string;
-  // Rich fields (populated by per-entity endpoints)
-  orbit: string;
-  system: string;
-  faction: string;
-  scu_last: number;
-  scu_users: number;
-  scu_avg: number;
-  scu_min: number;
-  scu_max: number;
-  price_last: number;
-  price_users: number;
-  price_avg: number;
-  price_min: number;
-  price_max: number;
-  inventory_status: number;
-  inventory_status_avg: number;
-  container_sizes: string;
-  is_buy_location: boolean;
-}
-
-export interface EntityInfo {
-  id: string;
-  name: string;
-  kind: string;
-  slug: string;
-  // Common
-  code: string | null;
-  company_name: string | null;
-  wiki: string | null;
-  game_version: string | null;
-  // Commodity
-  commodity_kind: string | null;
-  weight_scu: number | null;
-  avg_buy: number | null;
-  avg_sell: number | null;
-  is_illegal: boolean | null;
-  is_buyable: boolean | null;
-  is_sellable: boolean | null;
-  is_mineral: boolean | null;
-  is_raw: boolean | null;
-  is_refined: boolean | null;
-  is_harvestable: boolean | null;
-  // Item
-  section: string | null;
-  category: string | null;
-  size: string | null;
-  color: string | null;
-  // Vehicle
-  name_full: string | null;
-  scu: number | null;
-  crew: string | null;
-  length: number | null;
-  width: number | null;
-  height: number | null;
-  mass: number | null;
-  pad_type: string | null;
-  url_photo: string | null;
-  url_store: string | null;
-  roles: string[];
-}
-
-interface ApiResponse<T> {
-  ok: boolean;
-  data: T | null;
-  error: string | null;
-  stale: boolean;
-  total: number | null;
-}
+export type { UexResult, PriceEntry, EntityInfo };
 
 /**
  * Composable for UEX API interactions.
@@ -123,7 +37,9 @@ export function useUex() {
     error.value = null;
 
     try {
-      const resp = await invoke<ApiResponse<UexResult[]>>("api_search", { query });
+      const result = await commands.apiSearch(query);
+      if (result.status === "error") throw result.error;
+      const resp = result.data;
       if (resp.ok && resp.data) {
         results.value = resp.data;
         total.value = resp.total ?? resp.data.length;
@@ -151,18 +67,21 @@ export function useUex() {
   async function refreshInBackground() {
     refreshing = true;
     try {
-      await invoke("cache_refresh_expired");
+      await commands.cacheRefreshExpired();
       // Re-run with whatever the user has typed by now.
       const q = latestQuery.value;
       if (!q.trim()) {
         stale.value = false;
         return;
       }
-      const fresh = await invoke<ApiResponse<UexResult[]>>("api_search", { query: q });
-      if (fresh.ok && fresh.data) {
-        results.value = fresh.data;
-        total.value = fresh.total ?? fresh.data.length;
-        stale.value = false;
+      const result = await commands.apiSearch(q);
+      if (result.status === "ok") {
+        const fresh = result.data;
+        if (fresh.ok && fresh.data) {
+          results.value = fresh.data;
+          total.value = fresh.total ?? fresh.data.length;
+          stale.value = false;
+        }
       }
     } catch (e) {
       console.error("Background cache refresh failed:", e);
@@ -175,32 +94,34 @@ export function useUex() {
     return getEntityPrices("commodity", commodityId);
   }
 
+  type PriceCommand = (id: string) => Promise<Result<ApiResponse<PriceEntry[]>, string>>;
+
+  const priceCommandMap: Record<string, PriceCommand> = {
+    commodity: (id) => commands.apiCommodityPrices(id),
+    raw_commodity: (id) => commands.apiRawCommodityPrices(id),
+    item: (id) => commands.apiItemPrices(id),
+    vehicle: (id) => commands.apiVehiclePurchasePrices(id),
+    "ground vehicle": (id) => commands.apiVehiclePurchasePrices(id),
+    vehicle_rental: (id) => commands.apiVehicleRentalPrices(id),
+    fuel: (id) => commands.apiFuelPrices(id),
+    location: (id) => commands.apiFuelPrices(id),
+  };
+
   async function getEntityPrices(kind: string, entityId: string) {
     loading.value = true;
     error.value = null;
 
-    const commandMap: Record<string, { cmd: string; param: string }> = {
-      commodity: { cmd: "api_commodity_prices", param: "commodityId" },
-      raw_commodity: { cmd: "api_raw_commodity_prices", param: "commodityId" },
-      item: { cmd: "api_item_prices", param: "itemId" },
-      vehicle: { cmd: "api_vehicle_purchase_prices", param: "vehicleId" },
-      "ground vehicle": { cmd: "api_vehicle_purchase_prices", param: "vehicleId" },
-      vehicle_rental: { cmd: "api_vehicle_rental_prices", param: "vehicleId" },
-      fuel: { cmd: "api_fuel_prices", param: "terminalId" },
-      location: { cmd: "api_fuel_prices", param: "terminalId" },
-    };
-
-    const mapping = commandMap[kind];
-    if (!mapping) {
+    const command = priceCommandMap[kind];
+    if (!command) {
       prices.value = [];
       loading.value = false;
       return;
     }
 
     try {
-      const resp = await invoke<ApiResponse<PriceEntry[]>>(mapping.cmd, {
-        [mapping.param]: entityId,
-      });
+      const result = await command(entityId);
+      if (result.status === "error") throw result.error;
+      const resp = result.data;
       if (resp.ok && resp.data) {
         prices.value = resp.data;
         stale.value = resp.stale;
@@ -226,10 +147,9 @@ export function useUex() {
     entityInfo.value = null;
 
     try {
-      const resp = await invoke<ApiResponse<EntityInfo>>("api_entity_info", {
-        kind,
-        entityId,
-      });
+      const result = await commands.apiEntityInfo(kind, entityId);
+      if (result.status === "error") throw result.error;
+      const resp = result.data;
       if (resp.ok && resp.data) {
         entityInfo.value = resp.data;
       } else {
