@@ -41,7 +41,7 @@ pub struct ApiResponse<T: Serialize> {
 }
 
 impl<T: Serialize> ApiResponse<T> {
-    fn ok(data: T) -> Self {
+    pub(crate) fn ok(data: T) -> Self {
         Self { ok: true, data: Some(data), error: None, stale: false, total: None }
     }
 
@@ -49,7 +49,7 @@ impl<T: Serialize> ApiResponse<T> {
         Self { ok: true, data: Some(data), error: None, stale: true, total: None }
     }
 
-    fn err(msg: impl Into<String>) -> Self {
+    pub(crate) fn err(msg: impl Into<String>) -> Self {
         Self { ok: false, data: None, error: Some(msg.into()), stale: false, total: None }
     }
 }
@@ -89,7 +89,8 @@ async fn search_cached_or_fetch(
                 | Collection::ItemPrices
                 | Collection::VehiclePurchasePrices
                 | Collection::VehicleRentalPrices
-                | Collection::FuelPrices => return Err("Use specific price commands".to_string()),
+                | Collection::FuelPrices
+                | Collection::Fleet => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }

@@ -6,6 +6,7 @@ import StatusBar from "./components/layout/StatusBar.vue";
 import SearchTab from "./components/tabs/SearchTab.vue";
 import DetailsTab from "./components/tabs/DetailsTab.vue";
 import InventoryTab from "./components/tabs/InventoryTab.vue";
+import HangarTab from "./components/tabs/HangarTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
@@ -251,8 +252,9 @@ function onToggleDebug() {
           />
           <DetailsTab v-show="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
+          <HangarTab v-show="activeTab === 'hangar'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory'"
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar'"
           />
         </div>
 

@@ -101,6 +101,7 @@ pub fn run() {
             commands::favorites::add_favorite,
             commands::favorites::remove_favorite,
             commands::favorites::is_favorite,
+            commands::hangar::hangar_get_fleet,
         ])
         .setup(|app| {
             // Disable WebView2 built-in devtools, context menu, and status bar

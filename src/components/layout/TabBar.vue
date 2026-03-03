@@ -40,7 +40,7 @@ const tabs: Tab[] = [
   { id: "trade",     label: "TRADE",     shortcut: "F4",  disabled: true,  action: "switch" },
   { id: "mining",    label: "MINING",    shortcut: "F5",  disabled: true,  action: "switch" },
   { id: "market",    label: "MARKET",    shortcut: null,  disabled: true,  action: "switch" },
-  { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: true,  action: "switch" },
+  { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
   { id: "org",       label: "ORG",       shortcut: null,  disabled: true,  action: "switch" },
   { id: "inventory", label: "INVENTORY", shortcut: null,  disabled: false, action: "switch" },
   { id: "settings",  label: "SETTINGS",  shortcut: "F12", disabled: false, action: "toggle-settings" },

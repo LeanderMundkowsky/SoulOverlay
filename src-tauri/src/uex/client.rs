@@ -41,11 +41,50 @@ impl UexClient {
         query: &[(&str, &str)],
         api_key: &str,
     ) -> Result<serde_json::Value, String> {
+        self.get_raw_inner(path, query, api_key, None).await
+    }
+
+    /// Send a GET request with both Bearer token and secret-key header.
+    /// Checks the UEX `status` field for auth errors before parsing data.
+    pub(crate) async fn get_with_secret<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        api_key: &str,
+        secret_key: &str,
+    ) -> Result<Vec<T>, String> {
+        let body = self.get_raw_inner(path, query, api_key, Some(secret_key)).await?;
+
+        // UEX returns 200 even for auth errors — check the status field
+        if let Some(status) = body.get("status").and_then(|v| v.as_str()) {
+            if status != "ok" {
+                return Err(format!("UEX API error: {}", status));
+            }
+        }
+
+        let wrapper: UexApiResponse<T> =
+            serde_json::from_value(body).map_err(|e| format!("Failed to parse UEX response: {}", e))?;
+        Ok(wrapper.data.unwrap_or_default())
+    }
+
+    /// Internal: shared GET logic with optional secret-key header.
+    async fn get_raw_inner(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        api_key: &str,
+        secret_key: Option<&str>,
+    ) -> Result<serde_json::Value, String> {
         let url = format!("{}{}", UEX_BASE_URL, path);
 
         let mut req = self.http.get(&url).query(query);
         if !api_key.is_empty() {
             req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+        if let Some(sk) = secret_key {
+            if !sk.is_empty() {
+                req = req.header("secret-key", sk);
+            }
         }
 
         // Build display URL for logging

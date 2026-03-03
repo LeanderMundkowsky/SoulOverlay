@@ -17,6 +17,7 @@ export interface LayoutWidths {
 export interface Settings {
   hotkey: string;
   uex_api_key: string;
+  uex_secret_key: string;
   log_path: string | null;
   overlay_opacity: number;
   esc_closes_overlay: boolean;
@@ -32,6 +33,7 @@ export interface Settings {
 const defaultSettings: Settings = {
   hotkey: "Alt+Shift+S",
   uex_api_key: "",
+  uex_secret_key: "",
   log_path: null,
   overlay_opacity: 0.85,
   esc_closes_overlay: true,

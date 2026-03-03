@@ -72,6 +72,9 @@ pub struct Settings {
     pub hotkey: String,
     /// UEX Corp API key
     pub uex_api_key: String,
+    /// UEX Corp secret key (for user-specific endpoints like fleet)
+    #[serde(default)]
+    pub uex_secret_key: String,
     /// Optional custom log file path (None = use default)
     pub log_path: Option<String>,
     /// Overlay opacity (0.0 - 1.0)
@@ -127,6 +130,7 @@ impl Default for Settings {
         Self {
             hotkey: "F6".to_string(),
             uex_api_key: String::new(),
+            uex_secret_key: String::new(),
             log_path: None,
             overlay_opacity: 0.6,
             esc_closes_overlay: true,

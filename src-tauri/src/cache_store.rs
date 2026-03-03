@@ -21,6 +21,7 @@ pub enum Collection {
     Vehicles,
     Items,
     Locations,
+    Fleet,
 }
 
 impl Collection {
@@ -37,6 +38,7 @@ impl Collection {
             Self::Vehicles => "Vehicles",
             Self::Items => "Items",
             Self::Locations => "Locations",
+            Self::Fleet => "Fleet",
         }
     }
 
@@ -51,6 +53,7 @@ impl Collection {
             | Self::VehicleRentalPrices
             | Self::FuelPrices => 3600,
             Self::Vehicles | Self::Items | Self::Locations => 86400,
+            Self::Fleet => 600,
         }
     }
 
@@ -67,6 +70,7 @@ impl Collection {
             Self::Vehicles => "vehicles".to_string(),
             Self::Items => "items".to_string(),
             Self::Locations => "locations".to_string(),
+            Self::Fleet => "fleet".to_string(),
         }
     }
 
@@ -104,6 +108,7 @@ impl Collection {
             Collection::Vehicles,
             Collection::Items,
             Collection::Locations,
+            Collection::Fleet,
         ]
     }
 

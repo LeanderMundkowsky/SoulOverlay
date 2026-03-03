@@ -14,6 +14,7 @@ const settingsStore = useSettingsStore();
 const form = ref<Settings>({
   hotkey: "",
   uex_api_key: "",
+  uex_secret_key: "",
   log_path: null,
   overlay_opacity: 1.0,
   esc_closes_overlay: true,
