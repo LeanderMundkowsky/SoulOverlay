@@ -46,15 +46,17 @@ impl Collection {
     /// Fallback TTL for this collection in seconds (used when no entry exists yet).
     pub fn ttl_secs(&self) -> i64 {
         match self {
-            Self::Commodities => 600,
+            Self::Items
+            | Self::Commodities => 43200,
             Self::CommodityPrices
             | Self::RawCommodityPrices
             | Self::ItemPrices
-            | Self::VehiclePurchasePrices
+            | Self::FuelPrices => 1200,
+            Self::VehiclePurchasePrices
             | Self::VehicleRentalPrices
-            | Self::FuelPrices => 3600,
-            Self::Vehicles | Self::Items | Self::Locations => 86400,
-            Self::Fleet => 600,
+            | Self::Fleet
+            | Self::Vehicles => 43200,
+            Self::Locations => 86400,
         }
     }
 

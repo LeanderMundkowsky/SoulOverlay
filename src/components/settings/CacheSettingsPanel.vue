@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, toRaw } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { commands } from "@/bindings";
 import IconRefresh from "@/components/icons/IconRefresh.vue";
 import IconEdit from "@/components/icons/IconEdit.vue";
 import IconClose from "@/components/icons/IconClose.vue";
@@ -79,8 +80,8 @@ async function saveTtl(collection: string) {
   const parsed = parseTtl(editTtlText.value);
   if (parsed === null) return;
   const clamped = Math.max(60, parsed);
-  const updated = { ...settingsStore.settings };
-  updated.cache_ttls = { ...updated.cache_ttls, [collection]: clamped };
+  const raw = toRaw(settingsStore.settings);
+  const updated = { ...raw, cache_ttls: { ...raw.cache_ttls, [collection]: clamped } };
   try {
     await settingsStore.saveSettings(updated);
     await cache.fetchStatus();
@@ -88,6 +89,18 @@ async function saveTtl(collection: string) {
     cache.error.value = String(e);
   }
   editingCollection.value = null;
+}
+
+async function resetAllTtls() {
+  const updated = { ...toRaw(settingsStore.settings), cache_ttls: {} };
+  try {
+    await settingsStore.saveSettings(updated);
+    // Refresh expired entries (TTL defaults may be shorter than overrides)
+    await commands.cacheRefreshExpired();
+    await cache.fetchStatus();
+  } catch (e) {
+    cache.error.value = String(e);
+  }
 }
 </script>
 
@@ -97,17 +110,25 @@ async function saveTtl(collection: string) {
       <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
         Data Cache
       </label>
-      <button
-        @click="cache.refreshAll()"
-        :disabled="cache.refreshing.value"
-        class="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 disabled:text-white/20 transition-colors"
-      >
-        <IconRefresh
-          class="w-3.5 h-3.5"
-          :class="{ 'animate-spin': cache.refreshing.value }"
-        />
-        Refresh All
-      </button>
+      <div class="flex items-center gap-3">
+        <button
+          @click="resetAllTtls()"
+          class="text-xs text-white/30 hover:text-white/60 transition-colors"
+        >
+          Reset TTLs
+        </button>
+        <button
+          @click="cache.refreshAll()"
+          :disabled="cache.refreshing.value"
+          class="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 disabled:text-white/20 transition-colors"
+        >
+          <IconRefresh
+            class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': cache.refreshing.value }"
+          />
+          Refresh All
+        </button>
+      </div>
     </div>
 
     <AlertBanner v-if="cache.error.value" variant="error" :message="cache.error.value" />

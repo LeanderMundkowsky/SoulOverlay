@@ -32,7 +32,10 @@ async function handleSave() {
   saveSuccess.value = false;
 
   try {
-    await settingsStore.saveSettings(form.value);
+    // Preserve cache_ttls from the live store — TTLs are edited inline via CacheSettingsPanel,
+    // not through this form, so form.value.cache_ttls may be stale.
+    const toSave = { ...form.value, cache_ttls: toRaw(settingsStore.settings).cache_ttls };
+    await settingsStore.saveSettings(toSave);
     saveSuccess.value = true;
     setTimeout(() => {
       saveSuccess.value = false;

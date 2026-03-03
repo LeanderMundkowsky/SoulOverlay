@@ -25,12 +25,12 @@ watch(
   { immediate: true, deep: true },
 );
 
-// Auto-load fleet once both keys become available
+// Auto-load fleet once both keys become available (immediate because settings load pre-mount)
 watch(canFetch, (ready) => {
   if (ready && hangarStore.fleet.length === 0 && !hangarStore.loading) {
     hangarStore.loadFleet();
   }
-});
+}, { immediate: true });
 
 function refresh() {
   if (canFetch.value) {
