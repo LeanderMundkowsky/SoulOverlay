@@ -1,0 +1,69 @@
+{
+  // ── Editor defaults ──────────────────────────────────────────────
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  // ── Rust (rust-analyzer) ─────────────────────────────────────────
+  "[rust]": {
+    "editor.tabSize": 4,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.cargo.allTargets": true,
+  // ── Vue / TypeScript ─────────────────────────────────────────────
+  "[vue]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "Vue.volar"
+  },
+  "[typescript]": {
+    "editor.formatOnSave": true
+  },
+  "[json]": {
+    "editor.formatOnSave": true
+  },
+  "[jsonc]": {
+    "editor.formatOnSave": true
+  },
+  "files.associations": {
+    "*.vue": "vue"
+  },
+  // ── HTML / Vue template formatting ─────────────────────────────
+  "html.format.wrapAttributes": "force",
+  "html.format.wrapLineLength": 80,
+  // ── Tailwind CSS ─────────────────────────────────────────────────
+  "tailwindCSS.includeLanguages": {
+    "vue": "html"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    "class=\"([^\"]*)"
+  ],
+  "[css]": {
+    "editor.quickSuggestions": {
+      "strings": true
+    }
+  },
+  // ── File explorer exclusions ─────────────────────────────────────
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/dist-web": true,
+    "**/.git": true,
+    "**/src-tauri/target": true,
+    "**/src-tauri/gen": true
+  },
+  // ── Search exclusions ────────────────────────────────────────────
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/dist-web": true,
+    "**/.git": true,
+    "**/src-tauri/target": true,
+    "**/src-tauri/gen": true,
+    "**/Cargo.lock": true,
+    "**/package-lock.json": true,
+    "**/src/bindings.ts": true
+  }
+}

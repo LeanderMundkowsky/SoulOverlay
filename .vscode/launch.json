@@ -6,7 +6,9 @@
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/node_modules/@tauri-apps/cli/tauri.js",
-      "args": ["dev"],
+      "args": [
+        "dev"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -14,28 +16,15 @@
       }
     },
     {
-      "name": "Rust: Attach to Tauri",
-      "type": "lldb",
-      "request": "attach",
-      "program": "${workspaceFolder}/src-tauri/target/debug/soul-overlay.exe",
-      "sourceLanguages": ["rust"]
-    },
-    {
-      "name": "Frontend (Vite)",
-      "type": "chrome",
+      "name": "Tauri Build",
+      "type": "node",
       "request": "launch",
-      "url": "http://localhost:1420",
-      "webRoot": "${workspaceFolder}/src",
-      "sourceMapPathOverrides": {
-        "/@fs/*": "${workspaceFolder}/*"
-      }
-    }
-  ],
-  "compounds": [
-    {
-      "name": "Tauri Dev + Rust",
-      "configurations": ["Tauri Dev", "Rust: Attach to Tauri"],
-      "stopAll": true
+      "program": "${workspaceFolder}/node_modules/@tauri-apps/cli/tauri.js",
+      "args": [
+        "build"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
     }
   ]
 }

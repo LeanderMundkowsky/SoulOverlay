@@ -130,8 +130,8 @@ function blockBrowserShortcuts(e: KeyboardEvent) {
 
   // F-keys with browser meaning
   if (e.code === "F12") { e.preventDefault(); return; } // devtools
-  if (e.code === "F5")  { e.preventDefault(); return; } // reload
-  if (e.code === "F3")  { e.preventDefault(); return; } // find-next (browser)
+  if (e.code === "F5") { e.preventDefault(); return; } // reload
+  if (e.code === "F3") { e.preventDefault(); return; } // find-next (browser)
   if (e.code === "F11") { e.preventDefault(); return; } // browser fullscreen
 
   if (!ctrl) return;
@@ -204,23 +204,20 @@ function onToggleDebug() {
 <template>
   <div class="w-full h-full">
     <!-- Background dimming layer -->
-    <div
-      class="absolute inset-0 pointer-events-none"
-      :style="{ backgroundColor: `rgba(0,0,0,${settingsStore.settings.overlay_opacity})` }"
-    ></div>
+    <div class="absolute inset-0 pointer-events-none"
+      :style="{ backgroundColor: `rgba(0,0,0,${settingsStore.settings.overlay_opacity})` }">
+    </div>
 
     <!-- UI layer -->
     <div class="relative w-full h-full flex flex-col">
-      <TabBar
-        :active-tab="activeTab"
+      <TabBar :active-tab="activeTab"
         :sc-detected="scDetected"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
         @toggle-debug="onToggleDebug"
-        @toggle-favorites="showFavorites = !showFavorites"
-      />
+        @toggle-favorites="showFavorites = !showFavorites" />
 
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
@@ -228,70 +225,58 @@ function onToggleDebug() {
         <Transition name="slide-left">
           <div
             v-if="showDebug || (showFavorites && (activeTab === 'search' || activeTab === 'details'))"
-            class="relative flex-shrink-0 flex flex-col gap-4 py-4 pl-4"
-            :style="{ width: leftPanelPx + 'px', '--panel-w': leftPanelPx + 'px' }"
-          >
+            class="relative shrink-0 flex flex-col gap-4 py-4 pl-4"
+            :style="{ width: leftPanelPx + 'px', '--panel-w': leftPanelPx + 'px' }">
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+              class="flex-1 min-h-0" />
+            <DebugPanel v-if="showDebug"
               class="flex-1 min-h-0"
-            />
-            <DebugPanel
-              v-if="showDebug"
-              class="flex-1 min-h-0"
-              @close="showDebug = false"
-            />
-            <ResizeHandle :default-px="280" @resize="onLeftResize" @reset="onLeftReset" />
+              @close="showDebug = false" />
+            <ResizeHandle :default-px="280"
+              @resize="onLeftResize"
+              @reset="onLeftReset" />
           </div>
         </Transition>
 
         <div class="flex-1 overflow-y-auto">
-          <SearchTab
-            v-show="activeTab === 'search'"
+          <SearchTab v-show="activeTab === 'search'"
             ref="searchTabRef"
-            :sc-detected="scDetected"
-          />
+            :sc-detected="scDetected" />
           <DetailsTab v-show="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <HangarTab v-show="activeTab === 'hangar'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar'"
-          />
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar'" />
         </div>
 
         <!-- Keybinds side panel (left of settings) -->
         <Transition name="slide">
-          <div
-            v-if="showKeybinds && showSettings"
-            class="relative z-50 flex-shrink-0 h-full"
-            :style="{ width: '300px', '--panel-w': '300px' }"
-          >
+          <div v-if="showKeybinds && showSettings"
+            class="relative z-50 shrink-0 h-full"
+            :style="{ width: '300px', '--panel-w': '300px' }">
             <KeybindsModal @close="showKeybinds = false" />
           </div>
         </Transition>
 
         <!-- Settings side panel -->
         <Transition name="slide">
-          <div
-            v-if="showSettings"
-            class="relative z-50 flex-shrink-0 h-full"
-            :style="{ width: settingsPanelPx + 'px', '--panel-w': settingsPanelPx + 'px' }"
-          >
-            <ResizeHandle
-              side="left"
+          <div v-if="showSettings"
+            class="relative z-50 shrink-0 h-full"
+            :style="{ width: settingsPanelPx + 'px', '--panel-w': settingsPanelPx + 'px' }">
+            <ResizeHandle side="left"
               :default-px="448"
               @resize="onSettingsResize"
-              @reset="onSettingsReset"
-            />
-            <SettingsPanel
-              class="w-full"
+              @reset="onSettingsReset" />
+            <SettingsPanel class="w-full"
               @close="showSettings = false; showKeybinds = false"
-              @open-keybinds="showKeybinds = !showKeybinds"
-            />
+              @open-keybinds="showKeybinds = !showKeybinds" />
           </div>
         </Transition>
       </div>
 
-      <StatusBar :sc-detected="scDetected" @toggle-debug="onToggleDebug" />
+      <StatusBar :sc-detected="scDetected"
+        @toggle-debug="onToggleDebug" />
     </div>
   </div>
 </template>
@@ -301,22 +286,27 @@ function onToggleDebug() {
 .slide-leave-active {
   transition: margin-right 0.2s ease;
 }
+
 .slide-enter-from,
 .slide-leave-to {
   margin-right: calc(-1 * var(--panel-w, 384px));
 }
+
 .slide-enter-to,
 .slide-leave-from {
   margin-right: 0;
 }
+
 .slide-left-enter-active,
 .slide-left-leave-active {
   transition: margin-left 0.2s ease;
 }
+
 .slide-left-enter-from,
 .slide-left-leave-to {
   margin-left: calc(-1 * var(--panel-w, 280px));
 }
+
 .slide-left-enter-to,
 .slide-left-leave-from {
   margin-left: 0;
