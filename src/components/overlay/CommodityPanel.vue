@@ -16,16 +16,18 @@ const emit = defineEmits<{
 
 const { loading, error, prices, getEntityPrices } = useUex();
 
-const sortKey = ref<keyof PriceEntry>("price_last");
-const sortAsc = ref(true);
-const sortedPrices = ref<PriceEntry[]>([]);
+const buySortKey = ref<keyof PriceEntry>("price_last");
+const buySortAsc = ref(true);
+const buyDropdownOpen = ref(false);
 
-const showRentColumn = ref(false);
+const sellSortKey = ref<keyof PriceEntry>("price_last");
+const sellSortAsc = ref(false);
+const sellDropdownOpen = ref(false);
+
 const hasRichData = ref(false);
 
-const buyLocations = ref<PriceEntry[]>([]);
-const sellLocations = ref<PriceEntry[]>([]);
-const activeTab = ref<"buy" | "sell">("buy");
+const sortedBuy = ref<PriceEntry[]>([]);
+const sortedSell = ref<PriceEntry[]>([]);
 
 const kindLabels: Record<string, string> = {
   commodity: "Commodity",
@@ -38,72 +40,73 @@ const kindLabels: Record<string, string> = {
   location: "Location",
 };
 
+interface SortOption {
+  key: keyof PriceEntry;
+  label: string;
+  defaultAsc: boolean;
+}
+
+const richSortOptions: SortOption[] = [
+  { key: "price_last", label: "Price", defaultAsc: false },
+  { key: "scu_last", label: "SCU", defaultAsc: false },
+  { key: "terminal", label: "Terminal", defaultAsc: true },
+  { key: "date_updated", label: "Age", defaultAsc: false },
+];
+
+const simpleSortOptions: SortOption[] = [
+  { key: "buy_price", label: "Buy Price", defaultAsc: false },
+  { key: "sell_price", label: "Sell Price", defaultAsc: false },
+  { key: "terminal", label: "Terminal", defaultAsc: true },
+  { key: "rent_price", label: "Rent Price", defaultAsc: false },
+];
+
+function sortEntries(source: PriceEntry[], key: keyof PriceEntry, asc: boolean): PriceEntry[] {
+  const sorted = [...source];
+  sorted.sort((a, b) => {
+    const aVal = a[key] ?? 0;
+    const bVal = b[key] ?? 0;
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      return asc ? aVal - bVal : bVal - aVal;
+    }
+    return asc
+      ? String(aVal).localeCompare(String(bVal))
+      : String(bVal).localeCompare(String(aVal));
+  });
+  return sorted;
+}
+
 watch(
-  [prices, sortKey, sortAsc],
+  [prices, buySortKey, buySortAsc, sellSortKey, sellSortAsc],
   () => {
     const all = [...prices.value];
-
-    // Separate buy/sell locations
-    buyLocations.value = all.filter((p) => p.buy_price > 0);
-    sellLocations.value = all.filter((p) => p.sell_price > 0);
-
-    // Auto-select tab based on which has data
-    if (buyLocations.value.length === 0 && sellLocations.value.length > 0) {
-      activeTab.value = "sell";
-    } else if (buyLocations.value.length > 0 && sellLocations.value.length === 0) {
-      activeTab.value = "buy";
-    }
-
-    // Sort the active tab's data
-    const source = activeTab.value === "buy" ? buyLocations.value : sellLocations.value;
-    const sorted = [...source];
-    sorted.sort((a, b) => {
-      const aVal = a[sortKey.value] ?? 0;
-      const bVal = b[sortKey.value] ?? 0;
-      if (typeof aVal === "number" && typeof bVal === "number") {
-        return sortAsc.value ? aVal - bVal : bVal - aVal;
-      }
-      return sortAsc.value
-        ? String(aVal).localeCompare(String(bVal))
-        : String(bVal).localeCompare(String(aVal));
-    });
-    sortedPrices.value = sorted;
-
-    showRentColumn.value = sorted.some((p) => p.rent_price > 0);
+    sortedBuy.value = sortEntries(all.filter((p) => p.buy_price > 0), buySortKey.value, buySortAsc.value);
+    sortedSell.value = sortEntries(all.filter((p) => p.sell_price > 0), sellSortKey.value, sellSortAsc.value);
     hasRichData.value = props.entityKind === "commodity" || props.entityKind === "raw_commodity";
   },
   { immediate: true }
 );
 
-watch(activeTab, () => {
-  // Re-trigger sort when tab changes
-  const source = activeTab.value === "buy" ? buyLocations.value : sellLocations.value;
-  const sorted = [...source];
-  sorted.sort((a, b) => {
-    const aVal = a[sortKey.value] ?? 0;
-    const bVal = b[sortKey.value] ?? 0;
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortAsc.value ? aVal - bVal : bVal - aVal;
-    }
-    return sortAsc.value
-      ? String(aVal).localeCompare(String(bVal))
-      : String(bVal).localeCompare(String(aVal));
-  });
-  sortedPrices.value = sorted;
-});
-
-function toggleSort(key: keyof PriceEntry) {
-  if (sortKey.value === key) {
-    sortAsc.value = !sortAsc.value;
-  } else {
-    sortKey.value = key;
-    sortAsc.value = key === "terminal" || key === "orbit";
-  }
+function selectBuySort(opt: SortOption) {
+  buySortKey.value = opt.key;
+  buySortAsc.value = opt.defaultAsc;
+  buyDropdownOpen.value = false;
 }
 
-function sortIndicator(key: keyof PriceEntry): string {
-  if (sortKey.value !== key) return "";
-  return sortAsc.value ? " ▲" : " ▼";
+function selectSellSort(opt: SortOption) {
+  sellSortKey.value = opt.key;
+  sellSortAsc.value = opt.defaultAsc;
+  sellDropdownOpen.value = false;
+}
+
+function sortLabel(key: keyof PriceEntry): string {
+  const options = hasRichData.value ? richSortOptions : simpleSortOptions;
+  const found = options.find((o) => o.key === key);
+  return found ? found.label : "Price";
+}
+
+function closeDropdowns() {
+  buyDropdownOpen.value = false;
+  sellDropdownOpen.value = false;
 }
 
 function formatScu(val: number | undefined): string {
@@ -123,10 +126,10 @@ function inventoryPercent(entry: PriceEntry): number {
 }
 
 function inventoryBarColor(pct: number): string {
-  if (pct >= 80) return "bg-green-400";
-  if (pct >= 40) return "bg-yellow-400";
-  if (pct > 0) return "bg-blue-400";
-  return "bg-white/20";
+  if (pct >= 80) return "bg-green-400/50";
+  if (pct >= 40) return "bg-yellow-400/50";
+  if (pct > 0) return "bg-blue-400/50";
+  return "bg-white/10";
 }
 
 function relativeAge(timestamp: string): string {
@@ -178,8 +181,8 @@ function avgOf(entries: PriceEntry[], key: keyof PriceEntry): number {
   return vals.reduce((sum, v) => sum + v, 0) / vals.length;
 }
 
-function avgInventoryPercent(): number {
-  const pcts = sortedPrices.value.map((e) => inventoryPercent(e)).filter((v) => v > 0);
+function avgInventoryPercent(entries: PriceEntry[]): number {
+  const pcts = entries.map((e) => inventoryPercent(e)).filter((v) => v > 0);
   if (pcts.length === 0) return 0;
   return Math.round(pcts.reduce((sum, v) => sum + v, 0) / pcts.length);
 }
@@ -187,6 +190,10 @@ function avgInventoryPercent(): number {
 function formatSimplePrice(val: number): string {
   if (val === 0) return "-";
   return val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function hasData(): boolean {
+  return sortedBuy.value.length > 0 || sortedSell.value.length > 0;
 }
 </script>
 
@@ -203,26 +210,6 @@ function formatSimplePrice(val: number): string {
       </button>
     </div>
 
-    <!-- Tab bar (buy/sell) -->
-    <div v-if="!loading && !error && (buyLocations.length > 0 || sellLocations.length > 0)" class="flex border-b border-white/10 bg-white/[0.02]">
-      <button
-        v-if="buyLocations.length > 0"
-        @click="activeTab = 'buy'"
-        class="px-4 py-2 text-xs font-medium transition-colors"
-        :class="activeTab === 'buy' ? 'text-green-400 border-b-2 border-green-400' : 'text-white/40 hover:text-white/60'"
-      >
-        Buy ({{ buyLocations.length }})
-      </button>
-      <button
-        v-if="sellLocations.length > 0"
-        @click="activeTab = 'sell'"
-        class="px-4 py-2 text-xs font-medium transition-colors"
-        :class="activeTab === 'sell' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-white/40 hover:text-white/60'"
-      >
-        Sell ({{ sellLocations.length }})
-      </button>
-    </div>
-
     <!-- Loading -->
     <div v-if="loading" class="px-4 py-8 flex justify-center">
       <LoadingSpinner text="Loading prices..." />
@@ -231,149 +218,221 @@ function formatSimplePrice(val: number): string {
     <!-- Error -->
     <div v-else-if="error" class="px-4 py-4 text-red-400 text-sm">{{ error }}</div>
 
-    <!-- Rich data table (commodity/raw_commodity) -->
-    <div v-else-if="sortedPrices.length > 0 && hasRichData" class="overflow-x-auto overflow-y-auto flex-1">
-      <table class="w-full text-xs whitespace-nowrap">
-        <thead>
-          <tr class="text-white/30 text-xs uppercase tracking-wider sticky top-0 bg-[#1a1d24] z-10">
-            <!-- Location group -->
-            <th colspan="2" class="text-left px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5">Location</th>
-            <!-- Region group -->
-            <th colspan="2" class="text-left px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">Region</th>
-            <!-- SCU group -->
-            <th colspan="4" class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">SCU</th>
-            <!-- Inventory -->
-            <th class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">Inv</th>
-            <!-- UEC group -->
-            <th colspan="4" class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">UEC</th>
-            <!-- CS -->
-            <th class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">CS</th>
-            <!-- Age -->
-            <th class="text-center px-2 pt-2 pb-0.5 text-white/50 border-b border-white/5 border-l border-white/5">⏱</th>
-          </tr>
-          <tr class="text-white/40 text-xs uppercase tracking-wider sticky top-[26px] bg-[#1a1d24] z-10 border-b border-white/10">
-            <th @click="toggleSort('terminal')" class="text-left px-2 py-1.5 cursor-pointer hover:text-white/70">Name{{ sortIndicator("terminal") }}</th>
-            <th @click="toggleSort('orbit')" class="text-left px-2 py-1.5 cursor-pointer hover:text-white/70">Orbit{{ sortIndicator("orbit") }}</th>
-            <th class="text-left px-2 py-1.5 border-l border-white/5">Sys</th>
-            <th class="text-left px-2 py-1.5">Fac</th>
-            <th @click="toggleSort('scu_last')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70 border-l border-white/5">Last{{ sortIndicator("scu_last") }}</th>
-            <th @click="toggleSort('scu_avg')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Avg{{ sortIndicator("scu_avg") }}</th>
-            <th @click="toggleSort('scu_min')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Min{{ sortIndicator("scu_min") }}</th>
-            <th @click="toggleSort('scu_max')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Max{{ sortIndicator("scu_max") }}</th>
-            <th class="text-center px-2 py-1.5 border-l border-white/5">Avg</th>
-            <th @click="toggleSort('price_last')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70 border-l border-white/5">Last{{ sortIndicator("price_last") }}</th>
-            <th @click="toggleSort('price_avg')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Avg{{ sortIndicator("price_avg") }}</th>
-            <th @click="toggleSort('price_min')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Min{{ sortIndicator("price_min") }}</th>
-            <th @click="toggleSort('price_max')" class="text-right px-2 py-1.5 cursor-pointer hover:text-white/70">Max{{ sortIndicator("price_max") }}</th>
-            <th class="text-center px-2 py-1.5 border-l border-white/5">SCU</th>
-            <th @click="toggleSort('date_updated')" class="text-center px-2 py-1.5 cursor-pointer hover:text-white/70 border-l border-white/5">{{ sortIndicator("date_updated") || "" }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(entry, idx) in sortedPrices"
+    <!-- Rich data: side-by-side buy/sell columns (commodity/raw_commodity) -->
+    <div v-else-if="hasData() && hasRichData" class="flex flex-1 overflow-hidden" @click="closeDropdowns()">
+      <!-- Buy column -->
+      <div v-if="sortedBuy.length > 0" class="flex flex-col min-w-0" :class="sortedSell.length > 0 ? 'flex-1 border-r border-white/5' : 'flex-1'">
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
+          <span class="text-xs font-medium text-green-400/70">Buy ({{ sortedBuy.length }})</span>
+          <div class="flex items-center gap-0.5">
+            <div class="relative flex items-center">
+              <button @click.stop="buyDropdownOpen = !buyDropdownOpen; sellDropdownOpen = false" class="px-1.5 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">
+                {{ sortLabel(buySortKey) }}
+              </button>
+              <div v-if="buyDropdownOpen" class="absolute right-0 top-full mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[7.5rem] py-1">
+                <button v-for="opt in richSortOptions" :key="opt.key" @click.stop="selectBuySort(opt)" class="w-full text-left px-3 py-1.5 text-xs transition-colors" :class="buySortKey === opt.key ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+            <button @click.stop="buySortAsc = !buySortAsc" class="px-1 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">{{ buySortAsc ? '▲' : '▼' }}</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto flex-1 p-1.5 space-y-1">
+          <div
+            v-for="(entry, idx) in sortedBuy"
             :key="idx"
-            class="border-t border-white/5 hover:bg-white/5 transition-colors"
+            class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
           >
-            <!-- Name -->
-            <td class="px-2 py-1.5 text-white/80 font-medium max-w-[160px] truncate" :title="entry.terminal">{{ shortTerminal(entry.terminal) }}</td>
-            <!-- Orbit -->
-            <td class="px-2 py-1.5 text-white/50 font-medium">{{ entry.orbit }}</td>
-            <!-- System -->
-            <td class="px-2 py-1.5 text-white/40 border-l border-white/5">{{ shortSystem(entry.system) }}</td>
-            <!-- Faction -->
-            <td class="px-2 py-1.5 text-white/40">{{ shortFaction(entry.faction) }}</td>
-            <!-- SCU Last -->
-            <td class="px-2 py-1.5 text-right text-orange-300 border-l border-white/5">{{ formatScu(entry.scu_last) }}</td>
-            <!-- SCU Avg -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatScu(entry.scu_avg) }}</td>
-            <!-- SCU Min -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatScu(entry.scu_min) }}</td>
-            <!-- SCU Max -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatScu(entry.scu_max) }}</td>
-            <!-- Inventory bar -->
-            <td class="px-2 py-1.5 border-l border-white/5">
-              <div class="w-16 h-3 bg-white/10 rounded-sm overflow-hidden" :title="inventoryPercent(entry) + '%'">
-                <div
-                  class="h-full rounded-sm transition-all"
-                  :class="inventoryBarColor(inventoryPercent(entry))"
-                  :style="{ width: inventoryPercent(entry) + '%' }"
-                ></div>
+            <div class="flex items-center justify-between gap-1.5">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ shortTerminal(entry.terminal) }}</span>
+                <span class="px-1 py-0.5 rounded bg-white/10 text-white/40 text-[0.625rem] font-medium shrink-0">{{ shortSystem(entry.system) }}</span>
               </div>
-            </td>
-            <!-- UEC Last -->
-            <td class="px-2 py-1.5 text-right text-orange-300 border-l border-white/5">{{ formatPrice(entry.price_last) }}</td>
-            <!-- UEC Avg -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatPrice(entry.price_avg) }}</td>
-            <!-- UEC Min -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatPrice(entry.price_min) }}</td>
-            <!-- UEC Max -->
-            <td class="px-2 py-1.5 text-right text-white/50">{{ formatPrice(entry.price_max) }}</td>
-            <!-- Container sizes -->
-            <td class="px-2 py-1.5 text-center text-white/40 border-l border-white/5">{{ entry.container_sizes || "-" }}</td>
-            <!-- Age -->
-            <td class="px-2 py-1.5 text-center text-white/30 border-l border-white/5">{{ relativeAge(entry.date_updated) }}</td>
-          </tr>
-        </tbody>
-        <!-- Averages footer -->
-        <tfoot v-if="sortedPrices.length > 1">
-          <tr class="border-t border-white/10 bg-white/[0.03] text-white/50 font-medium">
-            <td class="px-2 py-1.5" colspan="2">{{ sortedPrices.length }} location{{ sortedPrices.length !== 1 ? "s" : "" }}</td>
-            <td class="px-2 py-1.5 border-l border-white/5" colspan="2">Averages</td>
-            <td class="px-2 py-1.5 text-right text-orange-300/70 border-l border-white/5">{{ formatScu(avgOf(sortedPrices, "scu_last")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatScu(avgOf(sortedPrices, "scu_avg")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatScu(avgOf(sortedPrices, "scu_min")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatScu(avgOf(sortedPrices, "scu_max")) }}</td>
-            <td class="px-2 py-1.5 border-l border-white/5">
-              <div class="w-16 h-3 bg-white/10 rounded-sm overflow-hidden">
-                <div
-                  class="h-full rounded-sm bg-green-400/60"
-                  :style="{ width: avgInventoryPercent() + '%' }"
-                ></div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-orange-300 text-xs font-semibold">{{ formatPrice(entry.price_last) }}</span>
+                <span class="text-white/25 text-[0.625rem]">{{ relativeAge(entry.date_updated) }}</span>
               </div>
-            </td>
-            <td class="px-2 py-1.5 text-right text-orange-300/70 border-l border-white/5">{{ formatPrice(avgOf(sortedPrices, "price_last")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatPrice(avgOf(sortedPrices, "price_avg")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatPrice(avgOf(sortedPrices, "price_min")) }}</td>
-            <td class="px-2 py-1.5 text-right text-white/40">{{ formatPrice(avgOf(sortedPrices, "price_max")) }}</td>
-            <td class="px-2 py-1.5 border-l border-white/5"></td>
-            <td class="px-2 py-1.5 border-l border-white/5"></td>
-          </tr>
-        </tfoot>
-      </table>
+            </div>
+            <div class="flex items-center justify-between gap-1.5 mt-0.5">
+              <div class="flex items-center gap-1 text-[0.6875rem] text-white/35 min-w-0 truncate">
+                <span>{{ entry.orbit }}</span>
+                <template v-if="entry.faction">
+                  <span class="text-white/15">·</span>
+                  <span>{{ shortFaction(entry.faction) }}</span>
+                </template>
+              </div>
+              <div class="flex items-center gap-2 shrink-0 text-[0.6875rem]">
+                <span class="text-white/40">{{ formatScu(entry.scu_last) }}<span class="text-white/20"> / {{ formatScu(entry.scu_max) }}</span></span>
+                <span v-if="entry.container_sizes" class="text-white/20">{{ entry.container_sizes }}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <div class="flex-1 h-[2px] bg-white/5 rounded-full overflow-hidden" :title="inventoryPercent(entry) + '%'">
+                <div class="h-full rounded-full transition-all" :class="inventoryBarColor(inventoryPercent(entry))" :style="{ width: inventoryPercent(entry) + '%' }"></div>
+              </div>
+              <span class="text-[0.625rem] text-white/25 shrink-0">{{ inventoryPercent(entry) }}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Sell column -->
+      <div v-if="sortedSell.length > 0" class="flex flex-col min-w-0" :class="sortedBuy.length > 0 ? 'flex-1' : 'flex-1'">
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
+          <span class="text-xs font-medium text-blue-400/70">Sell ({{ sortedSell.length }})</span>
+          <div class="flex items-center gap-0.5">
+            <div class="relative flex items-center">
+              <button @click.stop="sellDropdownOpen = !sellDropdownOpen; buyDropdownOpen = false" class="px-1.5 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">
+                {{ sortLabel(sellSortKey) }}
+              </button>
+              <div v-if="sellDropdownOpen" class="absolute right-0 top-full mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[7.5rem] py-1">
+                <button v-for="opt in richSortOptions" :key="opt.key" @click.stop="selectSellSort(opt)" class="w-full text-left px-3 py-1.5 text-xs transition-colors" :class="sellSortKey === opt.key ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+            <button @click.stop="sellSortAsc = !sellSortAsc" class="px-1 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">{{ sellSortAsc ? '▲' : '▼' }}</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto flex-1 p-1.5 space-y-1">
+          <div
+            v-for="(entry, idx) in sortedSell"
+            :key="idx"
+            class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
+          >
+            <div class="flex items-center justify-between gap-1.5">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ shortTerminal(entry.terminal) }}</span>
+                <span class="px-1 py-0.5 rounded bg-white/10 text-white/40 text-[0.625rem] font-medium shrink-0">{{ shortSystem(entry.system) }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-orange-300 text-xs font-semibold">{{ formatPrice(entry.price_last) }}</span>
+                <span class="text-white/25 text-[0.625rem]">{{ relativeAge(entry.date_updated) }}</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-1.5 mt-0.5">
+              <div class="flex items-center gap-1 text-[0.6875rem] text-white/35 min-w-0 truncate">
+                <span>{{ entry.orbit }}</span>
+                <template v-if="entry.faction">
+                  <span class="text-white/15">·</span>
+                  <span>{{ shortFaction(entry.faction) }}</span>
+                </template>
+              </div>
+              <div class="flex items-center gap-2 shrink-0 text-[0.6875rem]">
+                <span class="text-white/40">{{ formatScu(entry.scu_last) }}<span class="text-white/20"> / {{ formatScu(entry.scu_max) }}</span></span>
+                <span v-if="entry.container_sizes" class="text-white/20">{{ entry.container_sizes }}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <div class="flex-1 h-[2px] bg-white/5 rounded-full overflow-hidden" :title="inventoryPercent(entry) + '%'">
+                <div class="h-full rounded-full transition-all" :class="inventoryBarColor(inventoryPercent(entry))" :style="{ width: inventoryPercent(entry) + '%' }"></div>
+              </div>
+              <span class="text-[0.625rem] text-white/25 shrink-0">{{ inventoryPercent(entry) }}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Simple table fallback (non-commodity types) -->
-    <div v-else-if="sortedPrices.length > 0" class="overflow-x-auto overflow-y-auto flex-1">
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-white/50 text-xs uppercase tracking-wider sticky top-0 bg-[#1a1d24]">
-            <th @click="toggleSort('location')" class="text-left px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Location{{ sortIndicator("location") }}</th>
-            <th @click="toggleSort('terminal')" class="text-left px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Terminal{{ sortIndicator("terminal") }}</th>
-            <th @click="toggleSort('buy_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Buy{{ sortIndicator("buy_price") }}</th>
-            <th @click="toggleSort('sell_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Sell{{ sortIndicator("sell_price") }}</th>
-            <th v-if="showRentColumn" @click="toggleSort('rent_price')" class="text-right px-4 py-2 cursor-pointer hover:text-white/80 transition-colors">Rent{{ sortIndicator("rent_price") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(entry, idx) in sortedPrices"
+    <!-- Simple data: side-by-side buy/sell columns (non-commodity types) -->
+    <div v-else-if="hasData()" class="flex flex-1 overflow-hidden" @click="closeDropdowns()">
+      <div v-if="sortedBuy.length > 0" class="flex flex-col min-w-0" :class="sortedSell.length > 0 ? 'flex-1 border-r border-white/5' : 'flex-1'">
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
+          <span class="text-xs font-medium text-green-400/70">Buy ({{ sortedBuy.length }})</span>
+          <div class="flex items-center gap-0.5">
+            <div class="relative flex items-center">
+              <button @click.stop="buyDropdownOpen = !buyDropdownOpen; sellDropdownOpen = false" class="px-1.5 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">
+                {{ sortLabel(buySortKey) }}
+              </button>
+              <div v-if="buyDropdownOpen" class="absolute right-0 top-full mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[7.5rem] py-1">
+                <button v-for="opt in simpleSortOptions" :key="opt.key" @click.stop="selectBuySort(opt)" class="w-full text-left px-3 py-1.5 text-xs transition-colors" :class="buySortKey === opt.key ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+            <button @click.stop="buySortAsc = !buySortAsc" class="px-1 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">{{ buySortAsc ? '▲' : '▼' }}</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto flex-1 p-1.5 space-y-1">
+          <div
+            v-for="(entry, idx) in sortedBuy"
             :key="idx"
-            class="border-t border-white/5 hover:bg-white/5 transition-colors"
+            class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
           >
-            <td class="px-4 py-2 text-white/80">{{ entry.location }}</td>
-            <td class="px-4 py-2 text-white/60">{{ entry.terminal }}</td>
-            <td class="px-4 py-2 text-right text-green-400">{{ formatSimplePrice(entry.buy_price) }}</td>
-            <td class="px-4 py-2 text-right text-blue-400">{{ formatSimplePrice(entry.sell_price) }}</td>
-            <td v-if="showRentColumn" class="px-4 py-2 text-right text-yellow-400">{{ formatSimplePrice(entry.rent_price) }}</td>
-          </tr>
-        </tbody>
-      </table>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ entry.terminal }}</span>
+              <span class="text-green-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.buy_price) }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 mt-0.5">
+              <span class="text-white/30 text-[0.6875rem] truncate">{{ entry.location }}</span>
+              <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="sortedSell.length > 0" class="flex flex-col min-w-0" :class="sortedBuy.length > 0 ? 'flex-1' : 'flex-1'">
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
+          <span class="text-xs font-medium text-blue-400/70">Sell ({{ sortedSell.length }})</span>
+          <div class="flex items-center gap-0.5">
+            <div class="relative flex items-center">
+              <button @click.stop="sellDropdownOpen = !sellDropdownOpen; buyDropdownOpen = false" class="px-1.5 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">
+                {{ sortLabel(sellSortKey) }}
+              </button>
+              <div v-if="sellDropdownOpen" class="absolute right-0 top-full mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[7.5rem] py-1">
+                <button v-for="opt in simpleSortOptions" :key="opt.key" @click.stop="selectSellSort(opt)" class="w-full text-left px-3 py-1.5 text-xs transition-colors" :class="sellSortKey === opt.key ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+            <button @click.stop="sellSortAsc = !sellSortAsc" class="px-1 py-0.5 rounded text-[0.625rem] text-white/30 hover:text-white/50 hover:bg-white/10 transition-colors">{{ sellSortAsc ? '▲' : '▼' }}</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto flex-1 p-1.5 space-y-1">
+          <div
+            v-for="(entry, idx) in sortedSell"
+            :key="idx"
+            class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ entry.terminal }}</span>
+              <span class="text-blue-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.sell_price) }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 mt-0.5">
+              <span class="text-white/30 text-[0.6875rem] truncate">{{ entry.location }}</span>
+              <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Empty state -->
-    <div v-else class="px-4 py-8 text-center text-white/40 text-sm">
+    <div v-else-if="!loading" class="px-4 py-8 text-center text-white/40 text-sm">
       No price data available.
+    </div>
+
+    <!-- Summary footer -->
+    <div v-if="!loading && !error && hasData() && hasRichData" class="flex border-t border-white/10 text-[0.6875rem] shrink-0">
+      <div v-if="sortedBuy.length > 1" class="flex items-center gap-3 px-3 py-1.5 bg-white/[0.03]" :class="sortedSell.length > 0 ? 'flex-1 border-r border-white/5' : 'flex-1'">
+        <span class="text-white/30">{{ sortedBuy.length }}loc</span>
+        <span class="text-orange-300/60">ø {{ formatPrice(avgOf(sortedBuy, "price_last")) }}</span>
+        <div class="flex items-center gap-1 flex-1">
+          <div class="flex-1 h-[2px] bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full bg-green-400/40" :style="{ width: avgInventoryPercent(sortedBuy) + '%' }"></div>
+          </div>
+          <span class="text-white/20">{{ avgInventoryPercent(sortedBuy) }}%</span>
+        </div>
+      </div>
+      <div v-if="sortedSell.length > 1" class="flex items-center gap-3 px-3 py-1.5 bg-white/[0.03] flex-1">
+        <span class="text-white/30">{{ sortedSell.length }}loc</span>
+        <span class="text-orange-300/60">ø {{ formatPrice(avgOf(sortedSell, "price_last")) }}</span>
+        <div class="flex items-center gap-1 flex-1">
+          <div class="flex-1 h-[2px] bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full bg-blue-400/40" :style="{ width: avgInventoryPercent(sortedSell) + '%' }"></div>
+          </div>
+          <span class="text-white/20">{{ avgInventoryPercent(sortedSell) }}%</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>

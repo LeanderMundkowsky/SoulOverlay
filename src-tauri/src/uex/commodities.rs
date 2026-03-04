@@ -164,7 +164,7 @@ impl CommodityPriceDto {
         let (scu_last, scu_min, scu_max, scu_avg, scu_users) = if is_buy {
             (self.scu_buy, self.scu_buy_min, self.scu_buy_max, self.scu_buy_avg, self.scu_buy_users)
         } else {
-            (self.scu_sell_stock, None, None, self.scu_sell_stock_avg, None)
+            (self.scu_sell_stock, None, self.scu_sell, self.scu_sell_stock_avg, None)
         };
 
         let (price_last, price_min, price_max, price_avg, price_users) = if is_buy {
