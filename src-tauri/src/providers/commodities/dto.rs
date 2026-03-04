@@ -1,15 +1,14 @@
 use serde::Deserialize;
 
-use super::client::UexClient;
-use super::types::{
+use crate::uex::types::{
     deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string,
     deserialize_positive_f64, location_string, timestamp_string, EntityInfo, PriceEntry, UexResult,
 };
 
-// ── API DTOs ───────────────────────────────────────────────────────────────
+// ── Commodity DTO ──────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-pub(crate) struct CommodityDto {
+pub struct CommodityDto {
     #[serde(deserialize_with = "deserialize_flexible_id")]
     pub id: String,
     #[serde(default)]
@@ -81,8 +80,10 @@ impl From<&CommodityDto> for EntityInfo {
     }
 }
 
+// ── Commodity Price DTO ────────────────────────────────────────────────────
+
 #[derive(Deserialize)]
-pub(crate) struct CommodityPriceDto {
+pub struct CommodityPriceDto {
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_commodity: String,
     #[serde(default)]
@@ -99,7 +100,6 @@ pub(crate) struct CommodityPriceDto {
     pub id_terminal: String,
     #[serde(default)]
     pub faction_name: Option<String>,
-    // Price fields
     #[serde(default)]
     pub price_buy: Option<f64>,
     #[serde(default)]
@@ -120,7 +120,6 @@ pub(crate) struct CommodityPriceDto {
     pub price_sell_avg: Option<f64>,
     #[serde(default)]
     pub price_sell_users: Option<f64>,
-    // SCU fields
     #[serde(default)]
     pub scu_buy: Option<f64>,
     #[serde(default)]
@@ -137,7 +136,6 @@ pub(crate) struct CommodityPriceDto {
     pub scu_sell_stock: Option<f64>,
     #[serde(default)]
     pub scu_sell_stock_avg: Option<f64>,
-    // Status / inventory
     #[serde(default)]
     pub status_buy: Option<f64>,
     #[serde(default)]
@@ -146,7 +144,6 @@ pub(crate) struct CommodityPriceDto {
     pub status_sell: Option<f64>,
     #[serde(default)]
     pub status_sell_avg: Option<f64>,
-    // Container sizes
     #[serde(default)]
     pub container_sizes: Option<String>,
     #[serde(default)]
@@ -156,11 +153,9 @@ pub(crate) struct CommodityPriceDto {
 }
 
 impl CommodityPriceDto {
-    fn to_price_entry(&self, price_type: &str) -> PriceEntry {
-        // Determine if this location is a buy or sell location
+    pub fn to_price_entry(&self, price_type: &str) -> PriceEntry {
         let is_buy = self.price_buy.unwrap_or(0.0) > 0.0;
 
-        // Pick the relevant SCU/price stats based on direction
         let (scu_last, scu_min, scu_max, scu_avg, scu_users) = if is_buy {
             (self.scu_buy, self.scu_buy_min, self.scu_buy_max, self.scu_buy_avg, self.scu_buy_users)
         } else {
@@ -179,7 +174,6 @@ impl CommodityPriceDto {
             (self.status_sell, self.status_sell_avg)
         };
 
-        // Parse container_sizes (e.g. "1,2,4,8,16,24,32") into a range like "1-32"
         let container_sizes_display = self.container_sizes.as_deref().map(|cs| {
             let nums: Vec<u32> = cs.split(',').filter_map(|s| s.trim().parse().ok()).collect();
             if nums.is_empty() {
@@ -203,7 +197,6 @@ impl CommodityPriceDto {
             rent_price: 0.0,
             scu_available: self.scu_buy.or(self.scu_sell),
             date_updated: timestamp_string(&self.date_modified, &self.date_added),
-            // Rich fields
             orbit: self.orbit_name.clone().unwrap_or_default(),
             system: self.star_system_name.clone().unwrap_or_default(),
             faction: self.faction_name.clone().unwrap_or_default(),
@@ -223,139 +216,4 @@ impl CommodityPriceDto {
             is_buy_location: is_buy,
         }
     }
-}
-
-// ── Public functions ───────────────────────────────────────────────────────
-
-/// Fetch ALL commodities from UEX.
-pub async fn fetch_all_commodities(
-    client: &UexClient,
-    api_key: &str,
-) -> Result<Vec<UexResult>, String> {
-    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
-    Ok(dtos.iter().map(UexResult::from).collect())
-}
-
-/// Fetch ALL commodity EntityInfo from UEX.
-pub async fn fetch_all_commodity_infos(
-    client: &UexClient,
-    api_key: &str,
-) -> Result<Vec<EntityInfo>, String> {
-    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
-    Ok(dtos.iter().map(EntityInfo::from).collect())
-}
-
-/// Search UEX for commodities by query string (direct API call, no cache).
-pub async fn search_commodities(
-    client: &UexClient,
-    query: &str,
-    api_key: &str,
-) -> Result<Vec<UexResult>, String> {
-    let dtos: Vec<CommodityDto> = client
-        .get("/commodities", &[("name_filter", query)], api_key)
-        .await?;
-    let query_lower = query.to_lowercase();
-    Ok(dtos
-        .iter()
-        .map(UexResult::from)
-        .filter(|r| r.name.to_lowercase().contains(&query_lower))
-        .collect())
-}
-
-/// Fetch commodity details by id.
-pub async fn get_commodity_info(
-    client: &UexClient,
-    commodity_id: &str,
-    api_key: &str,
-) -> Result<EntityInfo, String> {
-    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
-    dtos.iter()
-        .find(|dto| dto.id == commodity_id)
-        .map(EntityInfo::from)
-        .ok_or_else(|| format!("Commodity {} not found", commodity_id))
-}
-
-/// Get prices for a specific commodity from UEX (direct API call).
-pub async fn get_commodity_prices(
-    client: &UexClient,
-    commodity_id: &str,
-    api_key: &str,
-) -> Result<Vec<PriceEntry>, String> {
-    let dtos: Vec<CommodityPriceDto> = client
-        .get(
-            "/commodities_prices",
-            &[("id_commodity", commodity_id)],
-            api_key,
-        )
-        .await?;
-    Ok(dtos.iter().map(|d| d.to_price_entry("commodity")).collect())
-}
-
-/// Get raw commodity prices for a specific commodity (direct API call).
-pub async fn get_raw_commodity_prices(
-    client: &UexClient,
-    commodity_id: &str,
-    api_key: &str,
-) -> Result<Vec<PriceEntry>, String> {
-    let dtos: Vec<CommodityPriceDto> = client
-        .get(
-            "/commodities_raw_prices",
-            &[("id_commodity", commodity_id)],
-            api_key,
-        )
-        .await?;
-    Ok(dtos
-        .iter()
-        .map(|d| d.to_price_entry("raw_commodity"))
-        .collect())
-}
-
-/// Fetch commodity prices for each ID in `commodity_ids` using per-entity API calls
-/// in parallel. Unlike `fetch_all_commodity_prices`, per-entity calls return the full
-/// rich dataset including orbit, system, faction, and min/max stats.
-pub async fn fetch_all_commodity_prices_per_entity(
-    client: &UexClient,
-    commodity_ids: &[String],
-    api_key: &str,
-) -> Vec<PriceEntry> {
-    let handles: Vec<_> = commodity_ids
-        .iter()
-        .map(|id| {
-            let client = client.clone();
-            let id = id.clone();
-            let key = api_key.to_string();
-            tokio::spawn(async move { get_commodity_prices(&client, &id, &key).await })
-        })
-        .collect();
-
-    let mut all = Vec::new();
-    for handle in handles {
-        if let Ok(Ok(prices)) = handle.await {
-            all.extend(prices);
-        }
-    }
-    all
-}
-pub async fn fetch_all_commodity_prices(
-    client: &UexClient,
-    api_key: &str,
-) -> Result<Vec<PriceEntry>, String> {
-    let dtos: Vec<CommodityPriceDto> = client
-        .get("/commodities_prices_all", &[], api_key)
-        .await?;
-    Ok(dtos.iter().map(|d| d.to_price_entry("commodity")).collect())
-}
-
-/// Fetch ALL raw commodity prices from UEX (bulk).
-pub async fn fetch_all_raw_commodity_prices(
-    client: &UexClient,
-    api_key: &str,
-) -> Result<Vec<PriceEntry>, String> {
-    let dtos: Vec<CommodityPriceDto> = client
-        .get("/commodities_raw_prices_all", &[], api_key)
-        .await?;
-    Ok(dtos
-        .iter()
-        .map(|d| d.to_price_entry("raw_commodity"))
-        .collect())
 }

@@ -1,32 +1,31 @@
 use serde::Deserialize;
 
-use super::client::UexClient;
-use super::types::{deserialize_flexible_id, deserialize_bool_flag, deserialize_nonempty_string, HangarVehicle};
-
-// ── API DTO ────────────────────────────────────────────────────────────────
+use crate::uex::types::{
+    deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string, HangarVehicle,
+};
 
 #[derive(Deserialize)]
-struct FleetVehicleDto {
+pub struct FleetVehicleDto {
     #[serde(deserialize_with = "deserialize_flexible_id")]
-    id: String,
+    pub id: String,
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
-    id_vehicle: String,
+    pub id_vehicle: String,
     #[serde(default)]
-    name: String,
+    pub name: String,
     #[serde(default)]
-    model_name: String,
+    pub model_name: String,
     #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    serial: Option<String>,
+    pub serial: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    description: Option<String>,
+    pub description: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    organization_name: Option<String>,
+    pub organization_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_bool_flag")]
-    is_hidden: Option<bool>,
+    pub is_hidden: Option<bool>,
     #[serde(default, deserialize_with = "deserialize_bool_flag")]
-    is_pledged: Option<bool>,
+    pub is_pledged: Option<bool>,
     #[serde(default)]
-    date_added: Option<serde_json::Value>,
+    pub date_added: Option<serde_json::Value>,
 }
 
 impl From<&FleetVehicleDto> for HangarVehicle {
@@ -55,18 +54,4 @@ impl From<&FleetVehicleDto> for HangarVehicle {
             url_photo: None,
         }
     }
-}
-
-// ── Public function ────────────────────────────────────────────────────────
-
-/// Fetch the authenticated user's fleet from UEX.
-pub async fn fetch_fleet(
-    client: &UexClient,
-    api_key: &str,
-    secret_key: &str,
-) -> Result<Vec<HangarVehicle>, String> {
-    let dtos: Vec<FleetVehicleDto> = client
-        .get_with_secret("/fleet", &[], api_key, secret_key)
-        .await?;
-    Ok(dtos.iter().map(HangarVehicle::from).collect())
 }

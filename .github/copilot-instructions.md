@@ -33,6 +33,9 @@ npm run tauri dev
 
 # Full release build → src-tauri/target/release/bundle/nsis/SoulOverlay_*_setup.exe
 npm run tauri build
+
+# Flush all cache entries (dev utility, requires app to not be running)
+npm run flush-cache
 ```
 
 No ESLint, Prettier, Vitest, or `#[cfg(test)]` suites exist. Quality is enforced by
@@ -56,11 +59,12 @@ src/                                 # Vue 3 + TypeScript frontend
 │   ├── overlay/                     # SearchBar, SearchResultRow, CommodityPanel, FavoritesPanel, EntityInfoCard
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
-│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, PlaceholderTab
+│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, ProfileTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch,
-│                                    #   ResizeHandle, ContextMenu, KeybindsModal
+│                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls, InventoryBar
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch
-├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts (Pinia)
+├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts (Pinia)
+├── utils/                           # imageProxy.ts, priceFormatters.ts, sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
 src-tauri/src/                       # Rust backend
@@ -75,27 +79,33 @@ src-tauri/src/                       # Rust backend
 ├── activity.rs                      # ActivityLog: tracks last user action timestamps
 ├── logging.rs                       # fern dual-logger setup (stderr + file, path from config)
 ├── platform.rs                      # HWND <-> isize helpers (breaks circular deps)
+├── image_proxy.rs                   # Async image proxy for UEX photo URLs via custom URI scheme
 ├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry
 ├── game_tracker.rs                  # SC window polling thread, SharedGameState
 ├── log_watcher.rs                   # game.log tail + regex parse + Tauri event emit
-├── uex/                             # UEX Corp API client (typed deserialization from swagger spec)
+├── uex/                             # UEX Corp API transport + shared types
 │   ├── client.rs                    # UexClient struct: shared reqwest::Client, generic get<T>
-│   ├── types.rs                     # App types: UexResult, PriceEntry, EntityInfo + serde helpers
-│   ├── commodities.rs               # Commodity fetch/search/info/prices
-│   ├── vehicles.rs                  # Vehicle fetch/search/info/purchase & rental prices
-│   ├── items.rs                     # Item fetch/search/info/prices + category fan-out
-│   ├── locations.rs                 # Terminal fetch/search
-│   ├── fleet.rs                     # Fleet (user ships) fetch via secret key
-│   └── fuel.rs                      # Fuel price fetch
+│   └── types.rs                     # Shared IPC types: UexResult, PriceEntry, EntityInfo + serde helpers
+├── providers/                       # Data providers: fetch + cache logic per entity type
+│   ├── mod.rs                       # BlobProvider / PerEntityProvider traits, registry, shared helpers
+│   ├── commodities/                 # dto.rs + provider.rs: catalog, prices, raw prices, search
+│   ├── vehicles/                    # dto.rs + provider.rs: catalog, purchase/rental prices, photo map
+│   ├── items/                       # dto.rs + provider.rs: catalog (category fan-out), prices, search
+│   ├── locations/                   # dto.rs + provider.rs: terminals catalog, search
+│   ├── fuel/                        # dto.rs + provider.rs: fuel prices
+│   ├── fleet/                       # dto.rs + provider.rs: user fleet (requires secret key)
+│   ├── user/                        # dto.rs + provider.rs: user profile (requires secret key)
+│   └── entity_info/                 # provider.rs: aggregates commodity/vehicle/item infos
 ├── tray.rs                          # System tray icon + menu
 ├── commands/                        # All #[tauri::command] + #[specta::specta] functions
 │   ├── api.rs                       # api_search, api_commodity_prices + ApiResponse<T> envelope
 │   ├── uex.rs                       # uex_search, uex_search_all, uex_prices (legacy)
-│   ├── cache.rs                     # cache_status, cache_refresh, cache_refresh_all, cache_refresh_expired
+│   ├── cache.rs                     # cache_status, cache_refresh + provider-based dispatch
 │   ├── settings.rs                  # get_settings, get_default_settings, save_settings
 │   ├── overlay.rs                   # show_overlay_cmd, hide_overlay_cmd
 │   ├── favorites.rs                 # get_favorites, add_favorite, remove_favorite, is_favorite
 │   ├── hangar.rs                    # hangar_get_fleet
+│   ├── user.rs                      # user_get_profile
 │   └── debug.rs                     # get_debug_info, get_game_state
 └── hotkey/                          # Global keyboard hook
     ├── mod.rs                       # HookHandle, register_hotkey, LL hook callback, atomics
@@ -111,6 +121,7 @@ for types, defaults, and data. Key modules:
 - `lib.rs` — startup sequence, `AppState` construction, `tauri_specta::Builder` + `collect_commands!`
 - `app_setup.rs` — `.setup()` hook, spawns background `prefetch_all` task + 30s refresh timer
 - `cache_store.rs` — dual-layer cache: in-memory `HashMap` + SQLite (`rmp-serde` blobs)
+- `providers/mod.rs` — trait-based provider system; all fetch+cache logic lives here
 - `window.rs` — Win32 WNDPROC subclass; manages show/hide, geometry, transparency
 - `hotkey/mod.rs` — `WH_KEYBOARD_LL` global hook; toggles via `PostMessageW(WM_APP+42)`
 - `commands/api.rs` — primary IPC surface; returns `ApiResponse<T>` envelope
@@ -128,6 +139,39 @@ typed commands from `src/bindings.ts`.
 4. `AppState` construction → `.manage()`
 5. `.setup()` → `app_setup::initialize()` → spawns prefetch thread + 30s timer
 6. Frontend: `loadSettings()` in `main.ts` completes **before** `app.mount("#app")`
+
+## Provider System
+
+All UEX data fetching and caching is organized via a trait-based provider system in
+`src-tauri/src/providers/`. Each entity type gets its own folder with:
+- `dto.rs` — API response DTOs with serde attrs + `From` impls converting to shared types
+- `provider.rs` — Trait implementations + standalone helper functions (search, fetch)
+- `mod.rs` — Module declarations + `pub use` re-exports
+
+**Two traits** in `providers/mod.rs`:
+- `BlobProvider` — single cache key (catalogs: commodities, vehicles, items, locations, fleet, user_profile)
+- `PerEntityProvider` — per-entity sub-keys (prices: `commodity_prices:42`, entity_info, etc.)
+
+Both share: `collection()`, `requires_secret()`, `depends_on()`, `async fn refresh(ctx)`
+
+**`all_providers()`** returns the full registry. `provider_for(name)` looks up by storage key.
+`commands/cache.rs` uses these for dispatch — no giant match statement.
+
+**Adding a new data provider:**
+1. Create `providers/new_entity/dto.rs` with API DTOs + `From<&Dto>` impls
+2. Create `providers/new_entity/provider.rs` implementing `BlobProvider` or `PerEntityProvider`
+3. Create `providers/new_entity/mod.rs` with module declarations + re-exports
+4. Add `pub mod new_entity;` to `providers/mod.rs`
+5. Register the provider in `all_providers()` in `providers/mod.rs`
+6. Add a `Collection` variant in `cache_store.rs` with TTL/key/display_name
+7. If the command crosses IPC: add types with `#[derive(specta::Type)]`, add command to
+   `collect_commands![]` in `lib.rs`
+
+**Shared helpers** in `providers/mod.rs`: `store_blob`, `store_prices_split`,
+`store_entity_infos`, `catalog_ids_from_cache`, `search_in_collection`
+
+**Key rule**: `uex/` only contains `client.rs` (HTTP transport) and `types.rs` (shared IPC
+types). All fetch logic, DTOs, and search functions live in `providers/`.
 
 ## tauri-specta — Type-Safe IPC
 
@@ -242,16 +286,17 @@ Each variant provides `display_name()`, `ttl_secs()` (default), `storage_key()`,
 | `Items` | 24 h | `items` | No |
 | `Locations` | 24 h | `locations` | No |
 | `Fleet` | 10 min | `fleet` | No |
+| `UserProfile` | 10 min | `user_profile` | No |
+| `EntityInfo` | 24 h | `entity_info:{kind}:{id}` | Yes |
 
 Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides are stored in
 `settings.cache_ttls` (`HashMap<String, u32>`) keyed by `Collection::storage_key()`.
 `Collection::ttl_for(&Settings)` resolves: user override → fallback default, min 60s.
 
-**Auto-refresh**: `app_setup.rs` runs a 30-second timer that calls `cache_refresh_expired`
-to refresh all collections whose TTL has elapsed. Initial prefetch on startup also uses
-this path. All collection refreshes run in parallel via `futures::future::join_all` — catalogs
-first (commodities, vehicles, items, locations), then price/fleet collections in a second
-parallel batch (prices depend on catalog IDs being in cache).
+**Auto-refresh**: `app_setup.rs` runs a 30-second timer that calls `guarded_refresh` for
+each collection. Initial prefetch on startup runs via `prefetch_all` in `commands/cache.rs`.
+Both use provider-based dispatch: phase 1 refreshes providers with no dependencies (catalogs),
+phase 2 refreshes the rest (prices depend on catalog IDs being in cache).
 
 **Favorites** bypass `CacheStore` entirely — plain SQLite table in `commands/favorites.rs`,
 keyed by `(id, kind)`. No TTL.
@@ -291,6 +336,7 @@ close buttons.
 - Do NOT define IPC types manually in TypeScript — they come from `src/bindings.ts`
 - Do NOT duplicate Rust default values in TypeScript — fetch via `getDefaultSettings()`
 - Do NOT edit `src/bindings.ts` — it is auto-generated by tauri-specta
+- Do NOT add fetch logic or DTOs to `uex/` — all data providers live in `providers/`
 
 ## TypeScript / Vue Style
 
@@ -328,9 +374,9 @@ Palette: white+opacity for text/borders, gray-900 for panels, blue-500/600 actio
 green-400 success, red-400 errors, yellow-400 warnings.
 
 **Pinia — two store archetypes**:
-- **Backend-backed** (`settings.ts`, `favorites.ts`, `game.ts`, `hangar.ts`): all mutations
-  go through generated commands. No `$patch`, no Options mutations. Re-export types from
-  `@/bindings`.
+- **Backend-backed** (`settings.ts`, `favorites.ts`, `game.ts`, `hangar.ts`, `user.ts`):
+  all mutations go through generated commands. No `$patch`, no Options mutations.
+  Re-export types from `@/bindings`.
 - **UI-coordination** (`details.ts`): pure in-memory, no IPC. Holds the currently viewed
   entity and a `requestTabSwitch: ref<boolean>` flag that `App.vue` watches.
 

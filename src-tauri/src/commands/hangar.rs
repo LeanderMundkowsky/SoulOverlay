@@ -2,8 +2,10 @@ use tauri::State;
 
 use crate::cache_store::{CacheResult, Collection};
 use crate::commands::api::ApiResponse;
+use crate::providers::fleet::fetch_fleet;
+use crate::providers::vehicles::fetch_vehicle_photo_map;
 use crate::state::AppState;
-use crate::uex::{self, HangarVehicle};
+use crate::uex::types::HangarVehicle;
 
 /// Enrich fleet vehicles with photo URLs from the vehicles API.
 async fn enrich_with_photos(
@@ -11,7 +13,7 @@ async fn enrich_with_photos(
     state: &AppState,
     api_key: &str,
 ) {
-    if let Ok(photo_map) = uex::fetch_vehicle_photo_map(&state.uex, api_key).await {
+    if let Ok(photo_map) = fetch_vehicle_photo_map(&state.uex, api_key).await {
         for ship in fleet.iter_mut() {
             if let Some(url) = photo_map.get(&ship.id_vehicle) {
                 ship.url_photo = Some(url.clone());
@@ -56,7 +58,7 @@ pub async fn hangar_get_fleet(
             let ak = api_key.clone();
             let sk = secret_key.clone();
             tokio::spawn(async move {
-                if let Ok(fleet) = uex::fetch_fleet(&uex, &ak, &sk).await {
+                if let Ok(fleet) = fetch_fleet(&uex, &ak, &sk).await {
                     let key = Collection::Fleet.storage_key();
                     let _ = cache.put(&key, ttl, &fleet);
                 }
@@ -69,7 +71,7 @@ pub async fn hangar_get_fleet(
     }
 
     // No cache — fetch directly
-    match uex::fetch_fleet(&state.uex, &api_key, &secret_key).await {
+    match fetch_fleet(&state.uex, &api_key, &secret_key).await {
         Ok(mut fleet) => {
             let _ = state.cache.put(&cache_key, ttl, &fleet);
             enrich_with_photos(&mut fleet, &state, &api_key).await;

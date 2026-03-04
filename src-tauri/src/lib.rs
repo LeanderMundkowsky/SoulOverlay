@@ -10,6 +10,7 @@ mod image_proxy;
 mod log_watcher;
 mod logging;
 mod platform;
+mod providers;
 mod settings;
 pub mod state;
 mod tray;

@@ -23,8 +23,13 @@ use tauri::State;
 
 use crate::activity::LastUserAction;
 use crate::cache_store::{CacheResult, Collection};
+use crate::providers::search_in_collection;
+use crate::providers::commodities::search_commodities;
+use crate::providers::vehicles::search_vehicles;
+use crate::providers::items::search_items;
+use crate::providers::locations::search_locations;
 use crate::state::AppState;
-use crate::uex::{self, EntityInfo, PriceEntry, UexResult};
+use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 
 // ── Response envelope ──────────────────────────────────────────────────────
 
@@ -73,18 +78,18 @@ async fn search_cached_or_fetch(
     let key = collection.storage_key();
     match state.cache.get::<Vec<UexResult>>(&key) {
         CacheResult::Fresh(data) => {
-            Ok((uex::search_in_collection(&data, query), false))
+            Ok((search_in_collection(&data, query), false))
         }
         CacheResult::Stale(data) => {
-            Ok((uex::search_in_collection(&data, query), true))
+            Ok((search_in_collection(&data, query), true))
         }
         CacheResult::Missing => {
             // Fallback: direct API call for this specific query
             let results = match collection {
-                Collection::Commodities => uex::search_commodities(&state.uex, query, api_key).await?,
-                Collection::Vehicles => uex::search_vehicles(&state.uex, query, api_key).await?,
-                Collection::Items => uex::search_items(&state.uex, query, api_key).await?,
-                Collection::Locations => uex::search_locations(&state.uex, query, api_key).await?,
+                Collection::Commodities => search_commodities(&state.uex, query, api_key).await?,
+                Collection::Vehicles => search_vehicles(&state.uex, query, api_key).await?,
+                Collection::Items => search_items(&state.uex, query, api_key).await?,
+                Collection::Locations => search_locations(&state.uex, query, api_key).await?,
                 Collection::CommodityPrices
                 | Collection::RawCommodityPrices
                 | Collection::ItemPrices

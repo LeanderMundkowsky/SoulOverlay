@@ -5,11 +5,10 @@ use std::time::Instant;
 use tauri::State;
 
 use crate::activity::FetchEvent;
-use crate::cache_store::{CacheResult, CacheStore, Collection, CollectionStatus};
+use crate::cache_store::{Collection, CollectionStatus};
+use crate::providers::{self, RefreshContext};
 use crate::settings::Settings;
 use crate::state::AppState;
-use crate::uex;
-use crate::uex::PriceEntry;
 
 /// Response from cache refresh operations.
 #[derive(Debug, Serialize, Type)]
@@ -70,102 +69,32 @@ pub async fn cache_refresh_all(
     state: State<'_, AppState>,
 ) -> Result<Vec<CacheRefreshResult>, String> {
     let settings = state.current_settings.lock().unwrap().clone();
-    // Catalogs first (prices depend on their IDs in cache).
-    let catalogs = [
-        Collection::Commodities,
-        Collection::Vehicles,
-        Collection::Items,
-        Collection::Locations,
-    ];
-    let catalog_keys: Vec<String> = catalogs.iter().map(|c| c.storage_key()).collect();
-    info!("Refreshing {} catalog collections in parallel: {}", catalog_keys.len(), catalog_keys.join(", "));
-    let catalog_futures: Vec<_> = catalog_keys
-        .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
-        .collect();
-    let mut results = futures::future::join_all(catalog_futures).await;
 
-    let rest_keys: Vec<String> = Collection::all()
-        .iter()
-        .filter(|c| !catalogs.contains(c))
-        .map(|c| c.storage_key())
+    // Phase 1: providers with no dependencies (catalogs)
+    let all = providers::all_providers();
+    let phase1_keys: Vec<String> = all.iter()
+        .filter(|p| p.depends_on().is_empty())
+        .map(|p| p.collection().storage_key())
         .collect();
-    info!("Refreshing {} remaining collections in parallel: {}", rest_keys.len(), rest_keys.join(", "));
-    let rest_futures: Vec<_> = rest_keys
+    info!("Refreshing {} catalog collections in parallel: {}", phase1_keys.len(), phase1_keys.join(", "));
+    let phase1_futures: Vec<_> = phase1_keys
         .iter()
         .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
         .collect();
-    results.extend(futures::future::join_all(rest_futures).await);
+    let mut results = futures::future::join_all(phase1_futures).await;
+
+    // Phase 2: providers with dependencies (prices, entity_info, etc.)
+    let phase2_keys: Vec<String> = all.iter()
+        .filter(|p| !p.depends_on().is_empty())
+        .map(|p| p.collection().storage_key())
+        .collect();
+    info!("Refreshing {} remaining collections in parallel: {}", phase2_keys.len(), phase2_keys.join(", "));
+    let phase2_futures: Vec<_> = phase2_keys
+        .iter()
+        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .collect();
+    results.extend(futures::future::join_all(phase2_futures).await);
     Ok(results)
-}
-
-// ── Split helper ───────────────────────────────────────────────────────────
-
-/// Split a flat vec of price entries by entity_id and store each group
-/// as a separate per-entity cache entry (e.g. `commodity_prices:42`).
-/// Invalidates old sub-entries first so stale entity IDs don't linger.
-fn store_prices_split(
-    cache: &CacheStore,
-    entries: &[PriceEntry],
-    collection: Collection,
-    ttl: i64,
-) -> Result<(), String> {
-    // Remove old sub-entries so entity IDs no longer in the API response don't
-    // cause the whole collection to appear stale.
-    cache.invalidate_collection(collection);
-
-    let mut groups: std::collections::HashMap<&str, Vec<PriceEntry>> = std::collections::HashMap::new();
-    for entry in entries {
-        groups.entry(&entry.entity_id).or_default().push(entry.clone());
-    }
-
-    let base_key = collection.storage_key();
-    let mut errors = Vec::new();
-    for (entity_id, group) in &groups {
-        let key = format!("{}:{}", base_key, entity_id);
-        if let Err(e) = cache.put(&key, ttl, group) {
-            errors.push(format!("{}: {}", key, e));
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors.join("; "))
-    }
-}
-
-/// Store entity infos as per-entity sub-keys (e.g. `entity_info:commodity:6`).
-fn store_entity_infos(
-    cache: &CacheStore,
-    infos: &[uex::EntityInfo],
-    ttl: i64,
-) -> Result<(), String> {
-    let base_key = Collection::EntityInfo.storage_key();
-    let mut errors = Vec::new();
-    for info in infos {
-        let key = format!("{}:{}:{}", base_key, info.kind, info.id);
-        if let Err(e) = cache.put(&key, ttl, info) {
-            errors.push(format!("{}: {}", key, e));
-        }
-    }
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors.join("; "))
-    }
-}
-
-/// Read entity IDs from a catalog collection in cache (Fresh or Stale).
-/// Returns an empty vec if the catalog is not cached yet.
-fn catalog_ids_from_cache(cache: &CacheStore, collection: Collection) -> Vec<String> {
-    let key = collection.storage_key();
-    match cache.get::<Vec<uex::UexResult>>(&key) {
-        CacheResult::Fresh(items) | CacheResult::Stale(items) => {
-            items.into_iter().map(|i| i.id).collect()
-        }
-        CacheResult::Missing => vec![],
-    }
 }
 
 /// Internal helper: refresh a collection by its storage key name.
@@ -176,212 +105,64 @@ pub(crate) async fn refresh_collection_by_name(
     state: &AppState,
     triggered_by: &str,
 ) -> CacheRefreshResult {
-    let client = &state.uex;
     let start = Instant::now();
 
-    let result = match name {
-        "commodities" => {
-            let ttl = Collection::Commodities.ttl_for(settings);
-            match uex::fetch_all_commodities(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed commodities: {} entries", data.len());
-                    state.cache.put(&Collection::Commodities.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
+    let provider = match providers::provider_for(name) {
+        Some(p) => p,
+        None => {
+            error!("Unknown collection: {}", name);
+            return CacheRefreshResult {
+                ok: false,
+                collection: name.to_string(),
+                error: Some(format!("Unknown collection: {}", name)),
+            };
         }
-        "vehicles" => {
-            let ttl = Collection::Vehicles.ttl_for(settings);
-            match uex::fetch_all_vehicles(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed vehicles: {} entries", data.len());
-                    state.cache.put(&Collection::Vehicles.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "items" => {
-            let ttl = Collection::Items.ttl_for(settings);
-            match uex::fetch_all_items(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed items: {} entries", data.len());
-                    state.cache.put(&Collection::Items.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "locations" => {
-            let ttl = Collection::Locations.ttl_for(settings);
-            match uex::fetch_all_locations(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed locations: {} entries", data.len());
-                    state.cache.put(&Collection::Locations.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "commodity_prices" => {
-            let ttl = Collection::CommodityPrices.ttl_for(settings);
-            let ids = catalog_ids_from_cache(&state.cache, Collection::Commodities);
-            if ids.is_empty() {
-                return CacheRefreshResult {
-                    ok: false,
-                    collection: name.to_string(),
-                    error: Some("Commodities not in cache; refresh commodities first".to_string()),
-                };
-            }
-            let data = uex::fetch_all_commodity_prices_per_entity(client, &ids, api_key).await;
-            info!("Refreshed commodity prices: {} rows across {} commodities", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::CommodityPrices, ttl)
-        }
-        "raw_commodity_prices" => {
-            let ttl = Collection::RawCommodityPrices.ttl_for(settings);
-            match uex::fetch_all_raw_commodity_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed raw commodity prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::RawCommodityPrices, ttl)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "item_prices" => {
-            let ttl = Collection::ItemPrices.ttl_for(settings);
-            match uex::fetch_all_item_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed item prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::ItemPrices, ttl)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "vehicle_purchase_prices" => {
-            let ttl = Collection::VehiclePurchasePrices.ttl_for(settings);
-            let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
-            if ids.is_empty() {
-                return CacheRefreshResult {
-                    ok: false,
-                    collection: name.to_string(),
-                    error: Some("Vehicles not in cache; refresh vehicles first".to_string()),
-                };
-            }
-            let data = uex::fetch_all_vehicle_purchase_prices_per_entity(client, &ids, api_key).await;
-            info!("Refreshed vehicle purchase prices: {} rows across {} vehicles", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::VehiclePurchasePrices, ttl)
-        }
-        "vehicle_rental_prices" => {
-            let ttl = Collection::VehicleRentalPrices.ttl_for(settings);
-            let ids = catalog_ids_from_cache(&state.cache, Collection::Vehicles);
-            if ids.is_empty() {
-                return CacheRefreshResult {
-                    ok: false,
-                    collection: name.to_string(),
-                    error: Some("Vehicles not in cache; refresh vehicles first".to_string()),
-                };
-            }
-            let data = uex::fetch_all_vehicle_rental_prices_per_entity(client, &ids, api_key).await;
-            info!("Refreshed vehicle rental prices: {} rows across {} vehicles", data.len(), ids.len());
-            store_prices_split(&state.cache, &data, Collection::VehicleRentalPrices, ttl)
-        }
-        "fuel_prices" => {
-            let ttl = Collection::FuelPrices.ttl_for(settings);
-            match uex::fetch_all_fuel_prices(client, api_key).await {
-                Ok(data) => {
-                    info!("Refreshed fuel prices: {} rows", data.len());
-                    store_prices_split(&state.cache, &data, Collection::FuelPrices, ttl)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "fleet" => {
-            if settings.uex_secret_key.is_empty() {
-                return CacheRefreshResult {
-                    ok: false,
-                    collection: name.to_string(),
-                    error: Some("UEX secret key not configured; skipping fleet refresh".to_string()),
-                };
-            }
-            let ttl = Collection::Fleet.ttl_for(settings);
-            match uex::fetch_fleet(client, api_key, &settings.uex_secret_key).await {
-                Ok(data) => {
-                    info!("Refreshed fleet: {} entries", data.len());
-                    state.cache.put(&Collection::Fleet.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "user_profile" => {
-            if settings.uex_secret_key.is_empty() {
-                return CacheRefreshResult {
-                    ok: false,
-                    collection: name.to_string(),
-                    error: Some("UEX secret key not configured; skipping user profile refresh".to_string()),
-                };
-            }
-            let ttl = Collection::UserProfile.ttl_for(settings);
-            match uex::fetch_user_profile(client, api_key, &settings.uex_secret_key).await {
-                Ok(data) => {
-                    info!("Refreshed user profile for '{}'", data.username);
-                    state.cache.put(&Collection::UserProfile.storage_key(), ttl, &data)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        "entity_info" => {
-            let ttl = Collection::EntityInfo.ttl_for(settings);
-            // Invalidate stale entries first
-            state.cache.invalidate_collection(Collection::EntityInfo);
-
-            let mut total = 0u32;
-            let mut errors = Vec::new();
-
-            match uex::fetch_all_commodity_infos(client, api_key).await {
-                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
-                Err(e) => errors.push(format!("commodities: {}", e)),
-            }
-            match uex::fetch_all_vehicle_infos(client, api_key).await {
-                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
-                Err(e) => errors.push(format!("vehicles: {}", e)),
-            }
-            match uex::fetch_all_item_infos(client, api_key).await {
-                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
-                Err(e) => errors.push(format!("items: {}", e)),
-            }
-
-            if errors.is_empty() {
-                info!("Refreshed entity info: {} entries", total);
-                Ok(())
-            } else {
-                Err(format!("Partial entity info refresh ({} ok): {}", total, errors.join("; ")))
-            }
-        }
-        _ => Err(format!("Unknown collection: {}", name)),
     };
+
+    if provider.requires_secret() && settings.uex_secret_key.is_empty() {
+        return CacheRefreshResult {
+            ok: false,
+            collection: name.to_string(),
+            error: Some(format!(
+                "UEX secret key not configured; skipping {} refresh",
+                name
+            )),
+        };
+    }
+
+    let secret = if settings.uex_secret_key.is_empty() {
+        None
+    } else {
+        Some(settings.uex_secret_key.as_str())
+    };
+
+    let ctx = RefreshContext {
+        client: &state.uex,
+        cache: &state.cache,
+        api_key,
+        secret_key: secret,
+        settings,
+    };
+
+    let result = provider.refresh(&ctx).await;
 
     let duration_ms = start.elapsed().as_millis() as u32;
-    let (ok, err_msg) = match &result {
-        Ok(()) => (true, None),
-        Err(e) => (false, Some(e.clone())),
-    };
-
-    let endpoint = match name {
-        "commodity_prices" => "/commodities_prices (per-entity)".to_string(),
-        "raw_commodity_prices" => "/commodities_raw_prices_all".to_string(),
-        "item_prices" => "/items_prices_all".to_string(),
-        "vehicle_purchase_prices" => "/vehicles_purchases_prices (per-entity)".to_string(),
-        "vehicle_rental_prices" => "/vehicles_rentals_prices (per-entity)".to_string(),
-        "fuel_prices" => "/fuel_prices_all".to_string(),
-        "commodities" => "/commodities".to_string(),
-        "vehicles" => "/vehicles".to_string(),
-        "items" => "/items (per-category)".to_string(),
-        "locations" => "/terminals".to_string(),
-        _ => format!("/{}", name),
+    let (ok, row_count, err_msg) = match &result {
+        Ok(count) => {
+            info!("Refreshed '{}': {} entries in {}ms", name, count, duration_ms);
+            (true, *count, None)
+        }
+        Err(e) => {
+            error!("Failed to refresh collection '{}': {}", name, e);
+            (false, 0, Some(e.clone()))
+        }
     };
 
     let event = FetchEvent {
         timestamp: chrono::Utc::now().to_rfc3339(),
         collection: name.to_string(),
-        endpoint,
-        row_count: 0, // not tracked here; per-collection count is logged above
+        endpoint: format!("/{}", name),
+        row_count,
         duration_ms,
         triggered_by: triggered_by.to_string(),
         ok,
@@ -391,40 +172,24 @@ pub(crate) async fn refresh_collection_by_name(
         log.push_fetch(event);
     }
 
-    match result {
-        Ok(()) => CacheRefreshResult {
-            ok: true,
-            collection: name.to_string(),
-            error: None,
-        },
-        Err(e) => {
-            error!("Failed to refresh collection '{}': {}", name, e);
-            CacheRefreshResult {
-                ok: false,
-                collection: name.to_string(),
-                error: Some(e),
-            }
-        }
+    CacheRefreshResult {
+        ok,
+        collection: name.to_string(),
+        error: err_msg,
     }
 }
 
 /// Public helper used by app_setup to prefetch all collections on startup.
-/// Catalog collections run first in parallel (prices depend on their IDs),
-/// then remaining collections run in parallel.
+/// Phase 1: providers with no dependencies, Phase 2: the rest.
 pub async fn prefetch_all(state: &AppState) {
     let settings = state.current_settings.lock().unwrap().clone();
+    let all = providers::all_providers();
 
-    // Catalog collections first (prices need their IDs for per-entity fetching).
-    let catalogs = [
-        Collection::Commodities,
-        Collection::Vehicles,
-        Collection::Items,
-        Collection::Locations,
-    ];
-    let catalog_keys: Vec<String> = catalogs
-        .iter()
-        .filter(|c| {
-            let key = c.storage_key();
+    // Phase 1: no-dependency providers (catalogs)
+    let phase1_keys: Vec<String> = all.iter()
+        .filter(|p| p.depends_on().is_empty())
+        .filter(|p| {
+            let key = p.collection().storage_key();
             if state.cache.is_expired(&key) {
                 true
             } else {
@@ -432,16 +197,16 @@ pub async fn prefetch_all(state: &AppState) {
                 false
             }
         })
-        .map(|c| c.storage_key())
+        .map(|p| p.collection().storage_key())
         .collect();
-    if !catalog_keys.is_empty() {
-        info!("Prefetching {} catalog collections in parallel: {}", catalog_keys.len(), catalog_keys.join(", "));
+    if !phase1_keys.is_empty() {
+        info!("Prefetching {} catalog collections in parallel: {}", phase1_keys.len(), phase1_keys.join(", "));
     }
-    let catalog_futures: Vec<_> = catalog_keys
+    let phase1_futures: Vec<_> = phase1_keys
         .iter()
         .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
         .collect();
-    for result in futures::future::join_all(catalog_futures).await {
+    for result in futures::future::join_all(phase1_futures).await {
         if !result.ok {
             if let Some(e) = &result.error {
                 error!("Prefetch failed for {}: {}", result.collection, e);
@@ -449,12 +214,11 @@ pub async fn prefetch_all(state: &AppState) {
         }
     }
 
-    // Remaining collections in parallel (prices, fleet, etc.)
-    let rest_keys: Vec<String> = Collection::all()
-        .iter()
-        .filter(|c| !catalogs.contains(c))
-        .filter(|c| {
-            let key = c.storage_key();
+    // Phase 2: dependent providers (prices, entity_info, secret-required, etc.)
+    let phase2_keys: Vec<String> = all.iter()
+        .filter(|p| !p.depends_on().is_empty())
+        .filter(|p| {
+            let key = p.collection().storage_key();
             if state.cache.is_expired(&key) {
                 true
             } else {
@@ -462,16 +226,16 @@ pub async fn prefetch_all(state: &AppState) {
                 false
             }
         })
-        .map(|c| c.storage_key())
+        .map(|p| p.collection().storage_key())
         .collect();
-    if !rest_keys.is_empty() {
-        info!("Prefetching {} remaining collections in parallel: {}", rest_keys.len(), rest_keys.join(", "));
+    if !phase2_keys.is_empty() {
+        info!("Prefetching {} remaining collections in parallel: {}", phase2_keys.len(), phase2_keys.join(", "));
     }
-    let rest_futures: Vec<_> = rest_keys
+    let phase2_futures: Vec<_> = phase2_keys
         .iter()
         .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
         .collect();
-    for result in futures::future::join_all(rest_futures).await {
+    for result in futures::future::join_all(phase2_futures).await {
         if !result.ok {
             if let Some(e) = &result.error {
                 error!("Prefetch failed for {}: {}", result.collection, e);

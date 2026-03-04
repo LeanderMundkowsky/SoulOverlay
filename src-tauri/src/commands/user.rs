@@ -2,8 +2,9 @@ use tauri::State;
 
 use crate::cache_store::{CacheResult, Collection};
 use crate::commands::api::ApiResponse;
+use crate::providers::user::fetch_user_profile;
 use crate::state::AppState;
-use crate::uex::{self, UexUserProfile};
+use crate::uex::types::UexUserProfile;
 
 /// Fetch the authenticated user's profile from UEX.
 /// Requires both `uex_api_key` and `uex_secret_key` to be configured.
@@ -39,7 +40,7 @@ pub async fn user_get_profile(
             let ak = api_key.clone();
             let sk = secret_key.clone();
             tokio::spawn(async move {
-                if let Ok(profile) = uex::fetch_user_profile(&uex, &ak, &sk).await {
+                if let Ok(profile) = fetch_user_profile(&uex, &ak, &sk).await {
                     let key = Collection::UserProfile.storage_key();
                     let _ = cache.put(&key, ttl, &profile);
                 }
@@ -52,7 +53,7 @@ pub async fn user_get_profile(
     }
 
     // No cache — fetch directly
-    match uex::fetch_user_profile(&state.uex, &api_key, &secret_key).await {
+    match fetch_user_profile(&state.uex, &api_key, &secret_key).await {
         Ok(profile) => {
             let _ = state.cache.put(&cache_key, ttl, &profile);
             Ok(ApiResponse::ok(profile))

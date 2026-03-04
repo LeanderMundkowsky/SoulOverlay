@@ -158,7 +158,7 @@ pub struct HangarVehicle {
 // ── Serde helpers ──────────────────────────────────────────────────────────
 
 /// Deserialize a field that may be a JSON number or a JSON string into a `String`.
-pub(crate) fn deserialize_flexible_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+pub fn deserialize_flexible_id<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -171,7 +171,7 @@ where
 }
 
 /// Deserialize a UEX boolean flag (0/1 integer) into `Option<bool>`.
-pub(crate) fn deserialize_bool_flag<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+pub fn deserialize_bool_flag<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -181,7 +181,7 @@ where
 
 /// Deserialize a field that may be absent/null/zero into `Option<f64>`,
 /// treating 0.0 as None.
-pub(crate) fn deserialize_positive_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+pub fn deserialize_positive_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -190,7 +190,7 @@ where
 }
 
 /// Deserialize a string field, returning None for empty strings.
-pub(crate) fn deserialize_nonempty_string<'de, D>(
+pub fn deserialize_nonempty_string<'de, D>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error>
 where
@@ -201,7 +201,7 @@ where
 }
 
 /// Extract a location string from star_system_name or planet_name.
-pub(crate) fn location_string(star_system: &Option<String>, planet: &Option<String>) -> String {
+pub fn location_string(star_system: &Option<String>, planet: &Option<String>) -> String {
     star_system
         .as_deref()
         .or(planet.as_deref())
@@ -210,7 +210,7 @@ pub(crate) fn location_string(star_system: &Option<String>, planet: &Option<Stri
 }
 
 /// Extract a timestamp string from date_modified/date_added fields.
-pub(crate) fn timestamp_string(date_modified: &Option<serde_json::Value>, date_added: &Option<serde_json::Value>) -> String {
+pub fn timestamp_string(date_modified: &Option<serde_json::Value>, date_added: &Option<serde_json::Value>) -> String {
     date_modified
         .as_ref()
         .or(date_added.as_ref())
