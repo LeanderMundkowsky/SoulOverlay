@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
-import CommodityPanel from "@/components/overlay/CommodityPanel.vue";
+import PricePanel from "@/components/overlay/PricePanel.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 import { useDetailsStore } from "@/stores/details";
 
@@ -28,7 +28,7 @@ const detailsStore = useDetailsStore();
 
       <!-- Price table -->
       <div class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
-        <CommodityPanel
+        <PricePanel
           :entity-id="detailsStore.currentEntity.id"
           :entity-name="detailsStore.currentEntity.name"
           :entity-kind="detailsStore.currentEntity.kind"

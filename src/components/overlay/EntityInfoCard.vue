@@ -5,6 +5,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
 import { useUex } from "@/composables/useUex";
 import { useFavoritesStore } from "@/stores/favorites";
+import { proxyImageUrl } from "@/utils/imageProxy";
 import type { EntityInfo } from "@/composables/useUex";
 
 const props = defineProps<{
@@ -105,24 +106,33 @@ function formatPrice(val: number): string {
 
     <!-- Vehicle info -->
     <template v-else-if="entityInfo && (entityInfo.kind === 'vehicle' || entityInfo.kind === 'ground vehicle')">
-      <div class="px-4 py-3 space-y-2">
-        <div class="flex items-center gap-2 flex-wrap text-xs">
-          <span class="text-white font-semibold text-sm">{{ entityInfo.name_full ?? entityInfo.name }}</span>
-          <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'Remove from favorites' : 'Add to favorites'">
-            <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind)" />
-          </button>
-          <span v-if="entityInfo.company_name" class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium">{{ entityInfo.company_name }}</span>
-          <span v-if="entityInfo.pad_type" class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/80">Pad {{ entityInfo.pad_type }}</span>
-        </div>
-        <div v-if="entityInfo.roles.length > 0" class="flex items-center gap-1.5 flex-wrap text-xs">
-          <span v-for="role in entityInfo.roles" :key="role" class="px-1.5 py-0.5 rounded bg-white/8 text-white/50">{{ role }}</span>
-        </div>
-        <div class="flex items-center gap-4 text-xs text-white/50">
-          <span v-if="entityInfo.scu">Cargo <span class="text-white/70">{{ entityInfo.scu }} SCU</span></span>
-          <span v-if="entityInfo.crew">Crew <span class="text-white/70">{{ entityInfo.crew }}</span></span>
-          <span v-if="entityInfo.mass">Mass <span class="text-white/70">{{ entityInfo.mass.toLocaleString() }} kg</span></span>
-          <span v-if="formatDimensions(entityInfo)">{{ formatDimensions(entityInfo) }}</span>
-          <span v-if="entityInfo.game_version" class="text-white/30">v{{ entityInfo.game_version }}</span>
+      <div class="relative overflow-hidden">
+        <img
+          v-if="entityInfo.url_photo"
+          :src="proxyImageUrl(entityInfo.url_photo)"
+          :alt="entityInfo.name"
+          class="absolute inset-0 w-full h-full object-cover"
+          @error="($event.target as HTMLImageElement).style.display = 'none'"
+        />
+        <div class="relative px-4 py-3 space-y-2 min-w-0" style="background: linear-gradient(to right, rgb(17 24 39 / 0.95) 50%, transparent)">
+          <div class="flex items-center gap-2 flex-wrap text-xs">
+            <span class="text-white font-semibold text-sm">{{ entityInfo.name_full ?? entityInfo.name }}</span>
+            <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind) ? 'Remove from favorites' : 'Add to favorites'">
+              <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityInfo.id, entityInfo.kind)" />
+            </button>
+            <span v-if="entityInfo.company_name" class="px-2 py-0.5 rounded bg-white/10 text-white/70 font-medium">{{ entityInfo.company_name }}</span>
+            <span v-if="entityInfo.pad_type" class="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/80">Pad {{ entityInfo.pad_type }}</span>
+          </div>
+          <div v-if="entityInfo.roles.length > 0" class="flex items-center gap-1.5 flex-wrap text-xs">
+            <span v-for="role in entityInfo.roles" :key="role" class="px-1.5 py-0.5 rounded bg-white/8 text-white/50">{{ role }}</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs text-white/50">
+            <span v-if="entityInfo.scu">Cargo <span class="text-white/70">{{ entityInfo.scu }} SCU</span></span>
+            <span v-if="entityInfo.crew">Crew <span class="text-white/70">{{ entityInfo.crew }}</span></span>
+            <span v-if="entityInfo.mass">Mass <span class="text-white/70">{{ entityInfo.mass.toLocaleString() }} kg</span></span>
+            <span v-if="formatDimensions(entityInfo)">{{ formatDimensions(entityInfo) }}</span>
+            <span v-if="entityInfo.game_version" class="text-white/30">v{{ entityInfo.game_version }}</span>
+          </div>
         </div>
       </div>
     </template>

@@ -38,7 +38,8 @@ export const useSettingsStore = defineStore("settings", () => {
     try {
       const result = await commands.saveSettings(newSettings);
       if (result.status === "error") throw result.error;
-      settings.value = { ...newSettings };
+      // Deep-clone via JSON round-trip to strip any nested reactive proxies
+      settings.value = JSON.parse(JSON.stringify(newSettings));
     } catch (e) {
       error.value = String(e);
       console.error("Failed to save settings:", e);

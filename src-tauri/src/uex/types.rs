@@ -123,6 +123,7 @@ pub struct HangarVehicle {
     pub is_hidden: bool,
     pub is_pledged: bool,
     pub date_added: String,
+    pub url_photo: Option<String>,
 }
 
 // ── Serde helpers ──────────────────────────────────────────────────────────

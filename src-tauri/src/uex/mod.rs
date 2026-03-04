@@ -21,7 +21,7 @@ pub use types::{EntityInfo, HangarVehicle, PriceEntry, UexResult};
 pub use vehicles::{
     fetch_all_vehicle_purchase_prices_per_entity,
     fetch_all_vehicle_rental_prices_per_entity,
-    fetch_all_vehicles, get_vehicle_info, search_vehicles,
+    fetch_all_vehicles, fetch_vehicle_photo_map, get_vehicle_info, search_vehicles,
 };
 
 /// Search a pre-fetched collection by name substring match.

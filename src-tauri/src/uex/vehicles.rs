@@ -449,3 +449,18 @@ pub async fn fetch_all_vehicle_rental_prices(
         .await?;
     Ok(dtos.iter().map(PriceEntry::from).collect())
 }
+
+/// Fetch a map of vehicle_id → url_photo for all vehicles.
+pub async fn fetch_vehicle_photo_map(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let dtos: Vec<VehicleDto> = client.get("/vehicles", &[], api_key).await?;
+    let mut map = std::collections::HashMap::new();
+    for dto in &dtos {
+        if let Some(ref url) = dto.url_photo {
+            map.insert(dto.id.clone(), url.clone());
+        }
+    }
+    Ok(map)
+}

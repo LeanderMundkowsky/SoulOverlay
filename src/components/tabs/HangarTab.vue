@@ -5,6 +5,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import { useHangarStore } from "@/stores/hangar";
 import { useSettingsStore } from "@/stores/settings";
 import { useDetailsStore } from "@/stores/details";
+import { proxyImageUrl } from "@/utils/imageProxy";
 
 const hangarStore = useHangarStore();
 const settingsStore = useSettingsStore();
@@ -110,8 +111,16 @@ function viewVehicle(idVehicle: string, modelName: string) {
         @click="viewVehicle(ship.id_vehicle, ship.model_name)"
       >
         <div class="flex items-start justify-between gap-4">
-          <!-- Left: ship info -->
-          <div class="min-w-0 flex-1">
+          <!-- Left: ship photo + info -->
+          <div class="flex items-start gap-3 min-w-0 flex-1">
+            <img
+              v-if="ship.url_photo"
+              :src="proxyImageUrl(ship.url_photo)"
+              :alt="ship.model_name"
+              class="w-20 h-14 object-cover rounded-lg shrink-0 bg-white/5"
+              @error="($event.target as HTMLImageElement).style.display = 'none'"
+            />
+            <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="text-white text-sm font-medium truncate">
                 {{ ship.model_name }}
@@ -135,6 +144,7 @@ function viewVehicle(idVehicle: string, modelName: string) {
             <div class="flex items-center gap-3 mt-1 text-white/30 text-xs">
               <span v-if="ship.serial">SN: {{ ship.serial }}</span>
               <span v-if="ship.organization_name">Org: {{ ship.organization_name }}</span>
+            </div>
             </div>
           </div>
 

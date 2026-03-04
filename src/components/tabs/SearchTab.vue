@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import SearchBar from "@/components/overlay/SearchBar.vue";
-import CommodityPanel from "@/components/overlay/CommodityPanel.vue";
+import PricePanel from "@/components/overlay/PricePanel.vue";
 import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
 import ResizeHandle from "@/components/ui/ResizeHandle.vue";
 import { useSettingsStore } from "@/stores/settings";
@@ -144,7 +144,7 @@ defineExpose({ focusInput, handleEsc });
 
           <!-- Prices card -->
           <div class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
-            <CommodityPanel
+            <PricePanel
               :entity-id="selectedResult.id"
               :entity-name="selectedResult.name"
               :entity-kind="selectedResult.kind"

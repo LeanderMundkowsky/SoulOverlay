@@ -414,7 +414,7 @@ export type GameState = { sc_detected: boolean }
 /**
  * A vehicle in the user's hangar/fleet from UEX API.
  */
-export type HangarVehicle = { id: string; id_vehicle: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; date_added: string }
+export type HangarVehicle = { id: string; id_vehicle: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; date_added: string; url_photo: string | null }
 /**
  * Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
  */

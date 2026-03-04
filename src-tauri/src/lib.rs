@@ -6,6 +6,7 @@ pub mod config;
 mod database;
 mod game_tracker;
 mod hotkey;
+mod image_proxy;
 mod log_watcher;
 mod logging;
 mod platform;
@@ -82,6 +83,12 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol("uex-img", |_ctx, request, responder| {
+            tauri::async_runtime::spawn(async move {
+                let response = image_proxy::fetch(request).await;
+                responder.respond(response);
+            });
+        })
         .manage(app_state)
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {

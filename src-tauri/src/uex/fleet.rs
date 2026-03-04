@@ -52,6 +52,7 @@ impl From<&FleetVehicleDto> for HangarVehicle {
             is_hidden: dto.is_hidden.unwrap_or(false),
             is_pledged: dto.is_pledged.unwrap_or(false),
             date_added: date,
+            url_photo: None,
         }
     }
 }
