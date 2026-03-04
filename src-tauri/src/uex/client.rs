@@ -44,6 +44,24 @@ impl UexClient {
         self.get_raw_inner(path, query, api_key, None).await
     }
 
+    /// Send a GET request with secret-key header and return the raw JSON body.
+    /// Checks the UEX `status` field for auth errors before returning.
+    pub(crate) async fn get_raw_with_secret(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        api_key: &str,
+        secret_key: &str,
+    ) -> Result<serde_json::Value, String> {
+        let body = self.get_raw_inner(path, query, api_key, Some(secret_key)).await?;
+        if let Some(status) = body.get("status").and_then(|v| v.as_str()) {
+            if status != "ok" {
+                return Err(format!("UEX API error: {}", status));
+            }
+        }
+        Ok(body)
+    }
+
     /// Send a GET request with both Bearer token and secret-key header.
     /// Checks the UEX `status` field for auth errors before parsing data.
     pub(crate) async fn get_with_secret<T: DeserializeOwned>(

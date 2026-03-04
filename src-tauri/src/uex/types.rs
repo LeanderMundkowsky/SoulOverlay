@@ -110,6 +110,35 @@ pub struct PriceEntry {
     pub is_buy_location: bool,
 }
 
+/// Authenticated user profile from the UEX API `GET /user` endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct UexUserProfile {
+    pub id: u32,
+    pub name: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub website_url: Option<String>,
+    pub timezone: Option<String>,
+    pub language: Option<String>,
+    pub discord_username: Option<String>,
+    pub twitch_username: Option<String>,
+    pub day_availability: Vec<String>,
+    pub time_availability: Vec<String>,
+    pub specializations: Vec<String>,
+    pub languages: Vec<String>,
+    pub archetypes: Vec<String>,
+    pub is_datarunner: bool,
+    pub is_datarunner_banned: bool,
+    pub is_staff: bool,
+    pub is_away_game: bool,
+    pub date_added: Option<String>,
+    pub date_modified: Option<String>,
+    pub date_rsi_verified: Option<String>,
+    pub date_twitch_verified: Option<String>,
+}
+
 /// A vehicle in the user's hangar/fleet from UEX API.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct HangarVehicle {

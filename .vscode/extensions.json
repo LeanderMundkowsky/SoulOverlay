@@ -4,6 +4,7 @@
     "vue.volar",
     "vadimcn.vscode-lldb",
     "bradlc.vscode-tailwindcss",
-    "tauri-apps.tauri-vscode"
+    "tauri-apps.tauri-vscode",
+    "cweijan.vscode-database-client2"
   ]
 }

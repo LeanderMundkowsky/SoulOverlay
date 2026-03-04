@@ -154,6 +154,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::favorites::remove_favorite,
             commands::favorites::is_favorite,
             commands::hangar::hangar_get_fleet,
+            commands::user::user_get_profile,
         ])
 }
 

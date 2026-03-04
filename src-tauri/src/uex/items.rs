@@ -194,6 +194,54 @@ pub async fn fetch_all_items(
     Ok(all_items)
 }
 
+/// Fetch ALL item EntityInfo from UEX by iterating over all item categories.
+/// Same fan-out strategy as `fetch_all_items` but returns full EntityInfo.
+pub async fn fetch_all_item_infos(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<EntityInfo>, String> {
+    let categories: Vec<CategoryDto> = client.get("/categories", &[], api_key).await?;
+    let category_ids: Vec<String> = categories
+        .into_iter()
+        .filter(|c| c.category_type.as_deref() == Some("item"))
+        .map(|c| c.id)
+        .collect();
+
+    let handles: Vec<_> = category_ids
+        .into_iter()
+        .map(|cat_id| {
+            let client = client.clone();
+            let key = api_key.to_string();
+            tokio::spawn(async move {
+                let dtos: Result<Vec<ItemDto>, String> = client
+                    .get("/items", &[("id_category", &cat_id)], &key)
+                    .await;
+                dtos
+            })
+        })
+        .collect();
+
+    let mut seen_ids = std::collections::HashSet::<String>::new();
+    let mut all_infos: Vec<EntityInfo> = Vec::new();
+
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(dtos)) => {
+                for dto in &dtos {
+                    if seen_ids.insert(dto.id.clone()) {
+                        all_infos.push(EntityInfo::from(dto));
+                    }
+                }
+            }
+            Ok(Err(e)) => log::warn!("Failed to fetch item infos for a category: {}", e),
+            Err(e) => log::warn!("Item info fetch task panicked: {}", e),
+        }
+    }
+
+    log::info!("Total item infos fetched: {}", all_infos.len());
+    Ok(all_infos)
+}
+
 /// Search UEX for items by query string.
 ///
 /// The `/items` endpoint does not support bare name search. This falls back to a

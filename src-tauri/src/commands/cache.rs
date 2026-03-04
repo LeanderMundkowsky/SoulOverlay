@@ -135,6 +135,27 @@ fn store_prices_split(
     }
 }
 
+/// Store entity infos as per-entity sub-keys (e.g. `entity_info:commodity:6`).
+fn store_entity_infos(
+    cache: &CacheStore,
+    infos: &[uex::EntityInfo],
+    ttl: i64,
+) -> Result<(), String> {
+    let base_key = Collection::EntityInfo.storage_key();
+    let mut errors = Vec::new();
+    for info in infos {
+        let key = format!("{}:{}:{}", base_key, info.kind, info.id);
+        if let Err(e) = cache.put(&key, ttl, info) {
+            errors.push(format!("{}: {}", key, e));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 /// Read entity IDs from a catalog collection in cache (Fresh or Stale).
 /// Returns an empty vec if the catalog is not cached yet.
 fn catalog_ids_from_cache(cache: &CacheStore, collection: Collection) -> Vec<String> {
@@ -286,6 +307,51 @@ pub(crate) async fn refresh_collection_by_name(
                     state.cache.put(&Collection::Fleet.storage_key(), ttl, &data)
                 }
                 Err(e) => Err(e),
+            }
+        }
+        "user_profile" => {
+            if settings.uex_secret_key.is_empty() {
+                return CacheRefreshResult {
+                    ok: false,
+                    collection: name.to_string(),
+                    error: Some("UEX secret key not configured; skipping user profile refresh".to_string()),
+                };
+            }
+            let ttl = Collection::UserProfile.ttl_for(settings);
+            match uex::fetch_user_profile(client, api_key, &settings.uex_secret_key).await {
+                Ok(data) => {
+                    info!("Refreshed user profile for '{}'", data.username);
+                    state.cache.put(&Collection::UserProfile.storage_key(), ttl, &data)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        "entity_info" => {
+            let ttl = Collection::EntityInfo.ttl_for(settings);
+            // Invalidate stale entries first
+            state.cache.invalidate_collection(Collection::EntityInfo);
+
+            let mut total = 0u32;
+            let mut errors = Vec::new();
+
+            match uex::fetch_all_commodity_infos(client, api_key).await {
+                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
+                Err(e) => errors.push(format!("commodities: {}", e)),
+            }
+            match uex::fetch_all_vehicle_infos(client, api_key).await {
+                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
+                Err(e) => errors.push(format!("vehicles: {}", e)),
+            }
+            match uex::fetch_all_item_infos(client, api_key).await {
+                Ok(infos) => { total += infos.len() as u32; if let Err(e) = store_entity_infos(&state.cache, &infos, ttl) { errors.push(e); } }
+                Err(e) => errors.push(format!("items: {}", e)),
+            }
+
+            if errors.is_empty() {
+                info!("Refreshed entity info: {} entries", total);
+                Ok(())
+            } else {
+                Err(format!("Partial entity info refresh ({} ok): {}", total, errors.join("; ")))
             }
         }
         _ => Err(format!("Unknown collection: {}", name)),

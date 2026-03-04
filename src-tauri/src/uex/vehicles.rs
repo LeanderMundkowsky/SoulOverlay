@@ -316,6 +316,15 @@ pub async fn fetch_all_vehicles(
     Ok(dtos.iter().map(UexResult::from).collect())
 }
 
+/// Fetch ALL vehicle EntityInfo from UEX.
+pub async fn fetch_all_vehicle_infos(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<EntityInfo>, String> {
+    let dtos: Vec<VehicleDto> = client.get("/vehicles", &[], api_key).await?;
+    Ok(dtos.iter().map(EntityInfo::from).collect())
+}
+
 /// Search UEX for vehicles by query string (direct API call, no cache).
 pub async fn search_vehicles(
     client: &UexClient,

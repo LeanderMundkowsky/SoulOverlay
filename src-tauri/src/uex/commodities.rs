@@ -236,6 +236,15 @@ pub async fn fetch_all_commodities(
     Ok(dtos.iter().map(UexResult::from).collect())
 }
 
+/// Fetch ALL commodity EntityInfo from UEX.
+pub async fn fetch_all_commodity_infos(
+    client: &UexClient,
+    api_key: &str,
+) -> Result<Vec<EntityInfo>, String> {
+    let dtos: Vec<CommodityDto> = client.get("/commodities", &[], api_key).await?;
+    Ok(dtos.iter().map(EntityInfo::from).collect())
+}
+
 /// Search UEX for commodities by query string (direct API call, no cache).
 pub async fn search_commodities(
     client: &UexClient,

@@ -9,6 +9,7 @@ import IconUsers from "@/components/icons/IconUsers.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import IconSun from "@/components/icons/IconSun.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
+import IconUser from "@/components/icons/IconUser.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
 
 interface Tab {
@@ -23,6 +24,8 @@ defineProps<{
   activeTab: string;
   scDetected: boolean;
   showFavorites: boolean;
+  isAuthenticated: boolean;
+  userAvatarUrl: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -138,7 +141,7 @@ function handleTab(tab: Tab) {
     </div>
 
     <!-- SC status indicator -->
-    <div class="flex items-center pr-5 flex-shrink-0">
+    <div class="flex items-center pr-3 flex-shrink-0">
       <div
         class="flex items-center gap-1.5 text-xs"
         :class="scDetected ? 'text-green-400' : 'text-yellow-400/70'"
@@ -148,6 +151,37 @@ function handleTab(tab: Tab) {
           :class="scDetected ? 'bg-green-400' : 'bg-yellow-400/70'"
         ></span>
         <span class="whitespace-nowrap">{{ scDetected ? "SC" : "No SC" }}</span>
+      </div>
+    </div>
+
+    <!-- User profile icon -->
+    <div
+      class="flex items-center pr-5 flex-shrink-0 cursor-pointer"
+      :class="isAuthenticated ? 'opacity-100' : 'opacity-30 cursor-not-allowed'"
+      :title="isAuthenticated ? 'View profile' : 'Set API key & secret key in Settings to view profile'"
+      @click="isAuthenticated && emit('update:activeTab', 'profile')"
+    >
+      <div
+        class="relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center transition-all"
+        :class="[
+          activeTab === 'profile' ? 'ring-2 ring-blue-500' : '',
+          isAuthenticated ? 'hover:ring-2 hover:ring-white/30' : '',
+        ]"
+      >
+        <img
+          v-if="isAuthenticated && userAvatarUrl"
+          :src="userAvatarUrl"
+          alt="Profile"
+          class="w-full h-full object-cover"
+          @error="($event.target as HTMLImageElement).style.display = 'none'"
+        />
+        <IconUser
+          v-else
+          class="w-4 h-4"
+          :class="isAuthenticated
+            ? (activeTab === 'profile' ? 'text-white' : 'text-white/50 hover:text-white/80')
+            : 'text-white/30'"
+        />
       </div>
     </div>
   </div>

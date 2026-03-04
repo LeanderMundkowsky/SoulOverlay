@@ -91,7 +91,9 @@ async fn search_cached_or_fetch(
                 | Collection::VehiclePurchasePrices
                 | Collection::VehicleRentalPrices
                 | Collection::FuelPrices
-                | Collection::Fleet => return Err("Use specific price commands".to_string()),
+                | Collection::Fleet
+                | Collection::UserProfile
+                | Collection::EntityInfo => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }
@@ -348,10 +350,8 @@ pub async fn api_fuel_prices(
 
 // ── Entity info endpoint ──────────────────────────────────────────────────
 
-const ENTITY_INFO_TTL_SECS: i64 = 86400; // 24 hours
-
-/// Fetch detailed entity metadata by kind and id.
-/// Caches results for 24 hours under `entity_info:{kind}:{id}`.
+/// Fetch detailed entity metadata by kind and id from the cache.
+/// Entity info is bulk-fetched at startup and refreshed by the background timer.
 #[tauri::command]
 #[specta::specta]
 pub async fn api_entity_info(
@@ -363,51 +363,14 @@ pub async fn api_entity_info(
         return Ok(ApiResponse::err("entity_id must not be empty"));
     }
 
-    let cache_key = format!("entity_info:{}:{}", kind, entity_id);
+    let cache_key = Collection::EntityInfo.storage_key_with_id(&format!("{}:{}", kind, entity_id));
 
-    // Check cache — verify the cached entity's id matches to guard against
-    // stale entries left by earlier code that stored the wrong entity.
     match state.cache.get::<EntityInfo>(&cache_key) {
-        CacheResult::Fresh(info) if info.id == entity_id => return Ok(ApiResponse::ok(info)),
-        CacheResult::Stale(info) if info.id == entity_id => return Ok(ApiResponse::ok_stale(info)),
-        CacheResult::Fresh(_) | CacheResult::Stale(_) => {
-            log::warn!("Entity info cache mismatch for key '{}', invalidating", cache_key);
-            state.cache.invalidate(&cache_key);
-        }
-        CacheResult::Missing => {}
-    }
-
-    let key = api_key(&state);
-
-    let result = match kind.as_str() {
-        "commodity" => uex::get_commodity_info(&state.uex, &entity_id, &key).await,
-        "vehicle" | "ground vehicle" => uex::get_vehicle_info(&state.uex, &entity_id, &key).await,
-        "item" => {
-            // Items require uuid; look it up from the cached items collection
-            let items_key = Collection::Items.storage_key();
-            let uuid = match state.cache.get::<Vec<UexResult>>(&items_key) {
-                CacheResult::Fresh(items) | CacheResult::Stale(items) => {
-                    items.iter()
-                        .find(|i| i.id == entity_id)
-                        .map(|i| i.uuid.clone())
-                        .unwrap_or_default()
-                }
-                CacheResult::Missing => String::new(),
-            };
-            if uuid.is_empty() {
-                Err(format!("Item {} uuid not available in cache", entity_id))
-            } else {
-                uex::get_item_info(&state.uex, &uuid, &key).await
-            }
-        }
-        _ => Err(format!("Entity info not supported for kind: {}", kind)),
-    };
-
-    match result {
-        Ok(info) => {
-            let _ = state.cache.put(&cache_key, ENTITY_INFO_TTL_SECS, &info);
-            Ok(ApiResponse::ok(info))
-        }
-        Err(e) => Ok(ApiResponse::err(e)),
+        CacheResult::Fresh(info) if info.id == entity_id => Ok(ApiResponse::ok(info)),
+        CacheResult::Stale(info) if info.id == entity_id => Ok(ApiResponse::ok_stale(info)),
+        _ => Ok(ApiResponse::err(format!(
+            "Entity info for {} {} not in cache. Wait for cache to finish loading.",
+            kind, entity_id
+        ))),
     }
 }

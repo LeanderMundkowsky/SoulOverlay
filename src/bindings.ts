@@ -133,8 +133,8 @@ async apiFuelPrices(terminalId: string) : Promise<Result<ApiResponse<PriceEntry[
 }
 },
 /**
- * Fetch detailed entity metadata by kind and id.
- * Caches results for 24 hours under `entity_info:{kind}:{id}`.
+ * Fetch detailed entity metadata by kind and id from the cache.
+ * Entity info is bulk-fetched at startup and refreshed by the background timer.
  */
 async apiEntityInfo(kind: string, entityId: string) : Promise<Result<ApiResponse<EntityInfo>, string>> {
     try {
@@ -312,6 +312,18 @@ async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Fetch the authenticated user's profile from UEX.
+ * Requires both `uex_api_key` and `uex_secret_key` to be configured.
+ */
+async userGetProfile() : Promise<Result<ApiResponse<UexUserProfile>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("user_get_profile") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -345,7 +357,7 @@ export type CacheRefreshResult = { ok: boolean; collection: string; error: strin
 /**
  * Known collection names used as cache keys.
  */
-export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet"
+export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info"
 /**
  * Per-collection debug status (CollectionStatus extended with is_refreshing + expires_at).
  */
@@ -529,6 +541,10 @@ export type UexResult = { id: string; name: string; kind: string; slug: string;
  * UUID (items only). Used to fetch item details from the UEX API.
  */
 uuid?: string }
+/**
+ * Authenticated user profile from the UEX API `GET /user` endpoint.
+ */
+export type UexUserProfile = { id: number; name: string; username: string; email: string | null; avatar: string | null; bio: string | null; website_url: string | null; timezone: string | null; language: string | null; discord_username: string | null; twitch_username: string | null; day_availability: string[]; time_availability: string[]; specializations: string[]; languages: string[]; archetypes: string[]; is_datarunner: boolean; is_datarunner_banned: boolean; is_staff: boolean; is_away_game: boolean; date_added: string | null; date_modified: string | null; date_rsi_verified: string | null; date_twitch_verified: string | null }
 
 /** tauri-specta globals **/
 

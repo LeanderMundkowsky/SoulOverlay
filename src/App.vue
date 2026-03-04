@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { commands } from "@/bindings";
 import TabBar from "./components/layout/TabBar.vue";
 import StatusBar from "./components/layout/StatusBar.vue";
@@ -7,6 +7,7 @@ import SearchTab from "./components/tabs/SearchTab.vue";
 import DetailsTab from "./components/tabs/DetailsTab.vue";
 import InventoryTab from "./components/tabs/InventoryTab.vue";
 import HangarTab from "./components/tabs/HangarTab.vue";
+import ProfileTab from "./components/tabs/ProfileTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
@@ -17,6 +18,7 @@ import { useGameStore } from "./stores/game";
 import { useSettingsStore } from "./stores/settings";
 import { useFavoritesStore } from "./stores/favorites";
 import { useDetailsStore } from "./stores/details";
+import { useUserStore } from "./stores/user";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
@@ -25,6 +27,7 @@ const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
 const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
+const userStore = useUserStore();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
@@ -32,6 +35,16 @@ const showKeybinds = ref(false);
 const showFavorites = ref(true);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
+
+const isAuthenticated = computed(() =>
+  settingsStore.settings.uex_api_key.length > 0 &&
+  settingsStore.settings.uex_secret_key.length > 0
+);
+const userAvatarUrl = computed(() => {
+  const avatar = userStore.profile?.avatar;
+  if (!avatar) return null;
+  return avatar.replace(/^https?:\/\//, "http://uex-img.localhost/");
+});
 
 // Panel widths — loaded from settings, updated on drag
 const leftPanelPx = ref(280);
@@ -213,6 +226,8 @@ function onToggleDebug() {
       <TabBar :active-tab="activeTab"
         :sc-detected="scDetected"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+        :is-authenticated="isAuthenticated"
+        :user-avatar-url="userAvatarUrl"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
@@ -246,8 +261,9 @@ function onToggleDebug() {
           <DetailsTab v-show="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <HangarTab v-show="activeTab === 'hangar'" />
+          <ProfileTab v-show="activeTab === 'profile'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar'" />
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'profile'" />
         </div>
 
         <!-- Keybinds side panel (left of settings) -->

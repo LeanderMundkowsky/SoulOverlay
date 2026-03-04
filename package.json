@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "flush-cache": "node scripts/flush-cache.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
@@ -21,6 +22,7 @@
     "@tauri-apps/cli": "^2.10.0",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vue/devtools": "^8.0.7",
+    "better-sqlite3": "^12.6.2",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
