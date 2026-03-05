@@ -33,7 +33,7 @@ const groups: GroupConfig[] = [
 ];
 
 function onPointerEnter() {
-  if (dragging.value) dragOver.value = true;
+  if (dragging.value && payload.value?.type === "entity") dragOver.value = true;
 }
 
 function onPointerLeave() {
@@ -42,7 +42,8 @@ function onPointerLeave() {
 
 function onPointerUp() {
   if (!dragging.value || !payload.value) return;
-  const entity = payload.value;
+  if (payload.value.type !== "entity") return;
+  const entity = payload.value.data;
   if (!favoritesStore.isFavorite(entity.id, entity.kind)) {
     favoritesStore.addFavorite(entity);
   }

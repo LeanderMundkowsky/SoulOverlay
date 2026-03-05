@@ -32,6 +32,7 @@ const detailsStore = useDetailsStore();
           :entity-id="detailsStore.currentEntity.id"
           :entity-name="detailsStore.currentEntity.name"
           :entity-kind="detailsStore.currentEntity.kind"
+          :entity-slug="detailsStore.currentEntity.slug ?? ''"
           @close="detailsStore.clear()"
         />
       </div>

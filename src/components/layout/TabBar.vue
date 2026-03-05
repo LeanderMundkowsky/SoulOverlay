@@ -11,6 +11,7 @@ import IconSun from "@/components/icons/IconSun.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 import IconUser from "@/components/icons/IconUser.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
+import IconEye from "@/components/icons/IconEye.vue";
 
 interface Tab {
   id: string;
@@ -24,6 +25,7 @@ defineProps<{
   activeTab: string;
   scDetected: boolean;
   showFavorites: boolean;
+  showWatchlist: boolean;
   isAuthenticated: boolean;
   userAvatarUrl: string | null;
 }>();
@@ -34,6 +36,7 @@ const emit = defineEmits<{
   (e: "toggle-settings"): void;
   (e: "toggle-debug"): void;
   (e: "toggle-favorites"): void;
+  (e: "toggle-watchlist"): void;
 }>();
 
 const tabs: Tab[] = [
@@ -67,15 +70,29 @@ function handleTab(tab: Tab) {
   <div class="flex-shrink-0 flex items-stretch bg-[#111318] border-b border-white/10 select-none">
     <!-- Favorites toggle (far left) -->
     <div
-      class="flex items-center pl-5 flex-shrink-0 cursor-pointer"
-      @click="emit('toggle-favorites')"
-      title="Toggle favorites panel"
+      class="flex items-center pl-5 gap-3 flex-shrink-0"
     >
-      <IconHeart
-        :filled="showFavorites"
-        class="w-4 h-4 transition-colors"
-        :class="showFavorites ? 'text-red-400' : 'text-white/30 hover:text-red-400'"
-      />
+      <div
+        class="cursor-pointer"
+        @click="emit('toggle-favorites')"
+        title="Toggle favorites panel"
+      >
+        <IconHeart
+          :filled="showFavorites"
+          class="w-4 h-4 transition-colors"
+          :class="showFavorites ? 'text-red-400' : 'text-white/30 hover:text-red-400'"
+        />
+      </div>
+      <div
+        class="cursor-pointer"
+        @click="emit('toggle-watchlist')"
+        title="Toggle watch list panel"
+      >
+        <IconEye
+          class="w-4 h-4 transition-colors"
+          :class="showWatchlist ? 'text-blue-400' : 'text-white/30 hover:text-blue-400'"
+        />
+      </div>
     </div>
 
     <!-- Centered tab list -->

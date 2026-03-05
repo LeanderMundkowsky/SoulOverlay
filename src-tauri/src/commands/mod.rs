@@ -7,3 +7,4 @@ pub mod overlay;
 pub mod settings;
 pub mod uex;
 pub mod user;
+pub mod watchlist;

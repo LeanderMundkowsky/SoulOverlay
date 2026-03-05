@@ -6,7 +6,7 @@ import SearchResultRow from "@/components/overlay/SearchResultRow.vue";
 import { useUex, type UexResult } from "@/composables/useUex";
 
 const emit = defineEmits<{
-  (e: "select", result: { id: string; name: string; kind: string }): void;
+  (e: "select", result: { id: string; name: string; kind: string; slug?: string }): void;
 }>();
 
 const query = ref("");
@@ -32,7 +32,7 @@ watch(query, (val) => {
 });
 
 function selectResult(result: UexResult) {
-  emit("select", { id: result.id, name: result.name, kind: result.kind });
+  emit("select", { id: result.id, name: result.name, kind: result.kind, slug: result.slug });
 }
 
 function onInputKeydown(e: KeyboardEvent) {

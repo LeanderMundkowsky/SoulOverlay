@@ -8,24 +8,41 @@ export interface DragEntity {
   uuid?: string;
 }
 
-const payload = ref<DragEntity | null>(null);
+export interface DragPrice {
+  entityId: string;
+  entityName: string;
+  entityKind: string;
+  entitySlug: string;
+  terminalId: string;
+  terminalName: string;
+  priceType: string;
+}
+
+export type DragPayload =
+  | { type: "entity"; data: DragEntity }
+  | { type: "price"; data: DragPrice };
+
+const payload = ref<DragPayload | null>(null);
 const dragging = ref(false);
 const ghostX = ref(0);
 const ghostY = ref(0);
+const ghostLabel = ref("");
 
 const DRAG_THRESHOLD = 6; // px before drag starts
 
 let startX = 0;
 let startY = 0;
-let pending: DragEntity | null = null;
+let pendingPayload: DragPayload | null = null;
+let pendingLabel = "";
 
 function onPointerMove(e: PointerEvent) {
-  if (pending && !dragging.value) {
+  if (pendingPayload && !dragging.value) {
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     if (Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
       dragging.value = true;
-      payload.value = pending;
+      payload.value = pendingPayload;
+      ghostLabel.value = pendingLabel;
     }
   }
   if (dragging.value) {
@@ -35,24 +52,33 @@ function onPointerMove(e: PointerEvent) {
 }
 
 function onPointerUp() {
-  // Drop is handled by the target's pointerup; this just cleans up.
-  // Use a microtask so the drop target's pointerup fires first.
   queueMicrotask(() => {
     dragging.value = false;
     payload.value = null;
-    pending = null;
+    ghostLabel.value = "";
+    pendingPayload = null;
   });
   document.removeEventListener("pointermove", onPointerMove);
   document.removeEventListener("pointerup", onPointerUp);
 }
 
-/** Call from a search-result row's pointerdown handler. */
-export function startDrag(e: PointerEvent, entity: DragEntity) {
-  pending = entity;
+function beginDrag(e: PointerEvent, p: DragPayload, label: string) {
+  pendingPayload = p;
+  pendingLabel = label;
   startX = e.clientX;
   startY = e.clientY;
   document.addEventListener("pointermove", onPointerMove);
   document.addEventListener("pointerup", onPointerUp);
+}
+
+/** Drag a search result entity (for favorites). */
+export function startDrag(e: PointerEvent, entity: DragEntity) {
+  beginDrag(e, { type: "entity", data: entity }, entity.name);
+}
+
+/** Drag a price entry (for watch list). */
+export function startPriceDrag(e: PointerEvent, price: DragPrice) {
+  beginDrag(e, { type: "price", data: price }, `${price.entityName} @ ${price.terminalName}`);
 }
 
 export function useDragDrop() {
@@ -61,5 +87,6 @@ export function useDragDrop() {
     dragging: readonly(dragging),
     ghostX: readonly(ghostX),
     ghostY: readonly(ghostY),
+    ghostLabel: readonly(ghostLabel),
   };
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { commands } from "@/bindings";
+import type { WatchEntry } from "@/bindings";
 import TabBar from "./components/layout/TabBar.vue";
 import StatusBar from "./components/layout/StatusBar.vue";
 import SearchTab from "./components/tabs/SearchTab.vue";
@@ -10,6 +11,7 @@ import HangarTab from "./components/tabs/HangarTab.vue";
 import ProfileTab from "./components/tabs/ProfileTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
+import WatchListPanel from "./components/overlay/WatchListPanel.vue";
 import SettingsPanel from "./components/panels/SettingsPanel.vue";
 import DebugPanel from "./components/panels/DebugPanel.vue";
 import ResizeHandle from "./components/ui/ResizeHandle.vue";
@@ -19,6 +21,7 @@ import { useSettingsStore } from "./stores/settings";
 import { useFavoritesStore } from "./stores/favorites";
 import { useDetailsStore } from "./stores/details";
 import { useUserStore } from "./stores/user";
+import { useWatchlistStore } from "./stores/watchlist";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
@@ -29,12 +32,14 @@ const settingsStore = useSettingsStore();
 const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
 const userStore = useUserStore();
-const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY } = useDragDrop();
+const watchlistStore = useWatchlistStore();
+const { dragging: isDragActive, ghostX, ghostY, ghostLabel } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
 const showKeybinds = ref(false);
 const showFavorites = ref(true);
+const showWatchlist = ref(false);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
 
@@ -105,6 +110,7 @@ onMounted(async () => {
   settingsPanelPx.value = settingsStore.settings.layout_widths.settings_panel_px;
   document.documentElement.style.fontSize = settingsStore.settings.font_size + "px";
   await favoritesStore.loadFavorites();
+  await watchlistStore.loadWatchlist();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
 });
@@ -222,6 +228,26 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
     detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid };
   }
 }
+
+function onWatchSelect(entry: WatchEntry) {
+  const entity = { id: entry.entity_id, name: entry.entity_name, kind: entry.entity_kind, slug: entry.entity_slug };
+  watchlistStore.highlightTarget = { terminalId: entry.terminal_id, priceType: entry.price_type };
+  if (activeTab.value === "search") {
+    searchTabRef.value?.selectEntity(entity);
+  } else {
+    detailsStore.currentEntity = { ...entity, uuid: "" };
+  }
+}
+
+function onToggleFavorites() {
+  showFavorites.value = !showFavorites.value;
+  if (showFavorites.value) showWatchlist.value = false;
+}
+
+function onToggleWatchlist() {
+  showWatchlist.value = !showWatchlist.value;
+  if (showWatchlist.value) showFavorites.value = false;
+}
 </script>
 
 <template>
@@ -236,26 +262,32 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
       <TabBar :active-tab="activeTab"
         :sc-detected="scDetected"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
+        :show-watchlist="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
         :is-authenticated="isAuthenticated"
         :user-avatar-url="userAvatarUrl"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
         @toggle-debug="onToggleDebug"
-        @toggle-favorites="showFavorites = !showFavorites" />
+        @toggle-favorites="onToggleFavorites"
+        @toggle-watchlist="onToggleWatchlist" />
 
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
-        <!-- Left column: Favorites + Debug stacked -->
+        <!-- Left column: Favorites / Watch list + Debug stacked -->
         <Transition name="slide-left">
           <div
-            v-if="showDebug || (showFavorites && (activeTab === 'search' || activeTab === 'details'))"
+            v-if="showDebug || ((showFavorites || showWatchlist) && (activeTab === 'search' || activeTab === 'details'))"
             class="relative shrink-0 flex flex-col gap-4 py-4 pl-4"
             :style="{ width: leftPanelPx + 'px', '--panel-w': leftPanelPx + 'px' }">
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
               class="flex-1 min-h-0"
               @select="onFavoriteSelect" />
+            <WatchListPanel
+              v-if="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
+              class="flex-1 min-h-0"
+              @select="onWatchSelect" />
             <DebugPanel v-if="showDebug"
               class="flex-1 min-h-0"
               @close="showDebug = false" />
@@ -308,11 +340,11 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
 
     <!-- Drag ghost -->
     <div
-      v-if="isDragActive && dragPayload"
+      v-if="isDragActive && ghostLabel"
       class="fixed z-[9999] pointer-events-none px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-200 text-xs font-medium whitespace-nowrap backdrop-blur-sm"
       :style="{ left: ghostX + 12 + 'px', top: ghostY + 12 + 'px' }"
     >
-      {{ dragPayload.name }}
+      {{ ghostLabel }}
     </div>
   </div>
 </template>

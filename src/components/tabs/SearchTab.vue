@@ -15,6 +15,7 @@ interface SelectedResult {
   id: string;
   name: string;
   kind: string;
+  slug?: string;
 }
 
 const settingsStore = useSettingsStore();
@@ -152,6 +153,7 @@ defineExpose({ focusInput, handleEsc, selectEntity });
               :entity-id="selectedResult.id"
               :entity-name="selectedResult.name"
               :entity-kind="selectedResult.kind"
+              :entity-slug="selectedResult.slug ?? ''"
               @close="selectedResult = null"
             />
           </div>

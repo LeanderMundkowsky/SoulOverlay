@@ -43,6 +43,20 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
             );
             CREATE UNIQUE INDEX idx_favorites_kind_id ON favorites(kind, id);",
         ),
+        // v3: watch_list table for tracked price entries
+        M::up(
+            "CREATE TABLE IF NOT EXISTS watch_list (
+                entity_id      TEXT NOT NULL,
+                entity_name    TEXT NOT NULL,
+                entity_kind    TEXT NOT NULL,
+                entity_slug    TEXT NOT NULL DEFAULT '',
+                terminal_id    TEXT NOT NULL,
+                terminal_name  TEXT NOT NULL,
+                price_type     TEXT NOT NULL,
+                added_at       TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_watch_list_key ON watch_list(entity_id, terminal_id, price_type);",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

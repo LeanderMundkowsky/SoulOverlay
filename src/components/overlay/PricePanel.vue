@@ -11,6 +11,7 @@ const props = defineProps<{
   entityId: string;
   entityName: string;
   entityKind: string;
+  entitySlug?: string;
 }>();
 
 const emit = defineEmits<{
@@ -83,6 +84,10 @@ watch(() => props.entityId, () => { fetchPrices(); });
       v-else-if="hasData() && hasRichData"
       :buy-entries="buyEntries"
       :sell-entries="sellEntries"
+      :entity-id="entityId"
+      :entity-name="entityName"
+      :entity-kind="entityKind"
+      :entity-slug="entitySlug"
     />
 
     <!-- Simple data (vehicle/item/fuel) -->

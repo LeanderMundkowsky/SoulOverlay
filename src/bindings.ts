@@ -324,6 +324,30 @@ async userGetProfile() : Promise<Result<ApiResponse<UexUserProfile>, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getWatchlist() : Promise<Result<WatchEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_watchlist") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addWatchEntry(entityId: string, entityName: string, entityKind: string, entitySlug: string, terminalId: string, terminalName: string, priceType: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_watch_entry", { entityId, entityName, entityKind, entitySlug, terminalId, terminalName, priceType }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeWatchEntry(entityId: string, terminalId: string, priceType: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_watch_entry", { entityId, terminalId, priceType }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -545,6 +569,7 @@ uuid?: string }
  * Authenticated user profile from the UEX API `GET /user` endpoint.
  */
 export type UexUserProfile = { id: number; name: string; username: string; email: string | null; avatar: string | null; bio: string | null; website_url: string | null; timezone: string | null; language: string | null; discord_username: string | null; twitch_username: string | null; day_availability: string[]; time_availability: string[]; specializations: string[]; languages: string[]; archetypes: string[]; is_datarunner: boolean; is_datarunner_banned: boolean; is_staff: boolean; is_away_game: boolean; date_added: string | null; date_modified: string | null; date_rsi_verified: string | null; date_twitch_verified: string | null }
+export type WatchEntry = { entity_id: string; entity_name: string; entity_kind: string; entity_slug: string; terminal_id: string; terminal_name: string; price_type: string; added_at: string }
 
 /** tauri-specta globals **/
 
