@@ -22,6 +22,7 @@ interface SelectedResult {
 const settingsStore = useSettingsStore();
 const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null);
 const selectedResult = ref<SelectedResult | null>(null);
+const pinnedLocation = ref<SelectedResult | null>(null);
 const searchSplitPct = ref(50);  // width when detail panel is open
 const searchSoloPct = ref(50);   // width when search is the only panel
 const mainAreaRef = ref<HTMLElement | null>(null);
@@ -84,6 +85,14 @@ function onResultSelected(result: SelectedResult) {
   selectedResult.value = result;
 }
 
+function onPinLocation(result: SelectedResult) {
+  pinnedLocation.value = result;
+}
+
+function onUnpinLocation() {
+  pinnedLocation.value = null;
+}
+
 function selectEntity(entity: { id: string; name: string; kind: string }) {
   selectedResult.value = entity;
 }
@@ -126,7 +135,7 @@ defineExpose({ focusInput, handleEsc, selectEntity });
           transition: isDragging ? 'none' : 'margin-left 0.3s ease, margin-right 0.3s ease',
         }"
       >
-        <SearchBar ref="searchBarRef" @select="onResultSelected" />
+        <SearchBar ref="searchBarRef" :pinned-location="pinnedLocation" @select="onResultSelected" @pin="onPinLocation" @unpin="onUnpinLocation" />
         <ResizeHandle
           :default-px="0"
           @resize="(px) => onSearchResize(mainAreaRef, px)"
@@ -155,6 +164,7 @@ defineExpose({ focusInput, handleEsc, selectEntity });
               :entity-name="selectedResult.name"
               :entity-kind="selectedResult.kind"
               :entity-slug="selectedResult.slug ?? ''"
+              :pinned-location="pinnedLocation"
               :active="props.active"
               @close="selectedResult = null"
             />

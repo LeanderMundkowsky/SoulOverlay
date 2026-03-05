@@ -1,19 +1,47 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
+import IconMapPin from "@/components/icons/IconMapPin.vue";
+import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import SearchResultRow from "@/components/overlay/SearchResultRow.vue";
 import { useUex, type UexResult } from "@/composables/useUex";
+import { useSettingsStore } from "@/stores/settings";
+import { matchesHotkey } from "@/composables/useHotkeyMatch";
+
+interface PinnedLocation {
+  id: string;
+  name: string;
+  kind: string;
+  slug?: string;
+}
+
+const props = defineProps<{
+  pinnedLocation: PinnedLocation | null;
+}>();
 
 const emit = defineEmits<{
   (e: "select", result: { id: string; name: string; kind: string; slug?: string }): void;
+  (e: "pin", result: { id: string; name: string; kind: string; slug?: string }): void;
+  (e: "unpin"): void;
 }>();
 
+const settingsStore = useSettingsStore();
 const query = ref("");
 const { loading, error, results, total, stale, search } = useUex();
 const activeIndex = ref(-1);
 const inputEl = ref<HTMLInputElement | null>(null);
 const rowRefs = ref<InstanceType<typeof SearchResultRow>[]>([]);
+
+const pinnedDisplayName = computed(() => {
+  if (!props.pinnedLocation) return "";
+  return props.pinnedLocation.name.replace(/^\[.*?\]\s*/, "");
+});
+
+const placeholderText = computed(() => {
+  if (props.pinnedLocation) return `Search within ${pinnedDisplayName.value}…`;
+  return "Search commodities, vehicles, items, locations…";
+});
 
 onMounted(() => {
   inputEl.value?.focus();
@@ -35,7 +63,26 @@ function selectResult(result: UexResult) {
   emit("select", { id: result.id, name: result.name, kind: result.kind, slug: result.slug });
 }
 
+function pinResult(result: UexResult) {
+  emit("pin", { id: result.id, name: result.name, kind: result.kind, slug: result.slug });
+}
+
+function tryPinToggle(e: KeyboardEvent, activeResult?: UexResult): boolean {
+  const hotkey = settingsStore.settings.keybinds.pin_location;
+  if (!matchesHotkey(e, hotkey)) return false;
+  e.preventDefault();
+  if (props.pinnedLocation) {
+    emit("unpin");
+  } else if (activeResult && activeResult.kind === "location") {
+    pinResult(activeResult);
+  }
+  return true;
+}
+
 function onInputKeydown(e: KeyboardEvent) {
+  const activeResult = activeIndex.value >= 0 ? results.value[activeIndex.value] : undefined;
+  if (tryPinToggle(e, activeResult)) return;
+
   if (!results.value.length && e.key !== "Escape") return;
 
   if (e.key === "ArrowDown") {
@@ -51,6 +98,8 @@ function onInputKeydown(e: KeyboardEvent) {
 }
 
 function onRowKeydown(e: KeyboardEvent, index: number, result: UexResult) {
+  if (tryPinToggle(e, result)) return;
+
   if (e.key === "ArrowDown") {
     e.preventDefault();
     if (index < results.value.length - 1) setActiveIndex(index + 1);
@@ -117,17 +166,28 @@ defineExpose({ focusInput, stale, handleEsc });
   <div class="flex flex-col h-full">
     <!-- Search input -->
     <div class="p-4 border-b border-white/5 flex-shrink-0">
-      <div class="relative">
-        <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+      <div class="flex items-center bg-white/5 border border-white/10 rounded-lg focus-within:border-blue-500/50 focus-within:bg-white/10 transition-colors">
+        <IconSearch class="ml-3 w-4 h-4 text-white/40 flex-shrink-0" />
+        <!-- Pin tag -->
+        <div
+          v-if="pinnedLocation"
+          class="flex items-center gap-1 ml-2 px-2 py-0.5 bg-green-500/15 border border-green-500/30 rounded text-green-300 text-xs flex-shrink-0"
+        >
+          <IconMapPin class="w-3 h-3" />
+          <span class="max-w-[150px] truncate">{{ pinnedDisplayName }}</span>
+          <button @click.stop="emit('unpin')" class="hover:text-white transition-colors ml-0.5" title="Unpin location">
+            <IconClose class="w-2.5 h-2.5" />
+          </button>
+        </div>
         <input
           ref="inputEl"
           v-model="query"
           type="text"
-          placeholder="Search commodities, vehicles, items, locations…"
-          class="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-10 py-2.5 text-white placeholder-white/30 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors text-sm"
+          :placeholder="placeholderText"
+          class="flex-1 bg-transparent py-2.5 px-3 text-white placeholder-white/30 focus:outline-none text-sm min-w-0"
           @keydown="onInputKeydown"
         />
-        <div v-if="loading" class="absolute right-3 top-1/2 -translate-y-1/2">
+        <div v-if="loading" class="mr-3 flex-shrink-0">
           <LoadingSpinner size="sm" />
         </div>
       </div>
@@ -155,6 +215,7 @@ defineExpose({ focusInput, stale, handleEsc });
           @keydown="(e: KeyboardEvent) => onRowKeydown(e, index, result)"
           @focus="activeIndex = index"
           @select="selectResult(result)"
+          @pin="pinResult(result)"
         />
       </div>
 

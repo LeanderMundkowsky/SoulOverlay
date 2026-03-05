@@ -462,7 +462,11 @@ toggle_settings: string;
 /**
  * Key combo to toggle the Debug panel (default: "F11")
  */
-toggle_debug: string }
+toggle_debug: string; 
+/**
+ * Key combo to pin/unpin a location in search (default: "Ctrl+Enter")
+ */
+pin_location: string }
 /**
  * The last price/entity lookup issued by the user (via a price command).
  */

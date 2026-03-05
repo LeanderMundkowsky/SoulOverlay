@@ -190,14 +190,39 @@ where
 }
 
 /// Deserialize a string field, returning None for empty strings.
+/// Also handles integers gracefully (UEX API sometimes returns 0 instead of null).
 pub fn deserialize_nonempty_string<'de, D>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let val = Option::<String>::deserialize(deserializer)?;
-    Ok(val.filter(|s| !s.is_empty()))
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match val {
+        serde_json::Value::String(s) if !s.is_empty() => Ok(Some(s)),
+        serde_json::Value::Number(n) => {
+            let s = n.to_string();
+            if s == "0" { Ok(None) } else { Ok(Some(s)) }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Deserialize an optional ID that may arrive as an integer, string, or null.
+/// Returns `None` for null, 0, or empty string.
+pub fn deserialize_optional_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match val {
+        serde_json::Value::Number(n) => {
+            let s = n.to_string();
+            if s == "0" { Ok(None) } else { Ok(Some(s)) }
+        }
+        serde_json::Value::String(s) if !s.is_empty() && s != "0" => Ok(Some(s)),
+        _ => Ok(None),
+    }
 }
 
 /// Extract a location string from star_system_name or planet_name.

@@ -11,6 +11,8 @@ pub struct Keybinds {
     pub toggle_settings: String,
     /// Key combo to toggle the Debug panel (default: "F11")
     pub toggle_debug: String,
+    /// Key combo to pin/unpin a location in search (default: "Ctrl+Enter")
+    pub pin_location: String,
 }
 
 impl Default for Keybinds {
@@ -18,6 +20,7 @@ impl Default for Keybinds {
         Self {
             toggle_settings: "F12".to_string(),
             toggle_debug:    "F11".to_string(),
+            pin_location:    "Ctrl+Enter".to_string(),
         }
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import CommodityPriceView from "@/components/overlay/CommodityPriceView.vue";
@@ -7,11 +7,19 @@ import SimplePriceView from "@/components/overlay/SimplePriceView.vue";
 import { useUex } from "@/composables/useUex";
 import type { PriceEntry } from "@/bindings";
 
+interface PinnedLocation {
+  id: string;
+  name: string;
+  kind: string;
+  slug?: string;
+}
+
 const props = defineProps<{
   entityId: string;
   entityName: string;
   entityKind: string;
   entitySlug?: string;
+  pinnedLocation?: PinnedLocation | null;
   active?: boolean;
 }>();
 
@@ -47,11 +55,53 @@ watch(
   { immediate: true }
 );
 
+function matchesPinnedLocation(entry: PriceEntry, pin: PinnedLocation): boolean {
+  const pinName = pin.name.replace(/^\[.*?\]\s*/, "").trim().toLowerCase();
+  switch (pin.slug) {
+    case "terminal":
+      return entry.terminal_id === pin.id;
+    case "star_system":
+      return (entry.system ?? "").toLowerCase() === pinName;
+    case "planet":
+    case "moon":
+      return entry.location.toLowerCase().includes(pinName);
+    case "orbit":
+      return (entry.orbit ?? "").toLowerCase().includes(pinName);
+    case "space_station":
+    case "outpost":
+    case "city":
+    case "poi":
+      return entry.terminal.toLowerCase().includes(pinName) ||
+             entry.location.toLowerCase().includes(pinName);
+    default:
+      return true;
+  }
+}
+
+const filteredBuyEntries = computed(() => {
+  if (!props.pinnedLocation) return buyEntries.value;
+  return buyEntries.value.filter(e => matchesPinnedLocation(e, props.pinnedLocation!));
+});
+
+const filteredSellEntries = computed(() => {
+  if (!props.pinnedLocation) return sellEntries.value;
+  return sellEntries.value.filter(e => matchesPinnedLocation(e, props.pinnedLocation!));
+});
+
+const pinnedDisplayName = computed(() => {
+  if (!props.pinnedLocation) return "";
+  return props.pinnedLocation.name.replace(/^\[.*?\]\s*/, "");
+});
+
 function fetchPrices() {
   getEntityPrices(props.entityKind, props.entityId);
 }
 
 function hasData(): boolean {
+  return filteredBuyEntries.value.length > 0 || filteredSellEntries.value.length > 0;
+}
+
+function hasUnfilteredData(): boolean {
   return buyEntries.value.length > 0 || sellEntries.value.length > 0;
 }
 
@@ -83,8 +133,8 @@ watch(() => props.entityId, () => { fetchPrices(); });
     <!-- Rich data (commodity/raw_commodity) -->
     <CommodityPriceView
       v-else-if="hasData() && hasRichData"
-      :buy-entries="buyEntries"
-      :sell-entries="sellEntries"
+      :buy-entries="filteredBuyEntries"
+      :sell-entries="filteredSellEntries"
       :entity-id="entityId"
       :entity-name="entityName"
       :entity-kind="entityKind"
@@ -95,9 +145,14 @@ watch(() => props.entityId, () => { fetchPrices(); });
     <!-- Simple data (vehicle/item/fuel) -->
     <SimplePriceView
       v-else-if="hasData()"
-      :buy-entries="buyEntries"
-      :sell-entries="sellEntries"
+      :buy-entries="filteredBuyEntries"
+      :sell-entries="filteredSellEntries"
     />
+
+    <!-- No results after pin filtering -->
+    <div v-else-if="!loading && hasUnfilteredData() && pinnedLocation" class="px-4 py-8 text-center text-white/40 text-sm">
+      No prices found at <span class="text-green-300">{{ pinnedDisplayName }}</span>
+    </div>
 
     <!-- Empty state -->
     <div v-else-if="!loading" class="px-4 py-8 text-center text-white/40 text-sm">

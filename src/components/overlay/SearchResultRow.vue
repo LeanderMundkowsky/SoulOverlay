@@ -7,6 +7,7 @@ import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconDollarSign from "@/components/icons/IconDollarSign.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
+import IconPin from "@/components/icons/IconPin.vue";
 import ContextMenu from "@/components/ui/ContextMenu.vue";
 import type { MenuItem, MenuSeparator } from "@/components/ui/ContextMenu.vue";
 import { useFavoritesStore } from "@/stores/favorites";
@@ -21,6 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "select"): void;
+  (e: "pin"): void;
 }>();
 
 defineOptions({ inheritAttrs: false });
@@ -144,6 +146,15 @@ function onPointerDown(e: PointerEvent) {
         >
           <IconInfoCircle class="w-3 h-3" />
           Details
+        </button>
+
+        <button
+          v-if="result.kind === 'location'"
+          @click.stop="emit('pin')"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs text-white/30 hover:text-green-400 hover:bg-green-400/10 transition-colors"
+        >
+          <IconPin class="w-3 h-3" />
+          Pin
         </button>
 
         <button

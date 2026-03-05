@@ -76,6 +76,13 @@ async function handleSave() {
         <HotkeyCapture v-model="form.keybinds.toggle_debug" />
       </div>
 
+      <!-- Pin Location -->
+      <div class="space-y-1.5">
+        <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Pin Location (Ctrl+Enter)</label>
+        <p class="text-white/30 text-xs">Pins the selected location to scope search results</p>
+        <HotkeyCapture v-model="form.keybinds.pin_location" />
+      </div>
+
       <AlertBanner v-if="saveError" variant="error" :message="saveError" />
       <AlertBanner v-if="saveSuccess" variant="success" message="Keybinds saved!" />
     </div>
