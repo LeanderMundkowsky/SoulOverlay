@@ -36,12 +36,14 @@ pub struct LogWatcher {
     _watcher: Option<RecommendedWatcher>,
 }
 
+type WatcherParts = (RecommendedWatcher, Arc<Mutex<u64>>, Arc<AtomicBool>);
+
 /// Create a new file watcher and initialise the offset to the current file size.
 /// Returns `(watcher, offset, running)` on success.
 fn create_watcher(
     app: &AppHandle,
     log_path: &Path,
-) -> Result<(RecommendedWatcher, Arc<Mutex<u64>>, Arc<AtomicBool>), String> {
+) -> Result<WatcherParts, String> {
     let offset = Arc::new(Mutex::new(0u64));
     let running = Arc::new(AtomicBool::new(true));
 

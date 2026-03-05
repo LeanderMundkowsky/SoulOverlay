@@ -18,7 +18,7 @@ export function formatSimplePrice(val: number): string {
 
 export function inventoryPercent(entry: PriceEntry): number {
   if (!entry.scu_max || entry.scu_max <= 0) return 0;
-  return Math.round(((entry.scu_avg ?? 0) / entry.scu_max) * 100);
+  return Math.min(100, Math.round(((entry.scu_last ?? 0) / entry.scu_max) * 100));
 }
 
 export function inventoryBarColor(pct: number): string {

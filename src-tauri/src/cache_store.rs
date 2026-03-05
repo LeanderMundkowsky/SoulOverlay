@@ -241,19 +241,17 @@ impl CacheStore {
 
         let mut memory = self.memory.lock().unwrap();
         let mut count = 0u32;
-        for row in rows {
-            if let Ok((key, data, cached_at_str, ttl_secs)) = row {
-                if let Ok(cached_at) = cached_at_str.parse::<DateTime<Utc>>() {
-                    memory.insert(
-                        key,
-                        MemoryEntry {
-                            data,
-                            cached_at,
-                            ttl_secs,
-                        },
-                    );
-                    count += 1;
-                }
+        for (key, data, cached_at_str, ttl_secs) in rows.flatten() {
+            if let Ok(cached_at) = cached_at_str.parse::<DateTime<Utc>>() {
+                memory.insert(
+                    key,
+                    MemoryEntry {
+                        data,
+                        cached_at,
+                        ttl_secs,
+                    },
+                );
+                count += 1;
             }
         }
 

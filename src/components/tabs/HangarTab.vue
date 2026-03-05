@@ -127,13 +127,13 @@ function viewVehicle(idVehicle: string, modelName: string) {
               </span>
               <span
                 v-if="ship.is_pledged"
-                class="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0"
+                class="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 shrink-0"
               >
                 Pledged
               </span>
               <span
                 v-if="ship.is_hidden"
-                class="text-xs px-1.5 py-0.5 rounded bg-white/10 text-white/40 flex-shrink-0"
+                class="text-xs px-1.5 py-0.5 rounded bg-white/10 text-white/40 shrink-0"
               >
                 Hidden
               </span>
@@ -150,7 +150,7 @@ function viewVehicle(idVehicle: string, modelName: string) {
 
           <!-- Right: arrow indicator -->
           <svg
-            class="w-4 h-4 text-white/20 group-hover:text-white/50 transition-colors flex-shrink-0 mt-1"
+            class="w-4 h-4 text-white/20 group-hover:text-white/50 transition-colors shrink-0 mt-1"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

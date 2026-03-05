@@ -51,7 +51,7 @@ unsafe extern "system" fn overlay_subclass_proc(
 
     if msg == WM_HOTKEY_TOGGLE {
         let show = wparam.0 != 0;
-        let sc_hwnd_val = lparam.0 as isize;
+        let sc_hwnd_val = lparam.0;
 
         if let Some(app) = SUBCLASS_APP.get() {
             if show {

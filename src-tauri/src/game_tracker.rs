@@ -204,9 +204,6 @@ fn find_sc_window() -> Option<HWND> {
     unsafe {
         // First arg = class name (None = match any class), second arg = window title.
         // Star Citizen's window title is "Star Citizen" but its class name is not.
-        match FindWindowW(None, w!("Star Citizen")) {
-            Ok(hwnd) => Some(hwnd),
-            Err(_) => None,
-        }
+        FindWindowW(None, w!("Star Citizen")).ok()
     }
 }

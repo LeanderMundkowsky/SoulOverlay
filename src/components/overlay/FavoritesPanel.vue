@@ -5,11 +5,13 @@ import IconPlane from "@/components/icons/IconPlane.vue";
 import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconClose from "@/components/icons/IconClose.vue";
 import { useFavoritesStore } from "@/stores/favorites";
-import { useDetailsStore } from "@/stores/details";
 import type { Favorite } from "@/stores/favorites";
 
 const favoritesStore = useFavoritesStore();
-const detailsStore = useDetailsStore();
+
+const emit = defineEmits<{
+  select: [fav: Favorite];
+}>();
 
 interface GroupConfig {
   kind: string;
@@ -36,13 +38,7 @@ function favoritesForKind(kind: string): Favorite[] {
 }
 
 function openFavorite(fav: Favorite) {
-  detailsStore.openEntity({
-    id: fav.id,
-    name: fav.name,
-    kind: fav.kind,
-    slug: fav.slug,
-    uuid: fav.uuid,
-  });
+  emit("select", fav);
 }
 
 async function removeFavorite(fav: Favorite) {
@@ -89,7 +85,7 @@ async function removeFavorite(fav: Favorite) {
               @click="openFavorite(fav)"
             >
               <!-- Entity icon -->
-              <div class="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center bg-white/5 text-white/40">
+              <div class="shrink-0 w-5 h-5 rounded flex items-center justify-center bg-white/5 text-white/40">
                 <IconCommodity v-if="fav.kind === 'commodity'" class="w-3 h-3" />
                 <IconPlane v-else-if="fav.kind === 'vehicle' || fav.kind === 'ground vehicle'" class="w-3 h-3" />
                 <IconMapPin v-else-if="fav.kind === 'location'" class="w-3 h-3" />
@@ -101,7 +97,7 @@ async function removeFavorite(fav: Favorite) {
 
               <!-- Remove button -->
               <button
-                class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/10"
+                class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/10"
                 title="Remove from favorites"
                 @click.stop="removeFavorite(fav)"
               >

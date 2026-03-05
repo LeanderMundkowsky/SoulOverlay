@@ -82,6 +82,10 @@ function onResultSelected(result: SelectedResult) {
   selectedResult.value = result;
 }
 
+function selectEntity(entity: { id: string; name: string; kind: string }) {
+  selectedResult.value = entity;
+}
+
 function focusInput() {
   searchBarRef.value?.focusInput();
 }
@@ -90,7 +94,7 @@ function handleEsc(): boolean {
   return searchBarRef.value?.handleEsc() ?? false;
 }
 
-defineExpose({ focusInput, handleEsc });
+defineExpose({ focusInput, handleEsc, selectEntity });
 </script>
 
 <template>

@@ -212,6 +212,14 @@ function onToggleSettings() {
 function onToggleDebug() {
   showDebug.value = !showDebug.value;
 }
+
+function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: string; uuid: string }) {
+  if (activeTab.value === "search") {
+    searchTabRef.value?.selectEntity(fav);
+  } else {
+    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid };
+  }
+}
 </script>
 
 <template>
@@ -244,7 +252,8 @@ function onToggleDebug() {
             :style="{ width: leftPanelPx + 'px', '--panel-w': leftPanelPx + 'px' }">
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
-              class="flex-1 min-h-0" />
+              class="flex-1 min-h-0"
+              @select="onFavoriteSelect" />
             <DebugPanel v-if="showDebug"
               class="flex-1 min-h-0"
               @close="showDebug = false" />
