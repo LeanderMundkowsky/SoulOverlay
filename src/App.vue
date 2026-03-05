@@ -300,8 +300,10 @@ function onToggleWatchlist() {
         <div class="flex-1 overflow-y-auto">
           <SearchTab v-show="activeTab === 'search'"
             ref="searchTabRef"
-            :sc-detected="scDetected" />
-          <DetailsTab v-show="activeTab === 'details'" />
+            :sc-detected="scDetected"
+            :active="activeTab === 'search'" />
+          <DetailsTab v-show="activeTab === 'details'"
+            :active="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <HangarTab v-show="activeTab === 'hangar'" />
           <ProfileTab v-show="activeTab === 'profile'" />

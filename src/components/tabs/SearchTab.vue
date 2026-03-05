@@ -7,8 +7,9 @@ import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
 import ResizeHandle from "@/components/ui/ResizeHandle.vue";
 import { useSettingsStore } from "@/stores/settings";
 
-defineProps<{
+const props = defineProps<{
   scDetected: boolean;
+  active: boolean;
 }>();
 
 interface SelectedResult {
@@ -154,6 +155,7 @@ defineExpose({ focusInput, handleEsc, selectEntity });
               :entity-name="selectedResult.name"
               :entity-kind="selectedResult.kind"
               :entity-slug="selectedResult.slug ?? ''"
+              :active="props.active"
               @close="selectedResult = null"
             />
           </div>

@@ -12,6 +12,7 @@ const props = defineProps<{
   entityName: string;
   entityKind: string;
   entitySlug?: string;
+  active?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -88,6 +89,7 @@ watch(() => props.entityId, () => { fetchPrices(); });
       :entity-name="entityName"
       :entity-kind="entityKind"
       :entity-slug="entitySlug"
+      :active="active"
     />
 
     <!-- Simple data (vehicle/item/fuel) -->

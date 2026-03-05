@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { ref, watch, nextTick, onMounted } from "vue";
 import SortControls from "@/components/ui/SortControls.vue";
 import InventoryBar from "@/components/ui/InventoryBar.vue";
 import IconEye from "@/components/icons/IconEye.vue";
@@ -17,6 +17,7 @@ const props = defineProps<{
   entityName?: string;
   entityKind?: string;
   entitySlug?: string;
+  active?: boolean;
 }>();
 
 const watchlistStore = useWatchlistStore();
@@ -83,15 +84,19 @@ function onPriceDrag(e: PointerEvent, entry: PriceEntry, priceType: string) {
 function applyHighlight(terminalId: string) {
   highlightedTerminalId.value = terminalId;
   highlightPulsing.value = true;
+  // Double nextTick: first for Vue to update :class bindings, second for DOM paint
   nextTick(() => {
-    const el = document.querySelector(`[data-terminal-id="${terminalId}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    nextTick(() => {
+      const el = document.querySelector(`[data-terminal-id="${terminalId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   });
   setTimeout(() => { highlightPulsing.value = false; }, 1000);
 }
 
 // Try to consume the highlight target once the matching element exists in entries
 function tryConsumeHighlight() {
+  if (props.active === false) return;
   const target = watchlistStore.highlightTarget;
   if (!target) return;
   const allEntries = [...props.buyEntries, ...props.sellEntries];
@@ -102,11 +107,14 @@ function tryConsumeHighlight() {
   }
 }
 
-// Watch the highlight target itself (handles details tab where data is already loaded)
-watch(() => watchlistStore.highlightTarget, () => tryConsumeHighlight(), { immediate: true });
+// Watch price entries changing — handles async data loading
+watch([() => props.buyEntries.length, () => props.sellEntries.length], () => tryConsumeHighlight());
 
-// Watch price entries changing (handles search tab where data loads after entity selection)
-watch(() => props.buyEntries.length + props.sellEntries.length, () => tryConsumeHighlight());
+// Watch highlight target directly — handles switching between entries of the same entity
+watch(() => watchlistStore.highlightTarget, () => tryConsumeHighlight());
+
+// Also try on mount (for cases where entries are already populated)
+onMounted(() => nextTick(() => tryConsumeHighlight()));
 </script>
 
 <template>

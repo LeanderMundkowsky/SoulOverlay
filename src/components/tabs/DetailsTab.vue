@@ -4,6 +4,10 @@ import PricePanel from "@/components/overlay/PricePanel.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 import { useDetailsStore } from "@/stores/details";
 
+const props = defineProps<{
+  active: boolean;
+}>();
+
 const detailsStore = useDetailsStore();
 </script>
 
@@ -33,6 +37,7 @@ const detailsStore = useDetailsStore();
           :entity-name="detailsStore.currentEntity.name"
           :entity-kind="detailsStore.currentEntity.kind"
           :entity-slug="detailsStore.currentEntity.slug ?? ''"
+          :active="props.active"
           @close="detailsStore.clear()"
         />
       </div>
