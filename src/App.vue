@@ -33,7 +33,7 @@ const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
 const userStore = useUserStore();
 const watchlistStore = useWatchlistStore();
-const { dragging: isDragActive, ghostX, ghostY, ghostLabel } = useDragDrop();
+const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY, ghostLabel } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
@@ -248,6 +248,25 @@ function onToggleWatchlist() {
   showWatchlist.value = !showWatchlist.value;
   if (showWatchlist.value) showFavorites.value = false;
 }
+
+// Temporarily show the target panel while dragging, restore on drop
+let dragPanelSnapshot: { favorites: boolean; watchlist: boolean } | null = null;
+watch(isDragActive, (active) => {
+  if (active && dragPayload.value) {
+    dragPanelSnapshot = { favorites: showFavorites.value, watchlist: showWatchlist.value };
+    if (dragPayload.value.type === "entity") {
+      showFavorites.value = true;
+      showWatchlist.value = false;
+    } else if (dragPayload.value.type === "price") {
+      showWatchlist.value = true;
+      showFavorites.value = false;
+    }
+  } else if (!active && dragPanelSnapshot) {
+    showFavorites.value = dragPanelSnapshot.favorites;
+    showWatchlist.value = dragPanelSnapshot.watchlist;
+    dragPanelSnapshot = null;
+  }
+});
 </script>
 
 <template>
