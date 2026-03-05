@@ -4,6 +4,7 @@ import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import CommodityPriceView from "@/components/overlay/CommodityPriceView.vue";
 import SimplePriceView from "@/components/overlay/SimplePriceView.vue";
+import LocationTerminalsView from "@/components/overlay/LocationTerminalsView.vue";
 import { useUex } from "@/composables/useUex";
 import type { PriceEntry } from "@/bindings";
 
@@ -25,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
+  (e: "select-entity", entity: { id: string; name: string; kind: string; slug: string }): void;
 }>();
 
 const { loading, error, prices, getEntityPrices } = useUex();
@@ -93,8 +95,15 @@ const pinnedDisplayName = computed(() => {
   return props.pinnedLocation.name.replace(/^\[.*?\]\s*/, "");
 });
 
+const isLocationView = computed(() => {
+  return props.entityKind === "location" && props.entitySlug !== "terminal"
+    && props.entitySlug !== "faction" && props.entitySlug !== "company";
+});
+
 function fetchPrices() {
-  getEntityPrices(props.entityKind, props.entityId);
+  if (!isLocationView.value) {
+    getEntityPrices(props.entityKind, props.entityId);
+  }
 }
 
 function hasData(): boolean {
@@ -129,6 +138,14 @@ watch(() => props.entityId, () => { fetchPrices(); });
 
     <!-- Error -->
     <div v-else-if="error" class="px-4 py-4 text-red-400 text-sm">{{ error }}</div>
+
+    <!-- Location terminals view (non-terminal locations) -->
+    <LocationTerminalsView
+      v-else-if="isLocationView"
+      :entity-id="entityId"
+      :entity-slug="entitySlug ?? ''"
+      @select-terminal="(t) => emit('select-entity', t)"
+    />
 
     <!-- Rich data (commodity/raw_commodity) -->
     <CommodityPriceView

@@ -93,7 +93,7 @@ function onUnpinLocation() {
   pinnedLocation.value = null;
 }
 
-function selectEntity(entity: { id: string; name: string; kind: string }) {
+function selectEntity(entity: { id: string; name: string; kind: string; slug?: string }) {
   selectedResult.value = entity;
 }
 
@@ -167,6 +167,7 @@ defineExpose({ focusInput, handleEsc, selectEntity });
               :pinned-location="pinnedLocation"
               :active="props.active"
               @close="selectedResult = null"
+              @select-entity="selectEntity"
             />
           </div>
         </div>

@@ -27,9 +27,9 @@ use crate::providers::search_in_collection;
 use crate::providers::commodities::search_commodities;
 use crate::providers::vehicles::search_vehicles;
 use crate::providers::items::search_items;
-use crate::providers::locations::search_locations;
+use crate::providers::locations::{search_locations, TERMINAL_HIERARCHY_KEY};
 use crate::state::AppState;
-use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
+use crate::uex::types::{EntityInfo, LocationTerminal, PriceEntry, UexResult};
 
 // ── Response envelope ──────────────────────────────────────────────────────
 
@@ -378,4 +378,66 @@ pub async fn api_entity_info(
             kind, entity_id
         ))),
     }
+}
+
+// ── Location terminals endpoint ───────────────────────────────────────────
+
+/// Strip the type prefix from a location ID (e.g. "sys_1" → "1", "planet_3" → "3").
+/// Terminal IDs have no prefix and are returned as-is.
+fn strip_location_id_prefix(slug: &str, id: &str) -> String {
+    let prefix = match slug {
+        "star_system" => "sys_",
+        "planet" => "planet_",
+        "moon" => "moon_",
+        "orbit" => "orbit_",
+        "space_station" => "station_",
+        "outpost" => "outpost_",
+        "city" => "city_",
+        "poi" => "poi_",
+        "faction" => "faction_",
+        "company" => "company_",
+        _ => "",
+    };
+    if prefix.is_empty() {
+        id.to_string()
+    } else {
+        id.strip_prefix(prefix).unwrap_or(id).to_string()
+    }
+}
+
+/// Fetch all terminals belonging to a location (by slug and prefixed ID).
+/// Uses cached terminal hierarchy data to filter by the appropriate parent ID.
+#[tauri::command]
+#[specta::specta]
+pub async fn api_location_terminals(
+    slug: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<LocationTerminal>>, String> {
+    use crate::providers::locations::dto::TerminalHierarchy;
+
+    if id.trim().is_empty() {
+        return Ok(ApiResponse::err("id must not be empty"));
+    }
+
+    let raw_id = strip_location_id_prefix(&slug, &id);
+
+    let hierarchy: Vec<TerminalHierarchy> = match state.cache.get::<Vec<TerminalHierarchy>>(TERMINAL_HIERARCHY_KEY) {
+        CacheResult::Fresh(h) => h,
+        CacheResult::Stale(h) => h,
+        CacheResult::Missing => {
+            return Ok(ApiResponse::err("Terminal data not loaded yet. Wait for cache to finish loading."));
+        }
+    };
+
+    let terminals: Vec<LocationTerminal> = hierarchy
+        .iter()
+        .filter(|t| t.matches_location(&slug, &raw_id))
+        .map(|t| t.to_location_terminal())
+        .collect();
+
+    let count = terminals.len() as u32;
+    let mut resp = ApiResponse::ok(terminals);
+    resp.total = Some(count);
+    Ok(resp)
 }

@@ -214,6 +214,28 @@ pub async fn prefetch_all(state: &AppState) {
         }
     }
 
+    // One-time migration: if terminal_hierarchy doesn't exist yet but locations
+    // are fresh, force a locations refresh to populate it.
+    {
+        use crate::cache_store::CacheResult;
+        use crate::providers::locations::TERMINAL_HIERARCHY_KEY;
+        use crate::providers::locations::dto::TerminalHierarchy;
+
+        let needs_hierarchy = matches!(
+            state.cache.get::<Vec<TerminalHierarchy>>(TERMINAL_HIERARCHY_KEY),
+            CacheResult::Missing
+        );
+        if needs_hierarchy && !state.cache.is_expired("locations") {
+            info!("Terminal hierarchy missing — forcing locations refresh");
+            let r = refresh_collection_by_name("locations", &settings.uex_api_key, &settings, state, "startup").await;
+            if !r.ok {
+                if let Some(e) = &r.error {
+                    error!("Terminal hierarchy refresh failed: {}", e);
+                }
+            }
+        }
+    }
+
     // Phase 2: dependent providers (prices, entity_info, secret-required, etc.)
     let phase2_keys: Vec<String> = all.iter()
         .filter(|p| !p.depends_on().is_empty())

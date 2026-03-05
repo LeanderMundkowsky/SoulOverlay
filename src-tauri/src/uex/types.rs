@@ -15,6 +15,17 @@ pub struct UexResult {
     pub uuid: String,
 }
 
+/// A terminal entry with hierarchy context for the location terminals view.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct LocationTerminal {
+    pub id: String,
+    pub name: String,
+    pub nickname: String,
+    pub system_name: String,
+    pub planet_name: String,
+    pub orbit_name: String,
+}
+
 /// Detailed entity metadata from UEX API, with type-specific optional fields.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
 pub struct EntityInfo {

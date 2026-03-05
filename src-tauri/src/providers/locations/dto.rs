@@ -1,10 +1,78 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::uex::types::{deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string, deserialize_optional_id, UexResult};
+use crate::uex::types::{deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string, deserialize_optional_id, LocationTerminal, UexResult};
 
 /// Trait for location DTOs that have an `is_available_live` field.
 pub(crate) trait LiveAvailable {
     fn is_available_live(&self) -> bool;
+}
+
+/// Internal cache struct for terminal hierarchy data (not an IPC type).
+/// Stored alongside the Locations cache to resolve terminals by parent location.
+#[derive(Serialize, Deserialize)]
+pub struct TerminalHierarchy {
+    pub id: String,
+    pub name: String,
+    pub nickname: String,
+    pub system_name: String,
+    pub planet_name: String,
+    pub orbit_name: String,
+    pub id_star_system: String,
+    pub id_planet: String,
+    pub id_moon: String,
+    pub id_orbit: String,
+    pub id_space_station: String,
+    pub id_outpost: String,
+    pub id_city: String,
+    pub id_poi: String,
+}
+
+impl TerminalHierarchy {
+    pub fn from_dto(dto: &TerminalDto) -> Self {
+        Self {
+            id: dto.id.clone(),
+            name: dto.name.clone(),
+            nickname: dto.nickname.clone().unwrap_or_default(),
+            system_name: dto.star_system_name.clone().unwrap_or_default(),
+            planet_name: dto.planet_name.clone().unwrap_or_default(),
+            orbit_name: dto.orbit_name.clone().unwrap_or_default(),
+            id_star_system: dto.id_star_system.clone().unwrap_or_default(),
+            id_planet: dto.id_planet.clone().unwrap_or_default(),
+            id_moon: dto.id_moon.clone().unwrap_or_default(),
+            id_orbit: dto.id_orbit.clone().unwrap_or_default(),
+            id_space_station: dto.id_space_station.clone().unwrap_or_default(),
+            id_outpost: dto.id_outpost.clone().unwrap_or_default(),
+            id_city: dto.id_city.clone().unwrap_or_default(),
+            id_poi: dto.id_poi.clone().unwrap_or_default(),
+        }
+    }
+
+    pub fn to_location_terminal(&self) -> LocationTerminal {
+        LocationTerminal {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            nickname: self.nickname.clone(),
+            system_name: self.system_name.clone(),
+            planet_name: self.planet_name.clone(),
+            orbit_name: self.orbit_name.clone(),
+        }
+    }
+
+    /// Check if this terminal belongs to the given location (slug + raw ID).
+    pub fn matches_location(&self, slug: &str, raw_id: &str) -> bool {
+        match slug {
+            "star_system" => self.id_star_system == raw_id,
+            "planet" => self.id_planet == raw_id,
+            "moon" => self.id_moon == raw_id,
+            "orbit" => self.id_orbit == raw_id,
+            "space_station" => self.id_space_station == raw_id,
+            "outpost" => self.id_outpost == raw_id,
+            "city" => self.id_city == raw_id,
+            "poi" => self.id_poi == raw_id,
+            "terminal" => self.id == raw_id,
+            _ => false,
+        }
+    }
 }
 
 // -- Terminal DTO -----------------------------------------------------------

@@ -145,6 +145,18 @@ async apiEntityInfo(kind: string, entityId: string) : Promise<Result<ApiResponse
 }
 },
 /**
+ * Fetch all terminals belonging to a location (by slug and prefixed ID).
+ * Uses cached terminal hierarchy data to filter by the appropriate parent ID.
+ */
+async apiLocationTerminals(slug: string, id: string) : Promise<Result<ApiResponse<LocationTerminal[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("api_location_terminals", { slug, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Get status for all cached collections.
  */
 async cacheStatus() : Promise<Result<CollectionStatus[], string>> {
@@ -503,6 +515,10 @@ search_split_pct: number;
  * Width of the search panel when it is the only element (centered), as a percentage (0–100)
  */
 search_solo_pct: number }
+/**
+ * A terminal entry with hierarchy context for the location terminals view.
+ */
+export type LocationTerminal = { id: string; name: string; nickname: string; system_name: string; planet_name: string; orbit_name: string }
 /**
  * A price entry from UEX API.
  * Unified across all price types — entity metadata identifies the source.
