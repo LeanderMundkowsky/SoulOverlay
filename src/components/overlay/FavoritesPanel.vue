@@ -5,13 +5,19 @@ import IconPlane from "@/components/icons/IconPlane.vue";
 import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconClose from "@/components/icons/IconClose.vue";
 import { useFavoritesStore } from "@/stores/favorites";
+import { useDragDrop } from "@/composables/useDragDrop";
 import type { Favorite } from "@/stores/favorites";
 
 const favoritesStore = useFavoritesStore();
+const { payload, dragging } = useDragDrop();
 
 const emit = defineEmits<{
   select: [fav: Favorite];
 }>();
+
+import { ref } from "vue";
+const collapsedGroups = ref<Record<string, boolean>>({});
+const dragOver = ref(false);
 
 interface GroupConfig {
   kind: string;
@@ -26,8 +32,22 @@ const groups: GroupConfig[] = [
   { kind: "location", label: "Locations" },
 ];
 
-import { ref } from "vue";
-const collapsedGroups = ref<Record<string, boolean>>({});
+function onPointerEnter() {
+  if (dragging.value) dragOver.value = true;
+}
+
+function onPointerLeave() {
+  dragOver.value = false;
+}
+
+function onPointerUp() {
+  if (!dragging.value || !payload.value) return;
+  const entity = payload.value;
+  if (!favoritesStore.isFavorite(entity.id, entity.kind)) {
+    favoritesStore.addFavorite(entity);
+  }
+  dragOver.value = false;
+}
 
 function toggleGroup(kind: string) {
   collapsedGroups.value[kind] = !collapsedGroups.value[kind];
@@ -47,7 +67,13 @@ async function removeFavorite(fav: Favorite) {
 </script>
 
 <template>
-  <div class="w-full flex flex-col bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+  <div
+    class="w-full flex flex-col bg-[#1a1d24] border rounded-xl overflow-hidden transition-colors"
+    :class="dragOver ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/10'"
+    @pointerenter="onPointerEnter"
+    @pointerleave="onPointerLeave"
+    @pointerup="onPointerUp"
+  >
     <!-- Header -->
     <div class="px-3 py-2 border-b border-white/10">
       <span class="text-xs font-semibold text-white/50 uppercase tracking-widest">Favorites</span>

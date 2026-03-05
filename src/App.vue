@@ -22,12 +22,14 @@ import { useUserStore } from "./stores/user";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
+import { useDragDrop } from "./composables/useDragDrop";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
 const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
 const userStore = useUserStore();
+const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
@@ -302,6 +304,15 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
 
       <StatusBar :sc-detected="scDetected"
         @toggle-debug="onToggleDebug" />
+    </div>
+
+    <!-- Drag ghost -->
+    <div
+      v-if="isDragActive && dragPayload"
+      class="fixed z-[9999] pointer-events-none px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-200 text-xs font-medium whitespace-nowrap backdrop-blur-sm"
+      :style="{ left: ghostX + 12 + 'px', top: ghostY + 12 + 'px' }"
+    >
+      {{ dragPayload.name }}
     </div>
   </div>
 </template>

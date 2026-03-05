@@ -11,6 +11,7 @@ import ContextMenu from "@/components/ui/ContextMenu.vue";
 import type { MenuItem, MenuSeparator } from "@/components/ui/ContextMenu.vue";
 import { useFavoritesStore } from "@/stores/favorites";
 import { useDetailsStore } from "@/stores/details";
+import { startDrag } from "@/composables/useDragDrop";
 import type { UexResult } from "@/composables/useUex";
 
 const props = defineProps<{
@@ -72,6 +73,17 @@ function toggleFavorite() {
 function openInDetails() {
   detailsStore.openEntity(props.result);
 }
+
+function onPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return;
+  startDrag(e, {
+    id: props.result.id,
+    name: props.result.name,
+    kind: props.result.kind,
+    slug: props.result.slug,
+    uuid: props.result.uuid ?? "",
+  });
+}
 </script>
 
 <template>
@@ -80,6 +92,7 @@ function openInDetails() {
     v-bind="$attrs"
     class="group flex flex-col px-4 py-2 border-t border-white/5 transition-colors outline-none cursor-default"
     :class="isActive ? 'bg-white/8 ring-1 ring-inset ring-blue-500/30' : 'hover:bg-white/5 focus:bg-white/8'"
+    @pointerdown="onPointerDown"
     @dblclick.stop="emit('select')"
     @contextmenu="onContextMenu"
   >
