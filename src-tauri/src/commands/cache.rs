@@ -9,6 +9,7 @@ use crate::cache_store::{Collection, CollectionStatus};
 use crate::providers::{self, RefreshContext};
 use crate::settings::Settings;
 use crate::state::AppState;
+use crate::uex::types::PriceEntry;
 
 /// Response from cache refresh operations.
 #[derive(Debug, Serialize, Type)]
@@ -231,6 +232,38 @@ pub async fn prefetch_all(state: &AppState) {
             if !r.ok {
                 if let Some(e) = &r.error {
                     error!("Terminal hierarchy refresh failed: {}", e);
+                }
+            }
+        }
+    }
+
+    // One-time migration: if *_by_terminal indexes don't exist but the price
+    // collections are fresh, force a refresh to build the terminal indexes.
+    {
+        use crate::cache_store::CacheResult;
+
+        let price_collections = [
+            "commodity_prices",
+            "raw_commodity_prices",
+            "item_prices",
+            "vehicle_purchase_prices",
+            "vehicle_rental_prices",
+            "fuel_prices",
+        ];
+
+        for name in &price_collections {
+            let probe_key = format!("{}_by_terminal:1", name);
+            let needs_index = matches!(
+                state.cache.get::<Vec<PriceEntry>>(&probe_key),
+                CacheResult::Missing
+            );
+            if needs_index && !state.cache.is_expired(name) {
+                info!("Terminal index missing for '{}' — forcing refresh", name);
+                let r = refresh_collection_by_name(name, &settings.uex_api_key, &settings, state, "startup").await;
+                if !r.ok {
+                    if let Some(e) = &r.error {
+                        error!("Terminal index refresh for '{}' failed: {}", name, e);
+                    }
                 }
             }
         }

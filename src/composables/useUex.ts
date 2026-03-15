@@ -104,7 +104,7 @@ export function useUex() {
     "ground vehicle": (id) => commands.apiVehiclePurchasePrices(id),
     vehicle_rental: (id) => commands.apiVehicleRentalPrices(id),
     fuel: (id) => commands.apiFuelPrices(id),
-    location: (id) => commands.apiFuelPrices(id),
+    location: (id) => commands.apiTerminalPrices(id),
   };
 
   async function getEntityPrices(kind: string, entityId: string) {

@@ -163,6 +163,38 @@ pub fn store_prices_split(
     }
 }
 
+/// Store price entries grouped by terminal_id under a "{collection}_by_terminal:{tid}" key.
+/// Used for lookups like "show me all prices at terminal X".
+pub fn store_prices_by_terminal(
+    cache: &CacheStore,
+    entries: &[PriceEntry],
+    collection: Collection,
+    ttl: i64,
+) -> Result<(), String> {
+    let mut groups: std::collections::HashMap<&str, Vec<PriceEntry>> =
+        std::collections::HashMap::new();
+    for entry in entries {
+        if !entry.terminal_id.is_empty() {
+            groups.entry(&entry.terminal_id).or_default().push(entry.clone());
+        }
+    }
+
+    let base_key = format!("{}_by_terminal", collection.storage_key());
+    let mut errors = Vec::new();
+    for (terminal_id, group) in &groups {
+        let key = format!("{}:{}", base_key, terminal_id);
+        if let Err(e) = cache.put(&key, ttl, group) {
+            errors.push(format!("{}: {}", key, e));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 /// Store entity infos as per-entity sub-keys (e.g. `entity_info:commodity:6`).
 pub fn store_entity_infos(
     cache: &CacheStore,

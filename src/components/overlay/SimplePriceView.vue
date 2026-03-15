@@ -9,7 +9,23 @@ import type { PriceEntry } from "@/bindings";
 const props = defineProps<{
   buyEntries: PriceEntry[];
   sellEntries: PriceEntry[];
+  /** When true, show entity_name instead of terminal as the row label. */
+  terminalView?: boolean;
 }>();
+
+const priceTypeLabels: Record<string, string> = {
+  commodity: "Commodity",
+  raw_commodity: "Raw Commodity",
+  item: "Item",
+  fuel: "Fuel",
+  vehicle_purchase: "Vehicle (Buy)",
+  vehicle_rental: "Vehicle (Rent)",
+};
+
+function subLabel(entry: PriceEntry): string {
+  if (!props.terminalView) return entry.location;
+  return priceTypeLabels[entry.price_type] ?? entry.price_type;
+}
 
 const buySortKey = ref<keyof PriceEntry>("buy_price");
 const buySortAsc = ref(true);
@@ -56,11 +72,11 @@ function onSellSelect(opt: SortOption) {
           class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ entry.terminal }}</span>
+            <span class="text-white/80 text-xs font-medium truncate" :title="terminalView ? entry.entity_name : entry.terminal">{{ terminalView ? entry.entity_name : entry.terminal }}</span>
             <span class="text-green-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.buy_price) }}</span>
           </div>
           <div class="flex items-center justify-between gap-2 mt-0.5">
-            <span class="text-white/30 text-[0.6875rem] truncate">{{ entry.location }}</span>
+            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabel(entry) }}</span>
             <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
           </div>
         </div>
@@ -86,11 +102,11 @@ function onSellSelect(opt: SortOption) {
           class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-white/80 text-xs font-medium truncate" :title="entry.terminal">{{ entry.terminal }}</span>
+            <span class="text-white/80 text-xs font-medium truncate" :title="terminalView ? entry.entity_name : entry.terminal">{{ terminalView ? entry.entity_name : entry.terminal }}</span>
             <span class="text-blue-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.sell_price) }}</span>
           </div>
           <div class="flex items-center justify-between gap-2 mt-0.5">
-            <span class="text-white/30 text-[0.6875rem] truncate">{{ entry.location }}</span>
+            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabel(entry) }}</span>
             <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
           </div>
         </div>

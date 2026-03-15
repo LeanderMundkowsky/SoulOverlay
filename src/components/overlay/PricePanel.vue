@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
+import { commands } from "@/bindings";
 import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import CommodityPriceView from "@/components/overlay/CommodityPriceView.vue";
@@ -35,6 +36,9 @@ const buyEntries = ref<PriceEntry[]>([]);
 const sellEntries = ref<PriceEntry[]>([]);
 const hasRichData = ref(false);
 
+// Terminal IDs that belong to the pinned location (resolved via hierarchy)
+const pinnedTerminalIds = ref<Set<string>>(new Set());
+
 const kindLabels: Record<string, string> = {
   commodity: "Commodity",
   raw_commodity: "Raw Commodity",
@@ -57,37 +61,60 @@ watch(
   { immediate: true }
 );
 
-function matchesPinnedLocation(entry: PriceEntry, pin: PinnedLocation): boolean {
-  const pinName = pin.name.replace(/^\[.*?\]\s*/, "").trim().toLowerCase();
-  switch (pin.slug) {
-    case "terminal":
-      return entry.terminal_id === pin.id;
-    case "star_system":
-      return (entry.system ?? "").toLowerCase() === pinName;
-    case "planet":
-    case "moon":
-      return entry.location.toLowerCase().includes(pinName);
-    case "orbit":
-      return (entry.orbit ?? "").toLowerCase().includes(pinName);
-    case "space_station":
-    case "outpost":
-    case "city":
-    case "poi":
-      return entry.terminal.toLowerCase().includes(pinName) ||
-             entry.location.toLowerCase().includes(pinName);
-    default:
-      return true;
-  }
+// Resolve pinned location → terminal IDs via hierarchy
+watch(
+  () => props.pinnedLocation,
+  async (pin) => {
+    if (!pin?.slug) {
+      pinnedTerminalIds.value = new Set();
+      return;
+    }
+    if (pin.slug === "terminal") {
+      pinnedTerminalIds.value = new Set([pin.id]);
+      return;
+    }
+    if (pin.slug === "star_system") {
+      // Star system: match by system name (hierarchy lookup for all terminals in system)
+      try {
+        const result = await commands.apiLocationTerminals(pin.slug, pin.id);
+        if (result.status === "ok" && result.data.ok && result.data.data) {
+          pinnedTerminalIds.value = new Set(result.data.data.map(t => t.id));
+        } else {
+          pinnedTerminalIds.value = new Set();
+        }
+      } catch {
+        pinnedTerminalIds.value = new Set();
+      }
+      return;
+    }
+    // All other location types: resolve via terminal hierarchy
+    try {
+      const result = await commands.apiLocationTerminals(pin.slug, pin.id);
+      if (result.status === "ok" && result.data.ok && result.data.data) {
+        pinnedTerminalIds.value = new Set(result.data.data.map(t => t.id));
+      } else {
+        pinnedTerminalIds.value = new Set();
+      }
+    } catch {
+      pinnedTerminalIds.value = new Set();
+    }
+  },
+  { immediate: true }
+);
+
+function matchesPinnedLocation(entry: PriceEntry): boolean {
+  if (pinnedTerminalIds.value.size === 0) return true;
+  return pinnedTerminalIds.value.has(entry.terminal_id);
 }
 
 const filteredBuyEntries = computed(() => {
   if (!props.pinnedLocation) return buyEntries.value;
-  return buyEntries.value.filter(e => matchesPinnedLocation(e, props.pinnedLocation!));
+  return buyEntries.value.filter(e => matchesPinnedLocation(e));
 });
 
 const filteredSellEntries = computed(() => {
   if (!props.pinnedLocation) return sellEntries.value;
-  return sellEntries.value.filter(e => matchesPinnedLocation(e, props.pinnedLocation!));
+  return sellEntries.value.filter(e => matchesPinnedLocation(e));
 });
 
 const pinnedDisplayName = computed(() => {
@@ -98,6 +125,10 @@ const pinnedDisplayName = computed(() => {
 const isLocationView = computed(() => {
   return props.entityKind === "location" && props.entitySlug !== "terminal"
     && props.entitySlug !== "faction" && props.entitySlug !== "company";
+});
+
+const isTerminalView = computed(() => {
+  return props.entityKind === "location" && props.entitySlug === "terminal";
 });
 
 function fetchPrices() {
@@ -164,6 +195,7 @@ watch(() => props.entityId, () => { fetchPrices(); });
       v-else-if="hasData()"
       :buy-entries="filteredBuyEntries"
       :sell-entries="filteredSellEntries"
+      :terminal-view="isTerminalView"
     />
 
     <!-- No results after pin filtering -->

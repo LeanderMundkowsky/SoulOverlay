@@ -137,6 +137,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::api::api_fuel_prices,
             commands::api::api_entity_info,
             commands::api::api_location_terminals,
+            commands::api::api_terminal_prices,
             commands::cache::cache_status,
             commands::cache::cache_refresh,
             commands::cache::cache_refresh_all,

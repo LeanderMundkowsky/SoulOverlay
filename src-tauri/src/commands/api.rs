@@ -51,7 +51,7 @@ impl<T: Serialize> ApiResponse<T> {
         Self { ok: true, data: Some(data), error: None, stale: false, total: None }
     }
 
-    fn ok_stale(data: T) -> Self {
+    pub(crate) fn ok_stale(data: T) -> Self {
         Self { ok: true, data: Some(data), error: None, stale: true, total: None }
     }
 
@@ -350,7 +350,32 @@ pub async fn api_fuel_prices(
     if terminal_id.trim().is_empty() {
         return Ok(ApiResponse::err("terminal_id must not be empty"));
     }
-    Ok(price_lookup_cached(&terminal_id, "fuel", Collection::FuelPrices, &state))
+    // Fuel prices are stored by terminal under "fuel_prices_by_terminal:{tid}"
+    let cache_key = format!("fuel_prices_by_terminal:{}", terminal_id);
+    let (response, source, row_count) = match state.cache.get::<Vec<PriceEntry>>(&cache_key) {
+        CacheResult::Fresh(prices) => {
+            let n = prices.len() as u32;
+            (ApiResponse::ok(prices), "fresh", n)
+        }
+        CacheResult::Stale(prices) => {
+            let n = prices.len() as u32;
+            (ApiResponse::ok_stale(prices), "stale", n)
+        }
+        CacheResult::Missing => (ApiResponse::ok(vec![]), "missing", 0),
+    };
+
+    if let Ok(mut log) = state.activity.lock() {
+        log.last_user_action = Some(LastUserAction {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            kind: "fuel".to_string(),
+            entity_id: terminal_id,
+            collection: "fuel_prices".to_string(),
+            source: source.to_string(),
+            row_count,
+        });
+    }
+
+    Ok(response)
 }
 
 // ── Entity info endpoint ──────────────────────────────────────────────────
@@ -438,6 +463,54 @@ pub async fn api_location_terminals(
 
     let count = terminals.len() as u32;
     let mut resp = ApiResponse::ok(terminals);
+    resp.total = Some(count);
+    Ok(resp)
+}
+
+// ── Terminal prices endpoint (all price types at a terminal) ──────────────
+
+/// Fetch all prices available at a specific terminal, aggregating across
+/// commodities, raw commodities, items, vehicles, and fuel.
+#[tauri::command]
+#[specta::specta]
+pub async fn api_terminal_prices(
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PriceEntry>>, String> {
+    if terminal_id.trim().is_empty() {
+        return Ok(ApiResponse::err("terminal_id must not be empty"));
+    }
+
+    let collections = [
+        Collection::CommodityPrices,
+        Collection::RawCommodityPrices,
+        Collection::ItemPrices,
+        Collection::VehiclePurchasePrices,
+        Collection::VehicleRentalPrices,
+        Collection::FuelPrices,
+    ];
+
+    let mut all_prices: Vec<PriceEntry> = Vec::new();
+    let mut any_stale = false;
+
+    for collection in &collections {
+        let key = format!("{}_by_terminal:{}", collection.storage_key(), terminal_id);
+        match state.cache.get::<Vec<PriceEntry>>(&key) {
+            CacheResult::Fresh(entries) => all_prices.extend(entries),
+            CacheResult::Stale(entries) => {
+                any_stale = true;
+                all_prices.extend(entries);
+            }
+            CacheResult::Missing => {}
+        }
+    }
+
+    let count = all_prices.len() as u32;
+    let mut resp = if any_stale {
+        ApiResponse::ok_stale(all_prices)
+    } else {
+        ApiResponse::ok(all_prices)
+    };
     resp.total = Some(count);
     Ok(resp)
 }

@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use super::dto::{CategoryDto, ItemDto, ItemPriceDto};
 use crate::cache_store::Collection;
 use crate::providers::{
-    search_in_collection, store_blob, store_prices_split, BlobProvider, PerEntityProvider,
-    RefreshContext,
+    search_in_collection, store_blob, store_prices_by_terminal, store_prices_split,
+    BlobProvider, PerEntityProvider, RefreshContext,
 };
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 use crate::uex::UexClient;
@@ -37,7 +37,11 @@ impl PerEntityProvider for ItemPrices {
         let dtos: Vec<ItemPriceDto> = ctx.client.get("/items_prices_all", &[], ctx.api_key).await?;
         let data: Vec<PriceEntry> = dtos.iter().map(PriceEntry::from).collect();
         let ttl = self.collection().ttl_for(ctx.settings);
-        store_prices_split(ctx.cache, &data, self.collection(), ttl)
+        let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
+        if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
+            log::warn!("Failed to store item prices by terminal: {}", e);
+        }
+        Ok(count)
     }
 }
 

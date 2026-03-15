@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use super::dto::{VehicleDto, VehiclePurchasePriceDto, VehicleRentalPriceDto};
 use crate::cache_store::Collection;
 use crate::providers::{
-    catalog_ids_from_cache, store_blob, store_prices_split, BlobProvider, PerEntityProvider,
-    RefreshContext,
+    catalog_ids_from_cache, store_blob, store_prices_by_terminal, store_prices_split,
+    BlobProvider, PerEntityProvider, RefreshContext,
 };
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 use crate::uex::UexClient;
@@ -42,7 +42,11 @@ impl PerEntityProvider for VehiclePurchasePrices {
         }
         let data = fetch_all_vehicle_purchase_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
         let ttl = self.collection().ttl_for(ctx.settings);
-        store_prices_split(ctx.cache, &data, self.collection(), ttl)
+        let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
+        if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
+            log::warn!("Failed to store vehicle purchase prices by terminal: {}", e);
+        }
+        Ok(count)
     }
 }
 
@@ -62,7 +66,11 @@ impl PerEntityProvider for VehicleRentalPrices {
         }
         let data = fetch_all_vehicle_rental_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
         let ttl = self.collection().ttl_for(ctx.settings);
-        store_prices_split(ctx.cache, &data, self.collection(), ttl)
+        let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
+        if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
+            log::warn!("Failed to store vehicle rental prices by terminal: {}", e);
+        }
+        Ok(count)
     }
 }
 

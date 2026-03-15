@@ -157,6 +157,18 @@ async apiLocationTerminals(slug: string, id: string) : Promise<Result<ApiRespons
 }
 },
 /**
+ * Fetch all prices available at a specific terminal, aggregating across
+ * commodities, raw commodities, items, vehicles, and fuel.
+ */
+async apiTerminalPrices(terminalId: string) : Promise<Result<ApiResponse<PriceEntry[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("api_terminal_prices", { terminalId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Get status for all cached collections.
  */
 async cacheStatus() : Promise<Result<CollectionStatus[], string>> {
