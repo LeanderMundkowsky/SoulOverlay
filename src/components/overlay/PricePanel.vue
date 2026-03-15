@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { commands } from "@/bindings";
 import IconClose from "@/components/icons/IconClose.vue";
+import IconArrowLeft from "@/components/icons/IconArrowLeft.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import CommodityPriceView from "@/components/overlay/CommodityPriceView.vue";
 import ItemPriceView from "@/components/overlay/ItemPriceView.vue";
@@ -26,11 +27,13 @@ const props = defineProps<{
   entitySlug?: string;
   pinnedLocation?: PinnedLocation | null;
   active?: boolean;
+  canGoBack?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "select-entity", entity: { id: string; name: string; kind: string; slug: string }): void;
+  (e: "back"): void;
 }>();
 
 const { loading, error, prices, getEntityPrices } = useUex();
@@ -157,6 +160,9 @@ watch(() => props.entityId, () => { fetchPrices(); });
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
       <div class="flex items-center gap-2 min-w-0">
+        <button v-if="canGoBack" @click="emit('back')" class="text-white/40 hover:text-white transition-colors shrink-0" title="Back">
+          <IconArrowLeft class="w-4 h-4" />
+        </button>
         <span class="px-1.5 py-0.5 rounded bg-white/10 text-white/70 text-xs font-medium uppercase tracking-wide shrink-0">{{ kindLabels[entityKind] ?? entityKind }}</span>
         <h2 class="text-white font-semibold text-sm truncate">{{ entityName }}</h2>
       </div>

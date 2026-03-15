@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import SearchBar from "@/components/overlay/SearchBar.vue";
 import PricePanel from "@/components/overlay/PricePanel.vue";
@@ -22,6 +22,7 @@ interface SelectedResult {
 const settingsStore = useSettingsStore();
 const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null);
 const selectedResult = ref<SelectedResult | null>(null);
+const navHistory = ref<SelectedResult[]>([]);
 const pinnedLocation = ref<SelectedResult | null>(null);
 const searchSplitPct = ref(50);  // width when detail panel is open
 const searchSoloPct = ref(50);   // width when search is the only panel
@@ -82,6 +83,7 @@ function onSearchReset() {
 }
 
 function onResultSelected(result: SelectedResult) {
+  navHistory.value = [];
   selectedResult.value = result;
 }
 
@@ -94,8 +96,26 @@ function onUnpinLocation() {
 }
 
 function selectEntity(entity: { id: string; name: string; kind: string; slug?: string }) {
+  if (selectedResult.value) {
+    navHistory.value.push({ ...selectedResult.value });
+  }
   selectedResult.value = entity;
 }
+
+function goBack() {
+  const prev = navHistory.value.pop();
+  selectedResult.value = prev ?? null;
+}
+
+function onMouseBack(e: MouseEvent) {
+  if (e.button === 3 && navHistory.value.length > 0) {
+    e.preventDefault();
+    goBack();
+  }
+}
+
+onMounted(() => window.addEventListener("mouseup", onMouseBack));
+onUnmounted(() => window.removeEventListener("mouseup", onMouseBack));
 
 function focusInput() {
   searchBarRef.value?.focusInput();
@@ -166,8 +186,10 @@ defineExpose({ focusInput, handleEsc, selectEntity });
               :entity-slug="selectedResult.slug ?? ''"
               :pinned-location="pinnedLocation"
               :active="props.active"
-              @close="selectedResult = null"
+              @close="selectedResult = null; navHistory = []"
               @select-entity="selectEntity"
+              @back="goBack"
+              :can-go-back="navHistory.length > 0"
             />
           </div>
         </div>
