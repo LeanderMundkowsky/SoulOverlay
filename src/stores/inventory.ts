@@ -126,11 +126,15 @@ export const useInventoryStore = defineStore("inventory", () => {
     }
   }
 
+  // Cross-tab navigation: HangarTab sets this before switching to inventory tab
+  const pendingLocationFilter = ref<{ id: string; name: string } | null>(null);
+
   return {
     entries,
     collections,
     loading,
     error,
+    pendingLocationFilter,
     loadInventory,
     loadCollections,
     addEntry,

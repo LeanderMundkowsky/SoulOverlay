@@ -22,6 +22,7 @@ import { useFavoritesStore } from "./stores/favorites";
 import { useDetailsStore } from "./stores/details";
 import { useUserStore } from "./stores/user";
 import { useWatchlistStore } from "./stores/watchlist";
+import { useInventoryStore } from "./stores/inventory";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
@@ -33,6 +34,7 @@ const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
 const userStore = useUserStore();
 const watchlistStore = useWatchlistStore();
+const inventoryStore = useInventoryStore();
 const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY, ghostLabel } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
@@ -256,6 +258,11 @@ function onToggleWatchlist() {
   if (showWatchlist.value) showFavorites.value = false;
 }
 
+function onSwitchToInventory(locationId: string, locationName: string) {
+  inventoryStore.pendingLocationFilter = { id: locationId, name: locationName };
+  activeTab.value = "inventory";
+}
+
 // Temporarily show the target panel while dragging, restore on drop
 let dragPanelSnapshot: { favorites: boolean; watchlist: boolean } | null = null;
 watch(isDragActive, (active) => {
@@ -330,7 +337,7 @@ watch(isDragActive, (active) => {
           <DetailsTab v-show="activeTab === 'details'"
             :active="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
-          <HangarTab v-show="activeTab === 'hangar'" />
+          <HangarTab v-show="activeTab === 'hangar'" @switch-to-inventory="onSwitchToInventory" />
           <ProfileTab v-show="activeTab === 'profile'" />
           <PlaceholderTab
             v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'profile'" />

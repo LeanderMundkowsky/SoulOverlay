@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
+import IconPackage from "@/components/icons/IconPackage.vue";
 import { useHangarStore } from "@/stores/hangar";
 import { useSettingsStore } from "@/stores/settings";
 import { useDetailsStore } from "@/stores/details";
+import { useInventoryStore } from "@/stores/inventory";
 import { proxyImageUrl } from "@/utils/imageProxy";
 
 const hangarStore = useHangarStore();
 const settingsStore = useSettingsStore();
 const detailsStore = useDetailsStore();
+const inventoryStore = useInventoryStore();
+
+const emit = defineEmits<{
+  (e: "switchToInventory", locationId: string, locationName: string): void;
+}>();
 
 const hasApiKey = ref(false);
 const hasSecretKey = ref(false);
@@ -47,6 +54,23 @@ function viewVehicle(idVehicle: string, modelName: string) {
     slug: "",
     uuid: "",
   });
+}
+
+/** Set of fleet location IDs that have inventory entries */
+const shipsWithInventory = computed(() => {
+  const ids = new Set<string>();
+  for (const entry of inventoryStore.entries) {
+    if (entry.location_slug === "fleet_vehicle") {
+      ids.add(entry.location_id);
+    }
+  }
+  return ids;
+});
+
+function viewShipInventory(shipId: string, modelName: string) {
+  const locationId = `fleet_${shipId}`;
+  const locationName = `[Ship] ${modelName}`;
+  emit("switchToInventory", locationId, locationName);
 }
 </script>
 
@@ -148,16 +172,27 @@ function viewVehicle(idVehicle: string, modelName: string) {
             </div>
           </div>
 
-          <!-- Right: arrow indicator -->
-          <svg
-            class="w-4 h-4 text-white/20 group-hover:text-white/50 transition-colors shrink-0 mt-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <!-- Right: inventory button + arrow indicator -->
+          <div class="flex items-center gap-2 shrink-0 mt-1">
+            <button
+              v-if="shipsWithInventory.has(`fleet_${ship.id}`)"
+              @click.stop="viewShipInventory(ship.id, ship.model_name)"
+              class="flex items-center gap-1 text-xs px-2 py-1 rounded-lg text-blue-400/60 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
+              title="View ship inventory"
+            >
+              <IconPackage class="w-3.5 h-3.5" />
+              <span>Inventory</span>
+            </button>
+            <svg
+              class="w-4 h-4 text-white/20 group-hover:text-white/50 transition-colors shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
         </div>
       </div>
     </div>

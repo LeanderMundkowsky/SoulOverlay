@@ -5,6 +5,7 @@ import type { InventoryEntry } from "@/stores/inventory";
 import InventoryModal from "@/components/ui/InventoryModal.vue";
 import type { ModalMode } from "@/components/ui/InventoryModal.vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
+import IconClose from "@/components/icons/IconClose.vue";
 import IconCommodity from "@/components/icons/IconCommodity.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
@@ -46,17 +47,119 @@ function toggleGroup(key: string) {
   }
 }
 
+// ── Dropdown filter (location in location mode, collection in collection mode) ──
+
+const filterQuery = ref("");
+const filterDropdownOpen = ref(false);
+const selectedFilter = ref<{ id: string; label: string } | null>(null);
+
+/** Unique locations from current inventory entries */
+const uniqueLocations = computed(() => {
+  const map = new Map<string, string>();
+  for (const e of inventoryStore.entries) {
+    if (!map.has(e.location_id)) map.set(e.location_id, e.location_name);
+  }
+  return Array.from(map, ([id, name]) => ({ id, label: name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+});
+
+/** Unique collections from current inventory entries */
+const uniqueCollections = computed(() => {
+  const set = new Set<string>();
+  for (const e of inventoryStore.entries) set.add(e.collection);
+  return Array.from(set)
+    .sort((a, b) => {
+      if (a === "") return 1;
+      if (b === "") return -1;
+      return a.localeCompare(b);
+    })
+    .map((c) => ({ id: c, label: c === "" ? "No Collection" : c }));
+});
+
+const filterOptions = computed(() =>
+  groupMode.value === "location" ? uniqueLocations.value : uniqueCollections.value,
+);
+
+const filteredFilterOptions = computed(() => {
+  const q = filterQuery.value.toLowerCase();
+  if (!q) return filterOptions.value;
+  return filterOptions.value.filter((o) => o.label.toLowerCase().includes(q));
+});
+
+function selectFilter(option: { id: string; label: string }) {
+  selectedFilter.value = option;
+  filterQuery.value = option.label;
+  filterDropdownOpen.value = false;
+}
+
+function clearFilter() {
+  selectedFilter.value = null;
+  filterQuery.value = "";
+  filterDropdownOpen.value = false;
+}
+
+function onFilterInput(value: string) {
+  filterQuery.value = value;
+  selectedFilter.value = null;
+  filterDropdownOpen.value = value.length === 0
+    ? filterOptions.value.length > 0
+    : filteredFilterOptions.value.length > 0;
+}
+
+function onFilterFocus() {
+  if (!selectedFilter.value) {
+    filterDropdownOpen.value = filterOptions.value.length > 0;
+  }
+}
+
+function closeFilterDropdownDelayed() {
+  globalThis.setTimeout(() => { filterDropdownOpen.value = false; }, 150);
+}
+
+// Reset filter when grouping changes
+watch(groupMode, () => {
+  clearFilter();
+  collapsedGroups.value.clear();
+});
+
+// ── Consume pending filter from store (cross-tab navigation) ──────────────
+
+watch(() => inventoryStore.pendingLocationFilter, (pending) => {
+  if (pending) {
+    groupMode.value = "location";
+    selectedFilter.value = { id: pending.id, label: pending.name };
+    filterQuery.value = pending.name;
+    inventoryStore.pendingLocationFilter = null;
+  }
+}, { immediate: true });
+
 // ── Filtered + grouped entries ─────────────────────────────────────────────
 
 const filteredEntries = computed(() => {
+  let result = inventoryStore.entries;
+
+  // Apply dropdown filter
+  if (selectedFilter.value) {
+    if (groupMode.value === "location") {
+      result = result.filter((e) => e.location_id === selectedFilter.value!.id);
+    } else {
+      const coll = selectedFilter.value.id; // "" for no collection
+      result = result.filter((e) => e.collection === coll);
+    }
+  }
+
+  // Apply text search
   const q = searchQuery.value.toLowerCase();
-  if (!q) return inventoryStore.entries;
-  return inventoryStore.entries.filter(
-    (e) =>
-      e.entity_name.toLowerCase().includes(q) ||
-      e.location_name.toLowerCase().includes(q) ||
-      e.collection.toLowerCase().includes(q),
-  );
+  if (q) {
+    result = result.filter(
+      (e) =>
+        e.entity_name.toLowerCase().includes(q) ||
+        e.location_name.toLowerCase().includes(q) ||
+        e.collection.toLowerCase().includes(q),
+    );
+  }
+
+  return result;
 });
 
 interface Group {
@@ -147,39 +250,6 @@ function slugIcon(slug: string): string {
     default: return "📦";
   }
 }
-
-// ── Collection filter ──────────────────────────────────────────────────────
-
-const collectionFilter = ref<string | null>(null);
-
-const displayedGroups = computed(() => {
-  if (!collectionFilter.value) return groupedEntries.value;
-  return groupedEntries.value.map((g) => ({
-    ...g,
-    entries: g.entries.filter(
-      (e) =>
-        (collectionFilter.value === "__none__" && e.collection === "") ||
-        e.collection === collectionFilter.value,
-    ),
-  })).filter((g) => g.entries.length > 0);
-});
-
-const allCollections = computed(() => {
-  const set = new Set<string>();
-  for (const e of inventoryStore.entries) {
-    set.add(e.collection || "__none__");
-  }
-  return Array.from(set).sort((a, b) => {
-    if (a === "__none__") return 1;
-    if (b === "__none__") return -1;
-    return a.localeCompare(b);
-  });
-});
-
-// Reset filter if grouping changes
-watch(groupMode, () => {
-  collectionFilter.value = null;
-});
 </script>
 
 <template>
@@ -220,8 +290,9 @@ watch(groupMode, () => {
       </div>
     </div>
 
-    <!-- Search + Collection filter -->
+    <!-- Search + Dropdown filter row -->
     <div class="flex items-center gap-2">
+      <!-- Text search -->
       <div class="flex-1 relative">
         <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
         <input
@@ -231,28 +302,42 @@ watch(groupMode, () => {
           class="w-full bg-[#111318] border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
         />
       </div>
-      <!-- Collection filter chips (when grouping by location) -->
-      <div v-if="groupMode === 'location' && allCollections.length > 1" class="flex items-center gap-1 flex-shrink-0">
+
+      <!-- Dropdown filter (location or collection depending on mode) -->
+      <div class="relative w-56 flex-shrink-0">
+        <input
+          type="text"
+          :value="filterQuery"
+          @input="onFilterInput(($event.target as HTMLInputElement).value)"
+          @focus="onFilterFocus"
+          @blur="closeFilterDropdownDelayed"
+          autocomplete="off"
+          :placeholder="groupMode === 'location' ? 'Filter by location...' : 'Filter by collection...'"
+          class="w-full bg-[#111318] border rounded-lg pl-3 pr-8 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
+          :class="selectedFilter ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+        />
+        <!-- Clear button -->
         <button
-          @click="collectionFilter = null"
-          class="text-xs px-2 py-1 rounded-lg transition-colors"
-          :class="collectionFilter === null
-            ? 'bg-white/10 text-white'
-            : 'text-white/30 hover:text-white hover:bg-white/5'"
+          v-if="selectedFilter"
+          @mousedown.prevent="clearFilter"
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
         >
-          All
+          <IconClose class="w-3.5 h-3.5" />
         </button>
-        <button
-          v-for="c in allCollections"
-          :key="c"
-          @click="collectionFilter = collectionFilter === c ? null : c"
-          class="text-xs px-2 py-1 rounded-lg transition-colors truncate max-w-[100px]"
-          :class="collectionFilter === c
-            ? 'bg-blue-500/20 text-blue-400'
-            : 'text-white/30 hover:text-white hover:bg-white/5'"
+        <!-- Dropdown -->
+        <div
+          v-if="filterDropdownOpen && filteredFilterOptions.length > 0"
+          class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
         >
-          {{ c === '__none__' ? 'No Collection' : c }}
-        </button>
+          <button
+            v-for="opt in filteredFilterOptions"
+            :key="opt.id"
+            @mousedown.prevent="selectFilter(opt)"
+            class="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/8 transition-colors truncate"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -272,16 +357,16 @@ watch(groupMode, () => {
 
     <!-- No results for filter -->
     <div
-      v-if="inventoryStore.entries.length > 0 && displayedGroups.length === 0"
+      v-if="inventoryStore.entries.length > 0 && groupedEntries.length === 0"
       class="text-center text-white/30 py-8 text-sm"
     >
       No matching entries found.
     </div>
 
     <!-- Grouped list -->
-    <div v-if="displayedGroups.length > 0" class="space-y-3">
+    <div v-if="groupedEntries.length > 0" class="space-y-3">
       <div
-        v-for="group in displayedGroups"
+        v-for="group in groupedEntries"
         :key="group.key"
         class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
       >
