@@ -286,7 +286,6 @@ watch(isDragActive, (active) => {
     <!-- UI layer -->
     <div class="relative w-full h-full flex flex-col">
       <TabBar :active-tab="activeTab"
-        :sc-detected="scDetected"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         :show-watchlist="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
         :is-authenticated="isAuthenticated"
@@ -327,7 +326,6 @@ watch(isDragActive, (active) => {
         <div class="flex-1 overflow-y-auto">
           <SearchTab v-show="activeTab === 'search'"
             ref="searchTabRef"
-            :sc-detected="scDetected"
             :active="activeTab === 'search'" />
           <DetailsTab v-show="activeTab === 'details'"
             :active="activeTab === 'details'" />

@@ -8,7 +8,6 @@ import ResizeHandle from "@/components/ui/ResizeHandle.vue";
 import { useSettingsStore } from "@/stores/settings";
 
 const props = defineProps<{
-  scDetected: boolean;
   active: boolean;
 }>();
 
@@ -131,12 +130,6 @@ defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation }
 <template>
   <div class="flex flex-col h-full overflow-hidden gap-3 p-4">
     <!-- Alerts -->
-    <AlertBanner
-      v-if="!scDetected"
-      variant="warning"
-      title="Star Citizen not detected"
-      message="Make sure Star Citizen is running in Borderless Windowed mode."
-    />
     <AlertBanner
       v-if="searchBarRef?.stale"
       variant="info"

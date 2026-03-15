@@ -23,7 +23,6 @@ interface Tab {
 
 defineProps<{
   activeTab: string;
-  scDetected: boolean;
   showFavorites: boolean;
   showWatchlist: boolean;
   isAuthenticated: boolean;
@@ -154,20 +153,6 @@ function handleTab(tab: Tab) {
               : 'bg-transparent'
           "
         ></div>
-      </div>
-    </div>
-
-    <!-- SC status indicator -->
-    <div class="flex items-center pr-3 flex-shrink-0">
-      <div
-        class="flex items-center gap-1.5 text-xs"
-        :class="scDetected ? 'text-green-400' : 'text-yellow-400/70'"
-      >
-        <span
-          class="w-2 h-2 rounded-full flex-shrink-0"
-          :class="scDetected ? 'bg-green-400' : 'bg-yellow-400/70'"
-        ></span>
-        <span class="whitespace-nowrap">{{ scDetected ? "SC" : "No SC" }}</span>
       </div>
     </div>
 

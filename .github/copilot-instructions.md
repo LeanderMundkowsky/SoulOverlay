@@ -57,7 +57,9 @@ src/                                 # Vue 3 + TypeScript frontend
 │   ├── icons/                       # SVG icon wrappers (template-only, use currentColor)
 │   ├── layout/                      # StatusBar, TabBar
 │   ├── overlay/                     # SearchBar, SearchResultRow, FavoritesPanel, WatchListPanel,
-│                                    #   PricePanel, CommodityPriceView, SimplePriceView, EntityInfoCard
+│                                    #   PricePanel, PriceList, EntityInfoCard, LocationTerminalsView
+│                                    #   CommodityPriceView, ItemPriceView, VehiclePriceView,
+│                                    #   FuelPriceView, TerminalPriceView
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
 │   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, ProfileTab, PlaceholderTab
@@ -65,7 +67,7 @@ src/                                 # Vue 3 + TypeScript frontend
 │                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls, InventoryBar
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch, useDragDrop
 ├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts (Pinia)
-├── utils/                           # imageProxy.ts, priceFormatters.ts, sorting.ts
+├── utils/                           # imageProxy.ts, priceFormatters.ts (locationPath, formatPrice, etc.), sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
 src-tauri/src/                       # Rust backend
@@ -170,7 +172,8 @@ Both share: `collection()`, `requires_secret()`, `depends_on()`, `async fn refre
    `collect_commands![]` in `lib.rs`
 
 **Shared helpers** in `providers/mod.rs`: `store_blob`, `store_prices_split`,
-`store_entity_infos`, `catalog_ids_from_cache`, `search_in_collection`
+`store_prices_by_terminal`, `store_entity_infos`, `catalog_ids_from_cache`,
+`search_in_collection`, `enrich_locations_from_hierarchy`
 
 **Key rule**: `uex/` only contains `client.rs` (HTTP transport) and `types.rs` (shared IPC
 types). All fetch logic, DTOs, and search functions live in `providers/`.
@@ -343,6 +346,53 @@ All ESC handling flows through `App.vue → handleKeyDown`:
 ESC does **not** close the Settings or Debug panels — toggled only via their keybinds or
 close buttons.
 
+## Search System
+
+Search is handled in `composables/useUex.ts` with type-prefix filtering:
+
+| Prefix | Searches | Example |
+|--------|----------|---------|
+| (none) | All types | `Laranite` |
+| `:c` | Commodities | `:c Laranite` |
+| `:v` | Vehicles | `:v Pisces` |
+| `:i` | Items | `:i Multi-Tool` |
+| `:l` | Locations (non-terminals) | `:l Seraphim` |
+| `:t` | Terminals | `:t Cargo` |
+
+Prefixes are parsed in `useUex.parsePrefix()` and routed to per-collection backend commands
+(`apiSearchCommodities`, etc.). `:l` and `:t` both call `apiSearchLocations` but filter
+results client-side by `slug === "terminal"` vs `slug !== "terminal"`.
+
+**Pinned locations**: Users can pin a location to filter all search results to that location's
+terminals. Pinned state lives in `SearchTab.pinnedLocation` and flows down to `SearchBar`
+(display) and `PricePanel` (terminal ID filtering via hierarchy resolution).
+
+**Navigation history**: `SearchTab.navHistory` tracks a stack when drilling down
+(e.g., Location → Terminal). Back navigation via ← button in `PricePanel` header or mouse
+back button (XButton1). History resets when selecting a new search result.
+
+## Location Enrichment
+
+Price entries from the UEX API often lack full location paths. All price providers call
+`enrich_locations_from_hierarchy()` (`providers/mod.rs`) during refresh to populate
+`system`, `location` (planet), and `orbit` (most specific parent: station > city > outpost)
+from the `TerminalHierarchy` cache.
+
+Frontend uses `locationPath(entry, includeSystem?)` from `utils/priceFormatters.ts` to build
+deduplicated breadcrumbs like "Stanton › Crusader › Seraphim Station".
+
+## Per-Type Price Views
+
+Each entity type has its own price view component in `components/overlay/`:
+- `CommodityPriceView` — buy/sell columns with SCU, inventory bars
+- `ItemPriceView` — buy/sell entries with location breadcrumb sub-labels
+- `VehiclePriceView` — purchase/rental prices with location sub-labels
+- `FuelPriceView` — fuel prices grouped by location
+- `TerminalPriceView` — all entity types at a terminal, shows `entry.category` as sub-label
+- `LocationTerminalsView` — lists terminals for a location, emits navigation events
+
+All price views use the shared `PriceList.vue` component for consistent row rendering.
+
 ## Key Constraints — Do Not Violate
 
 - Do NOT use `WS_EX_TRANSPARENT` — makes window click-through, breaks interaction
@@ -422,3 +472,15 @@ All commands need `#[specta::specta]` and must be listed in `collect_commands![]
 with full module paths — `pub use` re-exports do NOT carry the hidden `__cmd__` items.
 
 **Tauri IPC**: Events via `app.emit("kebab-name", json!({...}))`.
+
+## UEX API Quirks
+
+- The API returns integers (e.g. `0`) for null name/string fields. Use
+  `deserialize_nonempty_string` (in `uex/types.rs`) for `Option<String>` DTO fields.
+- Use `deserialize_optional_id` for parent reference ID fields (`id_star_system`,
+  `id_planet`, etc.) — these are integers, not strings.
+- All location types have `is_available` / `is_available_live` fields. Only show entries
+  where `is_available_live == 1` (filtered via `LiveAvailable` trait in `locations/dto.rs`).
+- Different price endpoints return different location fields: `/items_prices_all` has none,
+  `/commodities_prices` has all names. All providers enrich from terminal hierarchy to
+  ensure consistent location data.
