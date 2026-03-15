@@ -24,6 +24,7 @@ const emit = defineEmits<{
   (e: "select", result: { id: string; name: string; kind: string; slug?: string }): void;
   (e: "pin", result: { id: string; name: string; kind: string; slug?: string }): void;
   (e: "unpin"): void;
+  (e: "addToInventory", entity: { id: string; name: string; kind: string }): void;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -216,6 +217,7 @@ defineExpose({ focusInput, stale, handleEsc });
           @focus="activeIndex = index"
           @select="selectResult(result)"
           @pin="pinResult(result)"
+          @add-to-inventory="(entity) => emit('addToInventory', entity)"
         />
       </div>
 

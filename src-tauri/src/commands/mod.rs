@@ -3,6 +3,7 @@ pub mod cache;
 pub mod debug;
 pub mod favorites;
 pub mod hangar;
+pub mod inventory;
 pub mod overlay;
 pub mod settings;
 pub mod uex;

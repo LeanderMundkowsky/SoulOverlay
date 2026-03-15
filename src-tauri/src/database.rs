@@ -57,6 +57,24 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
             );
             CREATE UNIQUE INDEX idx_watch_list_key ON watch_list(entity_id, terminal_id, price_type);",
         ),
+        // v4: inventory table for local item/commodity tracking
+        M::up(
+            "CREATE TABLE IF NOT EXISTS inventory (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id       TEXT NOT NULL,
+                entity_name     TEXT NOT NULL,
+                entity_kind     TEXT NOT NULL,
+                location_id     TEXT NOT NULL,
+                location_name   TEXT NOT NULL,
+                location_slug   TEXT NOT NULL,
+                quantity        INTEGER NOT NULL DEFAULT 1,
+                collection      TEXT NOT NULL DEFAULT '',
+                added_at        TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_inventory_entity_location_collection
+                ON inventory(entity_id, location_id, collection);",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

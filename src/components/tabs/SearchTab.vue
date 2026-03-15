@@ -5,6 +5,7 @@ import SearchBar from "@/components/overlay/SearchBar.vue";
 import PricePanel from "@/components/overlay/PricePanel.vue";
 import EntityInfoCard from "@/components/overlay/EntityInfoCard.vue";
 import ResizeHandle from "@/components/ui/ResizeHandle.vue";
+import InventoryModal from "@/components/ui/InventoryModal.vue";
 import { useSettingsStore } from "@/stores/settings";
 
 const props = defineProps<{
@@ -124,6 +125,15 @@ function handleEsc(): boolean {
   return searchBarRef.value?.handleEsc() ?? false;
 }
 
+// ── Inventory modal from search ─────────────────────────────────────────────
+const showInventoryModal = ref(false);
+const inventoryPrefillEntity = ref<{ id: string; name: string; kind: string } | null>(null);
+
+function onAddToInventory(entity: { id: string; name: string; kind: string }) {
+  inventoryPrefillEntity.value = entity;
+  showInventoryModal.value = true;
+}
+
 defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation });
 </script>
 
@@ -148,7 +158,7 @@ defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation }
           transition: isDragging ? 'none' : 'margin-left 0.3s ease, margin-right 0.3s ease',
         }"
       >
-        <SearchBar ref="searchBarRef" :pinned-location="pinnedLocation" @select="onResultSelected" @pin="onPinLocation" @unpin="onUnpinLocation" />
+        <SearchBar ref="searchBarRef" :pinned-location="pinnedLocation" @select="onResultSelected" @pin="onPinLocation" @unpin="onUnpinLocation" @add-to-inventory="onAddToInventory" />
         <ResizeHandle
           :default-px="0"
           @resize="(px) => onSearchResize(mainAreaRef, px)"
@@ -188,6 +198,14 @@ defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation }
         </div>
       </Transition>
     </div>
+
+    <!-- Inventory modal triggered from search -->
+    <InventoryModal
+      v-if="showInventoryModal"
+      mode="add"
+      :prefill-entity="inventoryPrefillEntity"
+      @close="showInventoryModal = false"
+    />
   </div>
 </template>
 

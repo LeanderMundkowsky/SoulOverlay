@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "select"): void;
   (e: "pin"): void;
+  (e: "addToInventory", entity: { id: string; name: string; kind: string }): void;
 }>();
 
 defineOptions({ inheritAttrs: false });
@@ -47,7 +48,7 @@ function onContextMenu(e: MouseEvent) {
 
 function buildMenuItems(): (MenuItem | MenuSeparator)[] {
   const isFav = favoritesStore.isFavorite(props.result.id, props.result.kind);
-  return [
+  const items: (MenuItem | MenuSeparator)[] = [
     {
       label: props.result.kind === "commodity" ? "View Prices" : "View",
       icon: props.result.kind === "commodity" ? "💰" : "🔍",
@@ -66,6 +67,14 @@ function buildMenuItems(): (MenuItem | MenuSeparator)[] {
       action: () => favoritesStore.toggleFavorite(props.result),
     },
   ];
+  if (props.result.kind === "commodity" || props.result.kind === "item") {
+    items.push({
+      label: "Add to Inventory",
+      icon: "📦",
+      action: () => emit("addToInventory", { id: props.result.id, name: props.result.name, kind: props.result.kind }),
+    });
+  }
+  return items;
 }
 
 function toggleFavorite() {
@@ -155,6 +164,15 @@ function onPointerDown(e: PointerEvent) {
         >
           <IconPin class="w-3 h-3" />
           Pin
+        </button>
+
+        <button
+          v-if="result.kind === 'commodity' || result.kind === 'item'"
+          @click.stop="emit('addToInventory', { id: result.id, name: result.name, kind: result.kind })"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+        >
+          <IconPackage class="w-3 h-3" />
+          Inventory
         </button>
 
         <button

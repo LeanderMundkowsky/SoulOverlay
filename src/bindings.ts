@@ -372,6 +372,73 @@ async removeWatchEntry(entityId: string, terminalId: string, priceType: string) 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getInventory() : Promise<Result<InventoryEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_inventory") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addInventoryEntry(entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collection: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_inventory_entry", { entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collection }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateInventoryQuantity(id: number, quantity: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_inventory_quantity", { id, quantity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeInventoryEntry(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_inventory_entry", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeInventoryQuantity(id: number, quantity: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_inventory_quantity", { id, quantity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async transferInventory(id: number, quantity: number, targetLocationId: string, targetLocationName: string, targetLocationSlug: string, targetCollection: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("transfer_inventory", { id, quantity, targetLocationId, targetLocationName, targetLocationSlug, targetCollection }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getInventoryCollections() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_inventory_collections") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Search storage-capable locations + fleet vehicles for the inventory location picker.
+ */
+async getStorageLocations(query: string) : Promise<Result<UexResult[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_storage_locations", { query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -475,6 +542,7 @@ export type GameState = { sc_detected: boolean }
  * A vehicle in the user's hangar/fleet from UEX API.
  */
 export type HangarVehicle = { id: string; id_vehicle: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; date_added: string; url_photo: string | null }
+export type InventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collection: string; added_at: string; updated_at: string }
 /**
  * Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
  */
