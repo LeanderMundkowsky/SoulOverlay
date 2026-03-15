@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IconPin from "@/components/icons/IconPin.vue";
 import IconCommodity from "@/components/icons/IconCommodity.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import IconPlane from "@/components/icons/IconPlane.vue";
@@ -13,6 +14,7 @@ const { payload, dragging } = useDragDrop();
 
 const emit = defineEmits<{
   select: [fav: Favorite];
+  pin: [fav: Favorite];
 }>();
 
 import { ref } from "vue";
@@ -121,6 +123,16 @@ async function removeFavorite(fav: Favorite) {
 
               <!-- Name -->
               <span class="flex-1 text-xs text-white/70 truncate">{{ fav.name }}</span>
+
+              <!-- Pin button (locations only) -->
+              <button
+                v-if="fav.kind === 'location'"
+                class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/10"
+                title="Pin location to search"
+                @click.stop="emit('pin', fav)"
+              >
+                <IconPin class="w-3 h-3 text-white/30 hover:text-green-400" />
+              </button>
 
               <!-- Remove button -->
               <button

@@ -40,7 +40,7 @@ const pinnedDisplayName = computed(() => {
 
 const placeholderText = computed(() => {
   if (props.pinnedLocation) return `Search within ${pinnedDisplayName.value}…`;
-  return "Search commodities, vehicles, items, locations…";
+  return "Search… (:c :v :i :l :t to filter)";
 });
 
 onMounted(() => {
@@ -232,7 +232,7 @@ defineExpose({ focusInput, stale, handleEsc });
         v-else-if="!query.trim()"
         class="px-4 py-6 text-center text-white/20 text-xs select-none"
       >
-        Type to search commodities, vehicles, items, locations&hellip;
+        Type to search&hellip; Prefixes: <span class="text-white/30">:c</span> commodities, <span class="text-white/30">:v</span> vehicles, <span class="text-white/30">:i</span> items, <span class="text-white/30">:l</span> locations, <span class="text-white/30">:t</span> terminals
       </div>
     </div>
   </div>

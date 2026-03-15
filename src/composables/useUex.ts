@@ -23,26 +23,53 @@ export function useUex() {
   // Prevent concurrent background refreshes.
   let refreshing = false;
 
-  async function search(query: string) {
-    latestQuery.value = query;
+  // Map of search prefix → per-collection command + optional result filter
+  type SearchCommand = (q: string) => Promise<Result<ApiResponse<UexResult[]>, string>>;
+  interface PrefixConfig {
+    command: SearchCommand;
+    filter?: (r: UexResult) => boolean;
+  }
+  const prefixMap: Record<string, PrefixConfig> = {
+    c: { command: (q) => commands.apiSearchCommodities(q) },
+    v: { command: (q) => commands.apiSearchVehicles(q) },
+    i: { command: (q) => commands.apiSearchItems(q) },
+    l: { command: (q) => commands.apiSearchLocations(q), filter: (r) => r.slug !== "terminal" },
+    t: { command: (q) => commands.apiSearchLocations(q), filter: (r) => r.slug === "terminal" },
+  };
 
-    if (!query.trim()) {
+  function parsePrefix(raw: string): { command: SearchCommand; query: string; filter?: (r: UexResult) => boolean } {
+    const match = raw.match(/^:([cvilt])\s+(.+)/i);
+    if (match) {
+      const key = match[1].toLowerCase();
+      const cfg = prefixMap[key];
+      if (cfg) return { command: cfg.command, query: match[2], filter: cfg.filter };
+    }
+    return { command: (q) => commands.apiSearch(q), query: raw };
+  }
+
+  async function search(rawQuery: string) {
+    latestQuery.value = rawQuery;
+
+    if (!rawQuery.trim()) {
       results.value = [];
       total.value = null;
       stale.value = false;
       return;
     }
 
+    const { command, query, filter } = parsePrefix(rawQuery);
+
     loading.value = true;
     error.value = null;
 
     try {
-      const result = await commands.apiSearch(query);
+      const result = await command(query);
       if (result.status === "error") throw result.error;
       const resp = result.data;
       if (resp.ok && resp.data) {
-        results.value = resp.data;
-        total.value = resp.total ?? resp.data.length;
+        const filtered = filter ? resp.data.filter(filter) : resp.data;
+        results.value = filtered;
+        total.value = resp.total ?? filtered.length;
         stale.value = resp.stale;
 
         if (resp.stale && !refreshing) {
@@ -68,18 +95,19 @@ export function useUex() {
     refreshing = true;
     try {
       await commands.cacheRefreshExpired();
-      // Re-run with whatever the user has typed by now.
       const q = latestQuery.value;
       if (!q.trim()) {
         stale.value = false;
         return;
       }
-      const result = await commands.apiSearch(q);
+      const { command, query, filter } = parsePrefix(q);
+      const result = await command(query);
       if (result.status === "ok") {
         const fresh = result.data;
         if (fresh.ok && fresh.data) {
-          results.value = fresh.data;
-          total.value = fresh.total ?? fresh.data.length;
+          const filtered = filter ? fresh.data.filter(filter) : fresh.data;
+          results.value = filtered;
+          total.value = fresh.total ?? filtered.length;
           stale.value = false;
         }
       }

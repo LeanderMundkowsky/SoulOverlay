@@ -229,6 +229,13 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
   }
 }
 
+function onFavoritePin(fav: { id: string; name: string; kind: string; slug: string }) {
+  if (activeTab.value !== "search") {
+    activeTab.value = "search";
+  }
+  searchTabRef.value?.pinLocation(fav);
+}
+
 function onWatchSelect(entry: WatchEntry) {
   const entity = { id: entry.entity_id, name: entry.entity_name, kind: entry.entity_kind, slug: entry.entity_slug };
   watchlistStore.highlightTarget = { terminalId: entry.terminal_id, priceType: entry.price_type };
@@ -302,7 +309,8 @@ watch(isDragActive, (active) => {
             <FavoritesPanel
               v-if="showFavorites && (activeTab === 'search' || activeTab === 'details')"
               class="flex-1 min-h-0"
-              @select="onFavoriteSelect" />
+              @select="onFavoriteSelect"
+              @pin="onFavoritePin" />
             <WatchListPanel
               v-if="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
               class="flex-1 min-h-0"

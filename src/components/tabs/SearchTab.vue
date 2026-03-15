@@ -125,7 +125,7 @@ function handleEsc(): boolean {
   return searchBarRef.value?.handleEsc() ?? false;
 }
 
-defineExpose({ focusInput, handleEsc, selectEntity });
+defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation });
 </script>
 
 <template>
