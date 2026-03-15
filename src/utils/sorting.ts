@@ -20,6 +20,30 @@ export const simpleSortOptions: SortOption[] = [
   { key: "rent_price", label: "Rent Price", defaultAsc: false },
 ];
 
+export const itemSortOptions: SortOption[] = [
+  { key: "buy_price", label: "Buy Price", defaultAsc: false },
+  { key: "sell_price", label: "Sell Price", defaultAsc: false },
+  { key: "terminal", label: "Terminal", defaultAsc: true },
+  { key: "rent_price", label: "Rent Price", defaultAsc: false },
+];
+
+export const vehicleSortOptions: SortOption[] = [
+  { key: "buy_price", label: "Buy Price", defaultAsc: false },
+  { key: "terminal", label: "Terminal", defaultAsc: true },
+  { key: "rent_price", label: "Rent Price", defaultAsc: false },
+];
+
+export const fuelSortOptions: SortOption[] = [
+  { key: "buy_price", label: "Price", defaultAsc: true },
+  { key: "location", label: "Location", defaultAsc: true },
+];
+
+export const terminalSortOptions: SortOption[] = [
+  { key: "entity_name", label: "Name", defaultAsc: true },
+  { key: "buy_price", label: "Buy Price", defaultAsc: false },
+  { key: "sell_price", label: "Sell Price", defaultAsc: false },
+];
+
 export function sortEntries(source: PriceEntry[], key: keyof PriceEntry, asc: boolean): PriceEntry[] {
   const sorted = [...source];
   sorted.sort((a, b) => {

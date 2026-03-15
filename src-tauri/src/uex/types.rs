@@ -119,6 +119,8 @@ pub struct PriceEntry {
     pub container_sizes: String,
     #[serde(default)]
     pub is_buy_location: bool,
+    #[serde(default)]
+    pub category: String,
 }
 
 /// Authenticated user profile from the UEX API `GET /user` endpoint.

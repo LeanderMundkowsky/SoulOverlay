@@ -2,34 +2,30 @@
 import { ref } from "vue";
 import SortControls from "@/components/ui/SortControls.vue";
 import { formatSimplePrice } from "@/utils/priceFormatters";
-import { simpleSortOptions, sortEntries } from "@/utils/sorting";
+import { sortEntries } from "@/utils/sorting";
 import type { SortOption } from "@/utils/sorting";
 import type { PriceEntry } from "@/bindings";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   buyEntries: PriceEntry[];
   sellEntries: PriceEntry[];
-  /** When true, show entity_name instead of terminal as the row label. */
-  terminalView?: boolean;
-}>();
+  sortOptions: SortOption[];
+  labelFn: (entry: PriceEntry) => string;
+  subLabelFn?: (entry: PriceEntry) => string;
+  buyLabel?: string;
+  sellLabel?: string;
+  buyColor?: string;
+  sellColor?: string;
+}>(), {
+  buyLabel: "Buy",
+  sellLabel: "Sell",
+  buyColor: "text-green-400",
+  sellColor: "text-blue-400",
+});
 
-const priceTypeLabels: Record<string, string> = {
-  commodity: "Commodity",
-  raw_commodity: "Raw Commodity",
-  item: "Item",
-  fuel: "Fuel",
-  vehicle_purchase: "Vehicle (Buy)",
-  vehicle_rental: "Vehicle (Rent)",
-};
-
-function subLabel(entry: PriceEntry): string {
-  if (!props.terminalView) return entry.location;
-  return priceTypeLabels[entry.price_type] ?? entry.price_type;
-}
-
-const buySortKey = ref<keyof PriceEntry>("buy_price");
-const buySortAsc = ref(true);
-const sellSortKey = ref<keyof PriceEntry>("sell_price");
+const buySortKey = ref<keyof PriceEntry>(props.sortOptions[0]?.key ?? "buy_price");
+const buySortAsc = ref(props.sortOptions[0]?.defaultAsc ?? true);
+const sellSortKey = ref<keyof PriceEntry>(props.sortOptions[0]?.key ?? "sell_price");
 const sellSortAsc = ref(false);
 
 function sortedBuy(): PriceEntry[] {
@@ -49,6 +45,14 @@ function onSellSelect(opt: SortOption) {
   sellSortKey.value = opt.key;
   sellSortAsc.value = opt.defaultAsc;
 }
+
+function buyPrice(entry: PriceEntry): string {
+  return formatSimplePrice(entry.buy_price);
+}
+
+function sellPrice(entry: PriceEntry): string {
+  return formatSimplePrice(entry.sell_price);
+}
 </script>
 
 <template>
@@ -56,9 +60,9 @@ function onSellSelect(opt: SortOption) {
     <!-- Buy column -->
     <div v-if="buyEntries.length > 0" class="flex flex-col min-w-0" :class="sellEntries.length > 0 ? 'flex-1 border-r border-white/5' : 'flex-1'">
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
-        <span class="text-xs font-medium text-green-400/70">Buy ({{ buyEntries.length }})</span>
+        <span class="text-xs font-medium" :class="buyColor + '/70'">{{ buyLabel }} ({{ buyEntries.length }})</span>
         <SortControls
-          :options="simpleSortOptions"
+          :options="sortOptions"
           :current-key="buySortKey"
           :ascending="buySortAsc"
           @select="onBuySelect"
@@ -72,11 +76,11 @@ function onSellSelect(opt: SortOption) {
           class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-white/80 text-xs font-medium truncate" :title="terminalView ? entry.entity_name : entry.terminal">{{ terminalView ? entry.entity_name : entry.terminal }}</span>
-            <span class="text-green-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.buy_price) }}</span>
+            <span class="text-white/80 text-xs font-medium truncate" :title="labelFn(entry)">{{ labelFn(entry) }}</span>
+            <span class="text-xs font-semibold shrink-0" :class="buyColor">{{ buyPrice(entry) }}</span>
           </div>
-          <div class="flex items-center justify-between gap-2 mt-0.5">
-            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabel(entry) }}</span>
+          <div v-if="subLabelFn && subLabelFn(entry)" class="flex items-center justify-between gap-2 mt-0.5">
+            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabelFn(entry) }}</span>
             <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
           </div>
         </div>
@@ -86,9 +90,9 @@ function onSellSelect(opt: SortOption) {
     <!-- Sell column -->
     <div v-if="sellEntries.length > 0" class="flex flex-col min-w-0 flex-1">
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
-        <span class="text-xs font-medium text-blue-400/70">Sell ({{ sellEntries.length }})</span>
+        <span class="text-xs font-medium" :class="sellColor + '/70'">{{ sellLabel }} ({{ sellEntries.length }})</span>
         <SortControls
-          :options="simpleSortOptions"
+          :options="sortOptions"
           :current-key="sellSortKey"
           :ascending="sellSortAsc"
           @select="onSellSelect"
@@ -102,11 +106,11 @@ function onSellSelect(opt: SortOption) {
           class="border border-white/10 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors px-2.5 py-1.5"
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-white/80 text-xs font-medium truncate" :title="terminalView ? entry.entity_name : entry.terminal">{{ terminalView ? entry.entity_name : entry.terminal }}</span>
-            <span class="text-blue-400 text-xs font-semibold shrink-0">{{ formatSimplePrice(entry.sell_price) }}</span>
+            <span class="text-white/80 text-xs font-medium truncate" :title="labelFn(entry)">{{ labelFn(entry) }}</span>
+            <span class="text-xs font-semibold shrink-0" :class="sellColor">{{ sellPrice(entry) }}</span>
           </div>
-          <div class="flex items-center justify-between gap-2 mt-0.5">
-            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabel(entry) }}</span>
+          <div v-if="subLabelFn && subLabelFn(entry)" class="flex items-center justify-between gap-2 mt-0.5">
+            <span class="text-white/30 text-[0.6875rem] truncate">{{ subLabelFn(entry) }}</span>
             <span v-if="entry.rent_price > 0" class="text-yellow-400/60 text-[0.6875rem] shrink-0">Rent: {{ formatSimplePrice(entry.rent_price) }}</span>
           </div>
         </div>

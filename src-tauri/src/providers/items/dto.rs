@@ -123,6 +123,7 @@ impl From<&ItemPriceDto> for PriceEntry {
             inventory_status: 0.0, inventory_status_avg: 0.0,
             container_sizes: String::new(),
             is_buy_location: dto.price_buy.unwrap_or(0.0) > 0.0,
+            category: String::new(),
         }
     }
 }

@@ -14,8 +14,8 @@ from an in-memory mirror for instant search.
 
 - Prefer asking questions over "implement first, rework later". When facing design decisions,
   ambiguous requirements, or multiple valid approaches, stop and ask with predefined choices.
-- When testing UI changes via `npm run tauri dev`, the agent cannot see the overlay. After
-  launching, use `ask_user` with specific instructions: what to test, expected behavior,
+- Do NOT run `npm run tauri dev` yourself. The user manages starting/restarting the app.
+  Instead, use `ask_user` with specific test instructions: what to test, expected behavior,
   possible edge cases, and what errors to look for (e.g. red error banners, broken layouts,
   unresponsive hotkeys). Provide choices describing expected vs error states.
 

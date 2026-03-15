@@ -214,6 +214,7 @@ impl CommodityPriceDto {
             inventory_status_avg: status_avg.unwrap_or(0.0),
             container_sizes: container_sizes_display,
             is_buy_location: is_buy,
+            category: String::new(),
         }
     }
 }

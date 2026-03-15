@@ -535,7 +535,7 @@ export type LocationTerminal = { id: string; name: string; nickname: string; sys
  * A price entry from UEX API.
  * Unified across all price types — entity metadata identifies the source.
  */
-export type PriceEntry = { entity_id: string; entity_name: string; price_type: string; location: string; terminal: string; terminal_id: string; buy_price: number; sell_price: number; rent_price: number; scu_available: number | null; date_updated: string; orbit?: string; system?: string; faction?: string; scu_last?: number; scu_users?: number; scu_avg?: number; scu_min?: number; scu_max?: number; price_last?: number; price_users?: number; price_avg?: number; price_min?: number; price_max?: number; inventory_status?: number; inventory_status_avg?: number; container_sizes?: string; is_buy_location?: boolean }
+export type PriceEntry = { entity_id: string; entity_name: string; price_type: string; location: string; terminal: string; terminal_id: string; buy_price: number; sell_price: number; rent_price: number; scu_available: number | null; date_updated: string; orbit?: string; system?: string; faction?: string; scu_last?: number; scu_users?: number; scu_avg?: number; scu_min?: number; scu_max?: number; price_last?: number; price_users?: number; price_avg?: number; price_min?: number; price_max?: number; inventory_status?: number; inventory_status_avg?: number; container_sizes?: string; is_buy_location?: boolean; category?: string }
 /**
  * Application settings persisted as JSON to `%APPDATA%\SoulOverlay\settings.json`
  */

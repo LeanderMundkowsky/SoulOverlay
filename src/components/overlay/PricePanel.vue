@@ -4,7 +4,10 @@ import { commands } from "@/bindings";
 import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import CommodityPriceView from "@/components/overlay/CommodityPriceView.vue";
-import SimplePriceView from "@/components/overlay/SimplePriceView.vue";
+import ItemPriceView from "@/components/overlay/ItemPriceView.vue";
+import VehiclePriceView from "@/components/overlay/VehiclePriceView.vue";
+import FuelPriceView from "@/components/overlay/FuelPriceView.vue";
+import TerminalPriceView from "@/components/overlay/TerminalPriceView.vue";
 import LocationTerminalsView from "@/components/overlay/LocationTerminalsView.vue";
 import { useUex } from "@/composables/useUex";
 import type { PriceEntry } from "@/bindings";
@@ -34,7 +37,6 @@ const { loading, error, prices, getEntityPrices } = useUex();
 
 const buyEntries = ref<PriceEntry[]>([]);
 const sellEntries = ref<PriceEntry[]>([]);
-const hasRichData = ref(false);
 
 // Terminal IDs that belong to the pinned location (resolved via hierarchy)
 const pinnedTerminalIds = ref<Set<string>>(new Set());
@@ -56,7 +58,6 @@ watch(
     const all = [...prices.value];
     buyEntries.value = all.filter((p) => p.buy_price > 0);
     sellEntries.value = all.filter((p) => p.sell_price > 0);
-    hasRichData.value = props.entityKind === "commodity" || props.entityKind === "raw_commodity";
   },
   { immediate: true }
 );
@@ -122,17 +123,19 @@ const pinnedDisplayName = computed(() => {
   return props.pinnedLocation.name.replace(/^\[.*?\]\s*/, "");
 });
 
-const isLocationView = computed(() => {
-  return props.entityKind === "location" && props.entitySlug !== "terminal"
-    && props.entitySlug !== "faction" && props.entitySlug !== "company";
-});
-
-const isTerminalView = computed(() => {
-  return props.entityKind === "location" && props.entitySlug === "terminal";
+const viewType = computed(() => {
+  if (props.entityKind === "commodity" || props.entityKind === "raw_commodity") return "commodity";
+  if (props.entityKind === "item") return "item";
+  if (props.entityKind === "vehicle" || props.entityKind === "ground vehicle") return "vehicle";
+  if (props.entityKind === "vehicle_rental") return "vehicle";
+  if (props.entityKind === "fuel") return "fuel";
+  if (props.entityKind === "location" && props.entitySlug === "terminal") return "terminal";
+  if (props.entityKind === "location" && props.entitySlug !== "faction" && props.entitySlug !== "company") return "location";
+  return "item"; // fallback
 });
 
 function fetchPrices() {
-  if (!isLocationView.value) {
+  if (viewType.value !== "location") {
     getEntityPrices(props.entityKind, props.entityId);
   }
 }
@@ -172,7 +175,7 @@ watch(() => props.entityId, () => { fetchPrices(); });
 
     <!-- Location terminals view (non-terminal locations) -->
     <LocationTerminalsView
-      v-else-if="isLocationView"
+      v-else-if="viewType === 'location'"
       :entity-id="entityId"
       :entity-slug="entitySlug ?? ''"
       @select-terminal="(t) => emit('select-entity', t)"
@@ -180,7 +183,7 @@ watch(() => props.entityId, () => { fetchPrices(); });
 
     <!-- Rich data (commodity/raw_commodity) -->
     <CommodityPriceView
-      v-else-if="hasData() && hasRichData"
+      v-else-if="hasData() && viewType === 'commodity'"
       :buy-entries="filteredBuyEntries"
       :sell-entries="filteredSellEntries"
       :entity-id="entityId"
@@ -190,12 +193,32 @@ watch(() => props.entityId, () => { fetchPrices(); });
       :active="active"
     />
 
-    <!-- Simple data (vehicle/item/fuel) -->
-    <SimplePriceView
-      v-else-if="hasData()"
+    <!-- Item prices -->
+    <ItemPriceView
+      v-else-if="hasData() && viewType === 'item'"
       :buy-entries="filteredBuyEntries"
       :sell-entries="filteredSellEntries"
-      :terminal-view="isTerminalView"
+    />
+
+    <!-- Vehicle prices (purchase + rental) -->
+    <VehiclePriceView
+      v-else-if="hasData() && viewType === 'vehicle'"
+      :buy-entries="filteredBuyEntries"
+      :sell-entries="filteredSellEntries"
+    />
+
+    <!-- Fuel prices (per-location grouping) -->
+    <FuelPriceView
+      v-else-if="hasData() && viewType === 'fuel'"
+      :buy-entries="filteredBuyEntries"
+      :sell-entries="filteredSellEntries"
+    />
+
+    <!-- Terminal prices (all entity types at a terminal) -->
+    <TerminalPriceView
+      v-else-if="hasData() && viewType === 'terminal'"
+      :buy-entries="filteredBuyEntries"
+      :sell-entries="filteredSellEntries"
     />
 
     <!-- No results after pin filtering -->

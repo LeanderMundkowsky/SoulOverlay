@@ -50,6 +50,7 @@ impl From<&FuelPriceDto> for PriceEntry {
             price_users: 0.0, price_avg: 0.0, price_min: 0.0, price_max: 0.0,
             inventory_status: 0.0, inventory_status_avg: 0.0,
             container_sizes: String::new(), is_buy_location: true,
+            category: String::new(),
         }
     }
 }

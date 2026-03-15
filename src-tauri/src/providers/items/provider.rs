@@ -1,11 +1,14 @@
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::dto::{CategoryDto, ItemDto, ItemPriceDto};
-use crate::cache_store::Collection;
+use crate::cache_store::{CacheResult, Collection};
 use crate::providers::{
     search_in_collection, store_blob, store_prices_by_terminal, store_prices_split,
     BlobProvider, PerEntityProvider, RefreshContext,
 };
+use crate::providers::locations::dto::TerminalHierarchy;
+use crate::providers::locations::TERMINAL_HIERARCHY_KEY;
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 use crate::uex::UexClient;
 
@@ -32,10 +35,54 @@ pub struct ItemPrices;
 #[async_trait]
 impl PerEntityProvider for ItemPrices {
     fn collection(&self) -> Collection { Collection::ItemPrices }
+    fn depends_on(&self) -> &[Collection] { &[Collection::EntityInfo, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
         let dtos: Vec<ItemPriceDto> = ctx.client.get("/items_prices_all", &[], ctx.api_key).await?;
-        let data: Vec<PriceEntry> = dtos.iter().map(PriceEntry::from).collect();
+        let mut data: Vec<PriceEntry> = dtos.iter().map(PriceEntry::from).collect();
+
+        // Build terminal → location lookup from cached hierarchy
+        let hierarchy: Option<Vec<TerminalHierarchy>> = match ctx
+            .cache
+            .get::<Vec<TerminalHierarchy>>(TERMINAL_HIERARCHY_KEY)
+        {
+            CacheResult::Fresh(h) | CacheResult::Stale(h) => Some(h),
+            CacheResult::Missing => None,
+        };
+        let terminal_map: HashMap<&str, &TerminalHierarchy> = hierarchy
+            .as_ref()
+            .map(|h| h.iter().map(|t| (t.id.as_str(), t)).collect())
+            .unwrap_or_default();
+
+        let info_base = Collection::EntityInfo.storage_key();
+        for entry in &mut data {
+            // Enrich location from terminal hierarchy
+            if let Some(th) = terminal_map.get(entry.terminal_id.as_str()) {
+                if !th.orbit_name.is_empty() {
+                    entry.orbit = th.orbit_name.clone();
+                }
+                if !th.planet_name.is_empty() || !th.system_name.is_empty() {
+                    entry.location = if !th.planet_name.is_empty() {
+                        th.planet_name.clone()
+                    } else {
+                        th.system_name.clone()
+                    };
+                }
+                if !th.system_name.is_empty() {
+                    entry.system = th.system_name.clone();
+                }
+            }
+            // Enrich category from EntityInfo
+            let key = format!("{}:item:{}", info_base, entry.entity_id);
+            if let CacheResult::Fresh(info) | CacheResult::Stale(info) =
+                ctx.cache.get::<EntityInfo>(&key)
+            {
+                if let Some(section) = info.section {
+                    entry.category = section;
+                }
+            }
+        }
+
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
         if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
