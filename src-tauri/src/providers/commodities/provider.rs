@@ -3,7 +3,8 @@ use async_trait::async_trait;
 use super::dto::{CommodityDto, CommodityPriceDto};
 use crate::cache_store::Collection;
 use crate::providers::{
-    catalog_ids_from_cache, store_blob, store_prices_by_terminal, store_prices_split,
+    catalog_ids_from_cache, enrich_locations_from_hierarchy, store_blob,
+    store_prices_by_terminal, store_prices_split,
     BlobProvider, PerEntityProvider, RefreshContext,
 };
 use crate::uex::types::{PriceEntry, UexResult};
@@ -33,14 +34,15 @@ pub struct CommodityPrices;
 #[async_trait]
 impl PerEntityProvider for CommodityPrices {
     fn collection(&self) -> Collection { Collection::CommodityPrices }
-    fn depends_on(&self) -> &[Collection] { &[Collection::Commodities] }
+    fn depends_on(&self) -> &[Collection] { &[Collection::Commodities, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
         let ids = catalog_ids_from_cache(ctx.cache, Collection::Commodities);
         if ids.is_empty() {
             return Err("Commodities not in cache; refresh commodities first".to_string());
         }
-        let data = fetch_all_commodity_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        let mut data = fetch_all_commodity_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
         if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
@@ -62,7 +64,8 @@ impl PerEntityProvider for RawCommodityPrices {
         let dtos: Vec<CommodityPriceDto> = ctx.client
             .get("/commodities_raw_prices_all", &[], ctx.api_key)
             .await?;
-        let data: Vec<PriceEntry> = dtos.iter().map(|d| d.to_price_entry("raw_commodity")).collect();
+        let mut data: Vec<PriceEntry> = dtos.iter().map(|d| d.to_price_entry("raw_commodity")).collect();
+        enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
         if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {

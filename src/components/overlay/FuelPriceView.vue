@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import PriceList from "@/components/overlay/PriceList.vue";
 import { fuelSortOptions } from "@/utils/sorting";
+import { locationPath } from "@/utils/priceFormatters";
 import type { PriceEntry } from "@/bindings";
 
 const props = defineProps<{
@@ -30,7 +31,7 @@ function label(entry: PriceEntry): string {
 }
 
 function subLabel(entry: PriceEntry): string {
-  return entry.system || entry.location;
+  return locationPath(entry);
 }
 </script>
 

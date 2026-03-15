@@ -17,6 +17,8 @@ pub struct TerminalHierarchy {
     pub system_name: String,
     pub planet_name: String,
     pub orbit_name: String,
+    /// Most specific parent location (station > city > outpost > orbit)
+    pub location_name: String,
     pub id_star_system: String,
     pub id_planet: String,
     pub id_moon: String,
@@ -29,6 +31,13 @@ pub struct TerminalHierarchy {
 
 impl TerminalHierarchy {
     pub fn from_dto(dto: &TerminalDto) -> Self {
+        // Resolve most specific parent: station > city > outpost > orbit
+        let location_name = dto.space_station_name.clone()
+            .or_else(|| dto.city_name.clone())
+            .or_else(|| dto.outpost_name.clone())
+            .or_else(|| dto.orbit_name.clone())
+            .unwrap_or_default();
+
         Self {
             id: dto.id.clone(),
             name: dto.name.clone(),
@@ -36,6 +45,7 @@ impl TerminalHierarchy {
             system_name: dto.star_system_name.clone().unwrap_or_default(),
             planet_name: dto.planet_name.clone().unwrap_or_default(),
             orbit_name: dto.orbit_name.clone().unwrap_or_default(),
+            location_name,
             id_star_system: dto.id_star_system.clone().unwrap_or_default(),
             id_planet: dto.id_planet.clone().unwrap_or_default(),
             id_moon: dto.id_moon.clone().unwrap_or_default(),
@@ -92,6 +102,14 @@ pub struct TerminalDto {
     pub planet_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nonempty_string")]
     pub orbit_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
+    pub moon_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
+    pub space_station_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
+    pub city_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
+    pub outpost_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nonempty_string")]
     pub faction_name: Option<String>,
     // Hierarchy IDs for future pin-feature terminal resolution

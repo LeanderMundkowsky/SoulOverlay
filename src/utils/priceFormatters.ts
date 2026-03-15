@@ -64,6 +64,19 @@ export function shortTerminal(terminal: string): string {
   return terminal.replace(/^Admin - /, "");
 }
 
+/** Build a location breadcrumb like "Stanton › Hurston" or "Pyro › Monox › Monox L4". */
+export function locationPath(entry: PriceEntry, includeSystem = true): string {
+  const parts: string[] = [];
+  if (includeSystem && entry.system) parts.push(entry.system);
+  if (entry.location && entry.location !== "Unknown" && entry.location !== entry.system) {
+    parts.push(entry.location);
+  }
+  if (entry.orbit && entry.orbit !== entry.location && entry.orbit !== entry.system) {
+    parts.push(entry.orbit);
+  }
+  return parts.join(" › ");
+}
+
 export function avgOf(entries: PriceEntry[], key: keyof PriceEntry): number {
   const vals = entries.map((e) => e[key] as number).filter((v) => v > 0);
   if (vals.length === 0) return 0;

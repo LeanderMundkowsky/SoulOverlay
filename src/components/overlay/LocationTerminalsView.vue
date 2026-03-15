@@ -41,8 +41,8 @@ async function fetchTerminals() {
 function breadcrumb(t: LocationTerminal): string {
   const parts: string[] = [];
   if (t.orbit_name) parts.push(t.orbit_name);
-  if (t.planet_name) parts.push(t.planet_name);
-  if (t.system_name) parts.push(t.system_name);
+  if (t.planet_name && t.planet_name !== t.orbit_name) parts.push(t.planet_name);
+  if (t.system_name && t.system_name !== t.planet_name && t.system_name !== t.orbit_name) parts.push(t.system_name);
   return parts.join(", ");
 }
 

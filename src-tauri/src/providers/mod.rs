@@ -227,6 +227,37 @@ pub fn catalog_ids_from_cache(cache: &CacheStore, collection: Collection) -> Vec
     }
 }
 
+/// Enrich PriceEntry location fields from the terminal hierarchy cache.
+/// Sets orbit to the most specific parent (station > city > outpost > orbit),
+/// location to planet_name, and system to system_name.
+pub fn enrich_locations_from_hierarchy(cache: &CacheStore, entries: &mut [PriceEntry]) {
+    use crate::providers::locations::dto::TerminalHierarchy;
+    use crate::providers::locations::TERMINAL_HIERARCHY_KEY;
+
+    let hierarchy: Vec<TerminalHierarchy> = match cache.get(TERMINAL_HIERARCHY_KEY) {
+        CacheResult::Fresh(h) | CacheResult::Stale(h) => h,
+        CacheResult::Missing => return,
+    };
+    let map: std::collections::HashMap<&str, &TerminalHierarchy> =
+        hierarchy.iter().map(|t| (t.id.as_str(), t)).collect();
+
+    for entry in entries.iter_mut() {
+        if let Some(th) = map.get(entry.terminal_id.as_str()) {
+            if !th.location_name.is_empty() {
+                entry.orbit = th.location_name.clone();
+            } else if !th.orbit_name.is_empty() {
+                entry.orbit = th.orbit_name.clone();
+            }
+            if !th.planet_name.is_empty() {
+                entry.location = th.planet_name.clone();
+            }
+            if !th.system_name.is_empty() {
+                entry.system = th.system_name.clone();
+            }
+        }
+    }
+}
+
 /// Search a pre-fetched collection by name substring match.
 pub fn search_in_collection(collection: &[UexResult], query: &str) -> Vec<UexResult> {
     let query_lower = query.to_lowercase();

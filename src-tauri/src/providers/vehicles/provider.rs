@@ -3,7 +3,8 @@ use async_trait::async_trait;
 use super::dto::{VehicleDto, VehiclePurchasePriceDto, VehicleRentalPriceDto};
 use crate::cache_store::Collection;
 use crate::providers::{
-    catalog_ids_from_cache, store_blob, store_prices_by_terminal, store_prices_split,
+    catalog_ids_from_cache, enrich_locations_from_hierarchy, store_blob,
+    store_prices_by_terminal, store_prices_split,
     BlobProvider, PerEntityProvider, RefreshContext,
 };
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
@@ -33,14 +34,15 @@ pub struct VehiclePurchasePrices;
 #[async_trait]
 impl PerEntityProvider for VehiclePurchasePrices {
     fn collection(&self) -> Collection { Collection::VehiclePurchasePrices }
-    fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles] }
+    fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
         let ids = catalog_ids_from_cache(ctx.cache, Collection::Vehicles);
         if ids.is_empty() {
             return Err("Vehicles not in cache; refresh vehicles first".to_string());
         }
-        let data = fetch_all_vehicle_purchase_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        let mut data = fetch_all_vehicle_purchase_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
         if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {
@@ -57,14 +59,15 @@ pub struct VehicleRentalPrices;
 #[async_trait]
 impl PerEntityProvider for VehicleRentalPrices {
     fn collection(&self) -> Collection { Collection::VehicleRentalPrices }
-    fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles] }
+    fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
         let ids = catalog_ids_from_cache(ctx.cache, Collection::Vehicles);
         if ids.is_empty() {
             return Err("Vehicles not in cache; refresh vehicles first".to_string());
         }
-        let data = fetch_all_vehicle_rental_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        let mut data = fetch_all_vehicle_rental_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
         if let Err(e) = store_prices_by_terminal(ctx.cache, &data, self.collection(), ttl) {

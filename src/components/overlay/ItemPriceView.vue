@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PriceList from "@/components/overlay/PriceList.vue";
 import { itemSortOptions } from "@/utils/sorting";
+import { locationPath } from "@/utils/priceFormatters";
 import type { PriceEntry } from "@/bindings";
 
 defineProps<{
@@ -13,10 +14,7 @@ function label(entry: PriceEntry): string {
 }
 
 function subLabel(entry: PriceEntry): string {
-  if (entry.location && entry.location !== "Unknown") return entry.location;
-  if (entry.orbit) return entry.orbit;
-  if (entry.system) return entry.system;
-  return "";
+  return locationPath(entry);
 }
 </script>
 

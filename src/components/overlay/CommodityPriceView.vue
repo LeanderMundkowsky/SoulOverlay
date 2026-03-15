@@ -3,7 +3,7 @@ import { ref, watch, nextTick, onMounted } from "vue";
 import SortControls from "@/components/ui/SortControls.vue";
 import InventoryBar from "@/components/ui/InventoryBar.vue";
 import IconEye from "@/components/icons/IconEye.vue";
-import { formatScu, formatPrice, inventoryPercent, relativeAge, shortSystem, shortFaction, shortTerminal, avgOf, avgInventoryPercent } from "@/utils/priceFormatters";
+import { formatScu, formatPrice, inventoryPercent, relativeAge, shortSystem, shortTerminal, locationPath, avgOf, avgInventoryPercent } from "@/utils/priceFormatters";
 import { richSortOptions, sortEntries } from "@/utils/sorting";
 import type { SortOption } from "@/utils/sorting";
 import type { PriceEntry } from "@/bindings";
@@ -166,11 +166,7 @@ onMounted(() => nextTick(() => tryConsumeHighlight()));
             </div>
             <div class="flex items-center justify-between gap-1.5 mt-0.5">
               <div class="flex items-center gap-1 text-[0.6875rem] text-white/35 min-w-0 truncate">
-                <span>{{ entry.orbit }}</span>
-                <template v-if="entry.faction">
-                  <span class="text-white/15">·</span>
-                  <span>{{ shortFaction(entry.faction) }}</span>
-                </template>
+                <span>{{ locationPath(entry, false) }}</span>
               </div>
               <div class="flex items-center gap-2 shrink-0 text-[0.6875rem]">
                 <span class="text-white/40">{{ formatScu(entry.scu_last) }}<span class="text-white/20"> / {{ formatScu(entry.scu_max) }}</span></span>
@@ -228,11 +224,7 @@ onMounted(() => nextTick(() => tryConsumeHighlight()));
             </div>
             <div class="flex items-center justify-between gap-1.5 mt-0.5">
               <div class="flex items-center gap-1 text-[0.6875rem] text-white/35 min-w-0 truncate">
-                <span>{{ entry.orbit }}</span>
-                <template v-if="entry.faction">
-                  <span class="text-white/15">·</span>
-                  <span>{{ shortFaction(entry.faction) }}</span>
-                </template>
+                <span>{{ locationPath(entry, false) }}</span>
               </div>
               <div class="flex items-center gap-2 shrink-0 text-[0.6875rem]">
                 <span class="text-white/40">{{ formatScu(entry.scu_last) }}<span class="text-white/20"> / {{ formatScu(entry.scu_max) }}</span></span>

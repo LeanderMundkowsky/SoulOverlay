@@ -238,11 +238,11 @@ where
     }
 }
 
-/// Extract a location string from star_system_name or planet_name.
+/// Extract a location string preferring planet_name over star_system_name.
 pub fn location_string(star_system: &Option<String>, planet: &Option<String>) -> String {
-    star_system
+    planet
         .as_deref()
-        .or(planet.as_deref())
+        .or(star_system.as_deref())
         .unwrap_or("Unknown")
         .to_string()
 }

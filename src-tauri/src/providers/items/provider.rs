@@ -1,14 +1,12 @@
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 use super::dto::{CategoryDto, ItemDto, ItemPriceDto};
 use crate::cache_store::{CacheResult, Collection};
 use crate::providers::{
-    search_in_collection, store_blob, store_prices_by_terminal, store_prices_split,
+    enrich_locations_from_hierarchy, search_in_collection, store_blob,
+    store_prices_by_terminal, store_prices_split,
     BlobProvider, PerEntityProvider, RefreshContext,
 };
-use crate::providers::locations::dto::TerminalHierarchy;
-use crate::providers::locations::TERMINAL_HIERARCHY_KEY;
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 use crate::uex::UexClient;
 
@@ -41,38 +39,12 @@ impl PerEntityProvider for ItemPrices {
         let dtos: Vec<ItemPriceDto> = ctx.client.get("/items_prices_all", &[], ctx.api_key).await?;
         let mut data: Vec<PriceEntry> = dtos.iter().map(PriceEntry::from).collect();
 
-        // Build terminal → location lookup from cached hierarchy
-        let hierarchy: Option<Vec<TerminalHierarchy>> = match ctx
-            .cache
-            .get::<Vec<TerminalHierarchy>>(TERMINAL_HIERARCHY_KEY)
-        {
-            CacheResult::Fresh(h) | CacheResult::Stale(h) => Some(h),
-            CacheResult::Missing => None,
-        };
-        let terminal_map: HashMap<&str, &TerminalHierarchy> = hierarchy
-            .as_ref()
-            .map(|h| h.iter().map(|t| (t.id.as_str(), t)).collect())
-            .unwrap_or_default();
+        // Enrich location from terminal hierarchy
+        enrich_locations_from_hierarchy(ctx.cache, &mut data);
 
+        // Enrich category from EntityInfo
         let info_base = Collection::EntityInfo.storage_key();
         for entry in &mut data {
-            // Enrich location from terminal hierarchy
-            if let Some(th) = terminal_map.get(entry.terminal_id.as_str()) {
-                if !th.orbit_name.is_empty() {
-                    entry.orbit = th.orbit_name.clone();
-                }
-                if !th.planet_name.is_empty() || !th.system_name.is_empty() {
-                    entry.location = if !th.planet_name.is_empty() {
-                        th.planet_name.clone()
-                    } else {
-                        th.system_name.clone()
-                    };
-                }
-                if !th.system_name.is_empty() {
-                    entry.system = th.system_name.clone();
-                }
-            }
-            // Enrich category from EntityInfo
             let key = format!("{}:item:{}", info_base, entry.entity_id);
             if let CacheResult::Fresh(info) | CacheResult::Stale(info) =
                 ctx.cache.get::<EntityInfo>(&key)
