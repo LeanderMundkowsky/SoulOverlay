@@ -53,44 +53,46 @@ onMounted(fetchShips);
 
     <!-- Ship list -->
     <template v-else>
-      <div v-for="ship in ships" :key="ship.name" class="bg-[#1a1d24] border border-white/10 rounded-lg overflow-hidden">
-        <img
-          :src="ship.image_url"
-          :alt="ship.name"
-          class="w-full object-contain max-h-[400px]"
-          loading="lazy"
-        />
-        <div class="px-4 py-3 border-t border-white/5">
-          <h3 class="text-sm font-bold text-white">{{ ship.name }}</h3>
-          <p v-if="ship.ship_type" class="text-xs text-white/50 italic mt-0.5">
-            {{ ship.ship_type }}
-          </p>
-          <div class="flex gap-3 mt-2">
-            <a
-              v-if="ship.wiki_url"
-              :href="ship.wiki_url"
-              target="_blank"
-              class="text-[10px] text-blue-400/60 hover:text-blue-400 underline transition-colors"
-            >
-              Wiki ↗
-            </a>
-            <a
-              v-if="ship.pledge_url"
-              :href="ship.pledge_url"
-              target="_blank"
-              class="text-[10px] text-blue-400/60 hover:text-blue-400 underline transition-colors"
-            >
-              Pledge ↗
-            </a>
+      <div class="grid grid-cols-3 gap-3">
+        <div v-for="ship in ships" :key="ship.name" class="bg-[#1a1d24] border border-white/10 rounded-lg overflow-hidden">
+          <img
+            :src="ship.image_url"
+            :alt="ship.name"
+            class="w-full object-contain"
+            loading="lazy"
+          />
+          <div class="px-3 py-2 border-t border-white/5">
+            <h3 class="text-xs font-bold text-white truncate">{{ ship.name }}</h3>
+            <p v-if="ship.ship_type" class="text-[10px] text-white/50 italic mt-0.5">
+              {{ ship.ship_type }}
+            </p>
+            <div class="flex gap-2 mt-1.5">
+              <a
+                v-if="ship.wiki_url"
+                :href="ship.wiki_url"
+                target="_blank"
+                class="text-[10px] text-blue-400/60 hover:text-blue-400 underline transition-colors"
+              >
+                Wiki ↗
+              </a>
+              <a
+                v-if="ship.pledge_url"
+                :href="ship.pledge_url"
+                target="_blank"
+                class="text-[10px] text-blue-400/60 hover:text-blue-400 underline transition-colors"
+              >
+                Pledge ↗
+              </a>
+            </div>
+            <p v-if="ship.credit" class="text-[10px] text-amber-400/50 mt-1 truncate">
+              {{ ship.credit }}
+            </p>
           </div>
-          <p v-if="ship.credit" class="text-[10px] text-amber-400/50 mt-1">
-            {{ ship.credit }}
-          </p>
         </div>
       </div>
 
       <!-- Attribution -->
-      <div class="text-center text-[10px] text-white/20 pb-2">
+      <div class="text-center text-[10px] text-white/20 py-3">
         Ship data from
         <a href="https://contestedzonetimers.com/ships" target="_blank" class="underline hover:text-white/40">
           contestedzonetimers.com

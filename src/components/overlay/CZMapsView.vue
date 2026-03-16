@@ -7,6 +7,11 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 const maps = ref<CzMap[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
+const fullscreenMap = ref<string | null>(null);
+
+function toggleFullscreen(name: string) {
+  fullscreenMap.value = fullscreenMap.value === name ? null : name;
+}
 
 async function fetchMaps() {
   loading.value = true;
@@ -29,8 +34,8 @@ onMounted(fetchMaps);
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto px-4 py-3 space-y-4 select-none">
-    <h2 class="text-sm font-semibold text-white/60 tracking-widest uppercase mb-3">
+  <div class="h-full overflow-y-auto px-4 py-3 select-none">
+    <h2 class="text-xs font-semibold text-white/50 tracking-widest uppercase mb-3">
       Contested Zone Maps
     </h2>
 
@@ -51,27 +56,60 @@ onMounted(fetchMaps);
       </button>
     </div>
 
-    <!-- Map list -->
+    <!-- Map grid (2 columns) -->
     <template v-else>
-      <div v-for="map in maps" :key="map.name" class="bg-[#1a1d24] border border-white/10 rounded-lg overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-white/5">
-          <h3 class="text-xs font-semibold text-white/70 tracking-wider">{{ map.name }}</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div
+          v-for="map in maps"
+          :key="map.name"
+          class="bg-[#1a1d24] border border-white/10 rounded-lg overflow-hidden cursor-pointer hover:border-white/20 transition-colors"
+          @click="toggleFullscreen(map.name)"
+        >
+          <div class="px-3 py-2 border-b border-white/5">
+            <h3 class="text-[10px] font-semibold text-white/70 tracking-wider">{{ map.name }}</h3>
+          </div>
+          <img
+            :src="map.image_url"
+            :alt="map.name"
+            class="w-full object-contain"
+            loading="lazy"
+          />
         </div>
-        <img
-          :src="map.image_url"
-          :alt="map.name"
-          class="w-full object-contain max-h-[500px]"
-          loading="lazy"
-        />
       </div>
 
       <!-- Attribution -->
-      <div class="text-center text-[10px] text-white/20 pb-2">
+      <div class="text-center text-[10px] text-white/20 py-3">
         Maps by Terada &amp; u/Kerast · via
         <a href="https://contestedzonetimers.com/contested-zone-maps" target="_blank" class="underline hover:text-white/40">
           contestedzonetimers.com
         </a>
       </div>
     </template>
+
+    <!-- Fullscreen overlay -->
+    <Transition name="map-fs">
+      <div
+        v-if="fullscreenMap"
+        class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center cursor-pointer"
+        @click="fullscreenMap = null"
+      >
+        <img
+          :src="maps.find(m => m.name === fullscreenMap)?.image_url"
+          :alt="fullscreenMap"
+          class="max-w-full max-h-full object-contain"
+        />
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.map-fs-enter-active,
+.map-fs-leave-active {
+  transition: opacity 0.2s ease;
+}
+.map-fs-enter-from,
+.map-fs-leave-to {
+  opacity: 0;
+}
+</style>

@@ -90,7 +90,7 @@ impl Default for Settings {
             log_path: None,
             overlay_opacity: 0.6,
             esc_closes_overlay: true,
-            reset_on_open: true,
+            reset_on_open: false,
             max_search_results: 50,
             cache_ttls: HashMap::new(),
             layout_widths: LayoutWidths::default(),
