@@ -29,6 +29,7 @@ jobs:
         with:
           workspaces: src-tauri
           shared-key: "release"
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         run: npm ci
