@@ -16,7 +16,7 @@ use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
     SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE,
-    HWND_TOPMOST, SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SWP_SHOWWINDOW, SW_HIDE, WS_BORDER, WS_DLGFRAME, WS_EX_CLIENTEDGE, WS_EX_TOOLWINDOW,
     WS_EX_WINDOWEDGE, WS_THICKFRAME,
 };
@@ -33,6 +33,11 @@ pub fn get_overlay_hwnd_raw() -> isize {
 /// HWND of the window that was foreground before we showed the overlay.
 /// Restored on hide so focus returns to the previously active application.
 static PREV_FOREGROUND_HWND: std::sync::atomic::AtomicIsize =
+    std::sync::atomic::AtomicIsize::new(0);
+
+/// HWND of the window that was foreground before our app launched.
+/// Used to restore focus after setup so we don't steal it on startup.
+static PRE_LAUNCH_HWND: std::sync::atomic::AtomicIsize =
     std::sync::atomic::AtomicIsize::new(0);
 
 /// Original WNDPROC of the overlay window, saved during subclassing.
@@ -74,6 +79,31 @@ unsafe extern "system" fn overlay_subclass_proc(
     let original = ORIGINAL_WNDPROC.load(std::sync::atomic::Ordering::SeqCst);
     let original_proc: WNDPROC = std::mem::transmute(original);
     CallWindowProcW(original_proc, hwnd, msg, wparam, lparam)
+}
+
+/// Remember whichever window has focus right now.
+/// Call once before Tauri creates any windows so we can give focus back after setup.
+pub fn capture_pre_launch_foreground() {
+    unsafe {
+        let fg = GetForegroundWindow();
+        if !fg.is_invalid() {
+            PRE_LAUNCH_HWND.store(
+                crate::platform::hwnd_to_isize(fg),
+                std::sync::atomic::Ordering::SeqCst,
+            );
+        }
+    }
+}
+
+/// Give focus back to the window that was active before the app launched.
+pub fn restore_pre_launch_foreground() {
+    let prev = PRE_LAUNCH_HWND.load(std::sync::atomic::Ordering::SeqCst);
+    if prev != 0 {
+        let hwnd = crate::platform::hwnd_from_isize(prev);
+        unsafe {
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
 }
 
 /// Post a hotkey toggle message to the overlay window from any thread.
@@ -153,7 +183,7 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
             0,
             0,
             0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE,
         );
 
         // Install our subclass WNDPROC to handle hotkey toggle messages.
@@ -294,7 +324,7 @@ pub fn set_window_geometry(app: &AppHandle, x: i32, y: i32, w: u32, h: u32) {
             y,
             w as i32,
             h as i32,
-            SET_WINDOW_POS_FLAGS(0),
+            SWP_NOACTIVATE,
         );
     }
 

@@ -163,6 +163,10 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // Show a brief startup hint with the hotkey
     spawn_startup_hint(&handle, &settings.hotkey);
 
+    // Restore focus to whatever was active before the app launched.
+    // Tauri/WebView2 window creation steals focus even for invisible windows.
+    window::restore_pre_launch_foreground();
+
     Ok(())
 }
 
@@ -207,8 +211,8 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
                 use windows::Win32::Foundation::HWND;
                 use windows::Win32::UI::WindowsAndMessaging::{
                     GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
-                    HWND_TOPMOST, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
-                    WS_EX_TOOLWINDOW,
+                    HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW,
+                    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
                 };
 
                 let hwnd = HWND(raw.0);
@@ -228,7 +232,7 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
                         y,
                         0,
                         0,
-                        SWP_NOSIZE | SWP_SHOWWINDOW,
+                        SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE,
                     );
                 }
             }

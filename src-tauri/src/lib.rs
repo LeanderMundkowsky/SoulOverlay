@@ -74,6 +74,10 @@ pub fn run() {
         )
         .expect("Failed to export typescript bindings");
 
+    // Remember which window has focus before Tauri creates any windows,
+    // so we can restore focus after setup (window creation steals focus).
+    window::capture_pre_launch_foreground();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
