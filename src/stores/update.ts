@@ -47,21 +47,26 @@ export const useUpdateStore = defineStore("update", () => {
   }
 
   async function installUpdate() {
+    // If triggered from the backend startup event, we need to
+    // fetch the Update object from the plugin first.
     if (!pendingUpdate) {
-      error.value = "No update available to install";
-      return;
+      try {
+        pendingUpdate = await check();
+      } catch (e) {
+        error.value = `Update check failed: ${String(e)}`;
+        return;
+      }
+      if (!pendingUpdate) {
+        error.value = "No update available to install";
+        return;
+      }
     }
 
     installing.value = true;
     error.value = null;
     try {
-      // Back up database + settings before installing
       await invoke("backup_before_update");
-
-      // Download and install via the updater plugin
       await pendingUpdate.downloadAndInstall();
-
-      // Restart the app
       await relaunch();
     } catch (e) {
       error.value = String(e);

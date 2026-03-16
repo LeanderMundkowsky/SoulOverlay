@@ -295,7 +295,7 @@ watch(isDragActive, (active) => {
 
     <!-- UI layer -->
     <div class="relative w-full h-full flex flex-col">
-      <UpdateBanner />
+      <UpdateBanner @open-update-modal="showUpdateModal = true" />
 
       <TabBar :active-tab="activeTab"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"

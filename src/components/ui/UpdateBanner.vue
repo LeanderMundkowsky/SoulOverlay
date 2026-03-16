@@ -2,6 +2,10 @@
 import { useUpdateStore } from "@/stores/update";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 
+const emit = defineEmits<{
+  (e: "open-update-modal"): void;
+}>();
+
 const updateStore = useUpdateStore();
 </script>
 
@@ -15,11 +19,10 @@ const updateStore = useUpdateStore();
       Update <span class="font-semibold text-blue-100">v{{ updateStore.updateInfo?.version }}</span> is available
     </span>
     <button
-      @click="updateStore.installUpdate()"
-      :disabled="updateStore.installing"
-      class="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white text-xs font-medium rounded-md transition-colors"
+      @click="emit('open-update-modal')"
+      class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors"
     >
-      {{ updateStore.installing ? "Installing..." : "Install" }}
+      Install
     </button>
     <button
       @click="updateStore.dismiss()"
