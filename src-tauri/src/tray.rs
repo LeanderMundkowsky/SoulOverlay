@@ -2,13 +2,12 @@
 use log::info;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
     AppHandle, Emitter, Manager,
 };
 
 use crate::window;
 
-/// Build and register the system tray icon with menu.
+/// Attach menu and event handlers to the tray icon created by tauri.conf.json.
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Overlay", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
@@ -16,35 +15,37 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = Menu::with_items(app, &[&show_hide, &settings, &quit])?;
 
-    let _tray = TrayIconBuilder::new()
-        .menu(&menu)
-        .tooltip("SoulOverlay")
-        .on_menu_event(move |app, event| match event.id.as_ref() {
-            "show_hide" => {
-                if let Some(w) = app.get_webview_window("overlay") {
-                    if window::is_overlay_visible(app) {
-                        let _ = w.hide();
-                    } else {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                }
-            }
-            "settings" => {
-                let _ = app.emit("open-settings", ());
-                // Also show the overlay so user can see settings
-                if let Some(w) = app.get_webview_window("overlay") {
+    let tray = app
+        .tray_by_id("main")
+        .ok_or("Tray icon 'main' not found — check trayIcon.id in tauri.conf.json")?;
+
+    tray.set_menu(Some(menu))?;
+    tray.set_tooltip(Some("SoulOverlay"))?;
+    tray.on_menu_event(move |app, event| match event.id.as_ref() {
+        "show_hide" => {
+            if let Some(w) = app.get_webview_window("overlay") {
+                if window::is_overlay_visible(app) {
+                    let _ = w.hide();
+                } else {
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
             }
-            "quit" => {
-                info!("Quit requested from tray menu");
-                app.exit(0);
+        }
+        "settings" => {
+            let _ = app.emit("open-settings", ());
+            // Also show the overlay so user can see settings
+            if let Some(w) = app.get_webview_window("overlay") {
+                let _ = w.show();
+                let _ = w.set_focus();
             }
-            _ => {}
-        })
-        .build(app)?;
+        }
+        "quit" => {
+            info!("Quit requested from tray menu");
+            app.exit(0);
+        }
+        _ => {}
+    });
 
     info!("System tray initialized");
     Ok(())
