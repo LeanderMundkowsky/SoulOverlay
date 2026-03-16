@@ -13,6 +13,10 @@ const props = defineProps<{
   mode: ModalMode;
   /** Pre-fill entity (add mode from search row) */
   prefillEntity?: { id: string; name: string; kind: string } | null;
+  /** Pre-fill location (add mode from inventory group header) */
+  prefillLocation?: { id: string; name: string; slug: string } | null;
+  /** Pre-fill collection (add mode from inventory group header) */
+  prefillCollection?: string | null;
   /** Source entry for remove/transfer modes */
   sourceEntry?: InventoryEntry | null;
 }>();
@@ -236,6 +240,21 @@ onMounted(async () => {
       uuid: "",
     };
     entityQuery.value = props.prefillEntity.name;
+  }
+
+  if (props.mode === "add" && props.prefillLocation) {
+    selectedLocation.value = {
+      id: props.prefillLocation.id,
+      name: props.prefillLocation.name,
+      slug: props.prefillLocation.slug,
+      kind: "",
+      uuid: "",
+    };
+    locationQuery.value = props.prefillLocation.name;
+  }
+
+  if (props.mode === "add" && props.prefillCollection) {
+    collectionQuery.value = props.prefillCollection;
   }
 
   if (props.mode === "remove" && props.sourceEntry) {

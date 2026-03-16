@@ -207,22 +207,48 @@ const totalItems = computed(() =>
 const showModal = ref(false);
 const modalMode = ref<ModalMode>("add");
 const modalSourceEntry = ref<InventoryEntry | null>(null);
+const modalPrefillLocation = ref<{ id: string; name: string; slug: string } | null>(null);
+const modalPrefillCollection = ref<string | null>(null);
 
 function openAddModal() {
   modalMode.value = "add";
   modalSourceEntry.value = null;
+  modalPrefillLocation.value = null;
+  modalPrefillCollection.value = null;
+  showModal.value = true;
+}
+
+function openAddModalForGroup(group: Group) {
+  modalMode.value = "add";
+  modalSourceEntry.value = null;
+  if (groupMode.value === "location") {
+    const first = group.entries[0];
+    modalPrefillLocation.value = {
+      id: first.location_id,
+      name: first.location_name,
+      slug: first.location_slug,
+    };
+    modalPrefillCollection.value = null;
+  } else {
+    modalPrefillLocation.value = null;
+    modalPrefillCollection.value = group.key === "__none__" ? null : group.key;
+  }
   showModal.value = true;
 }
 
 function openRemoveModal(entry: InventoryEntry) {
   modalMode.value = "remove";
   modalSourceEntry.value = entry;
+  modalPrefillLocation.value = null;
+  modalPrefillCollection.value = null;
   showModal.value = true;
 }
 
 function openTransferModal(entry: InventoryEntry) {
   modalMode.value = "transfer";
   modalSourceEntry.value = entry;
+  modalPrefillLocation.value = null;
+  modalPrefillCollection.value = null;
   showModal.value = true;
 }
 
@@ -380,6 +406,11 @@ function slugIcon(slug: string): string {
           <span v-else class="text-sm">🏷️</span>
           <span class="text-white text-sm font-medium flex-1">{{ group.label }}</span>
           <span class="text-white/30 text-xs">{{ group.totalQuantity }}× total</span>
+          <span
+            @click.stop="openAddModalForGroup(group)"
+            class="text-white/20 hover:text-green-400 text-xs px-1.5 py-0.5 rounded-md hover:bg-green-400/10 transition-colors ml-1"
+            title="Add item here"
+          >+</span>
         </button>
 
         <!-- Group entries -->
@@ -441,6 +472,8 @@ function slugIcon(slug: string): string {
       v-if="showModal"
       :mode="modalMode"
       :source-entry="modalSourceEntry"
+      :prefill-location="modalPrefillLocation"
+      :prefill-collection="modalPrefillCollection"
       @close="showModal = false"
       @saved="onModalSaved"
     />
