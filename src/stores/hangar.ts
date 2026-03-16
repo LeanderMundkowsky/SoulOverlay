@@ -32,11 +32,34 @@ export const useHangarStore = defineStore("hangar", () => {
     }
   }
 
+  async function refreshFleet() {
+    loading.value = true;
+    error.value = null;
+    try {
+      await commands.cacheRefresh("fleet");
+      const result = await commands.hangarGetFleet();
+      if (result.status === "error") throw result.error;
+      const resp = result.data;
+      if (resp.ok && resp.data) {
+        fleet.value = resp.data;
+        stale.value = resp.stale;
+      } else {
+        error.value = resp.error ?? "Unknown error";
+      }
+    } catch (e) {
+      error.value = String(e);
+      console.error("Failed to refresh fleet:", e);
+    } finally {
+      loading.value = false;
+    }
+  }
+
   return {
     fleet,
     loading,
     error,
     stale,
     loadFleet,
+    refreshFleet,
   };
 });

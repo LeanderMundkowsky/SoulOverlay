@@ -275,8 +275,8 @@ function slugIcon(slug: string): string {
           @click="toggleGroupMode"
           class="text-xs px-2.5 py-1 rounded-lg border transition-colors"
           :class="groupMode === 'location'
-            ? 'border-green-500/30 bg-green-500/10 text-green-400'
-            : 'border-blue-500/30 bg-blue-500/10 text-blue-400'"
+            ? 'border-green-500/30 bg-[#15261c] text-green-400'
+            : 'border-blue-500/30 bg-[#172035] text-blue-400'"
         >
           {{ groupMode === 'location' ? '📍 By Location' : '🏷️ By Collection' }}
         </button>
