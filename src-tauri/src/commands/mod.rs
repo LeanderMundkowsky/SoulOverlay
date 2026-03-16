@@ -7,5 +7,6 @@ pub mod inventory;
 pub mod overlay;
 pub mod settings;
 pub mod uex;
+pub mod updates;
 pub mod user;
 pub mod watchlist;

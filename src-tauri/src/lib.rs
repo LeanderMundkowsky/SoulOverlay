@@ -84,6 +84,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .register_asynchronous_uri_scheme_protocol("uex-img", |_ctx, request, responder| {
             tauri::async_runtime::spawn(async move {
                 let response = image_proxy::fetch(request).await;
@@ -169,6 +171,8 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::inventory::transfer_inventory,
             commands::inventory::get_inventory_collections,
             commands::inventory::get_storage_locations,
+            commands::updates::check_for_update,
+            commands::updates::backup_before_update,
         ])
 }
 

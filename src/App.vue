@@ -27,6 +27,8 @@ import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
 import { useDragDrop } from "./composables/useDragDrop";
+import UpdateBanner from "./components/ui/UpdateBanner.vue";
+import UpdateModal from "./components/ui/UpdateModal.vue";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
@@ -40,6 +42,7 @@ const activeTab = ref("search");
 const showSettings = ref(false);
 const showDebug = ref(false);
 const showKeybinds = ref(false);
+const showUpdateModal = ref(false);
 const showFavorites = ref(true);
 const showWatchlist = ref(false);
 const scDetected = ref(false);
@@ -292,6 +295,8 @@ watch(isDragActive, (active) => {
 
     <!-- UI layer -->
     <div class="relative w-full h-full flex flex-col">
+      <UpdateBanner />
+
       <TabBar :active-tab="activeTab"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         :show-watchlist="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
@@ -363,7 +368,8 @@ watch(isDragActive, (active) => {
               @reset="onSettingsReset" />
             <SettingsPanel class="w-full"
               @close="showSettings = false; showKeybinds = false"
-              @open-keybinds="showKeybinds = !showKeybinds" />
+              @open-keybinds="showKeybinds = !showKeybinds"
+              @open-update-modal="showUpdateModal = true; showSettings = false" />
           </div>
         </Transition>
       </div>
@@ -380,6 +386,9 @@ watch(isDragActive, (active) => {
     >
       {{ ghostLabel }}
     </div>
+
+    <!-- Update modal -->
+    <UpdateModal v-if="showUpdateModal" @close="showUpdateModal = false" />
   </div>
 </template>
 

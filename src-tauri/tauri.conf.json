@@ -35,9 +35,19 @@
       "iconAsTemplate": true
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzM0QyNkFDOUMwMEUyMEQKUldRTjRnQ2NyQ1k5OHhRSlpib21ieTFVcE9UbkRDd3hTQVJuMVNHamNQRGV0SEQzM3VOYjdWU1gK",
+      "endpoints": [
+        "https://github.com/Soul-Returns/SoulOverlay/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

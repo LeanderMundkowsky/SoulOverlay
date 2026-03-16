@@ -439,6 +439,32 @@ async getStorageLocations(query: string) : Promise<Result<UexResult[], string>> 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Check GitHub releases for a newer version.
+ * Called from the startup auto-check in app_setup.rs.
+ * Also exposed as a command so `UpdateInfo` is included in specta bindings.
+ */
+async checkForUpdate() : Promise<Result<UpdateInfo | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_for_update") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Back up the database and settings files before an update.
+ * Keeps the last 3 backups, removes older ones.
+ * Called from the frontend before triggering download + install.
+ */
+async backupBeforeUpdate() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backup_before_update") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -669,6 +695,10 @@ uuid?: string }
  * Authenticated user profile from the UEX API `GET /user` endpoint.
  */
 export type UexUserProfile = { id: number; name: string; username: string; email: string | null; avatar: string | null; bio: string | null; website_url: string | null; timezone: string | null; language: string | null; discord_username: string | null; twitch_username: string | null; day_availability: string[]; time_availability: string[]; specializations: string[]; languages: string[]; archetypes: string[]; is_datarunner: boolean; is_datarunner_banned: boolean; is_staff: boolean; is_away_game: boolean; date_added: string | null; date_modified: string | null; date_rsi_verified: string | null; date_twitch_verified: string | null }
+/**
+ * Information about an available update, sent to the frontend via Tauri events.
+ */
+export type UpdateInfo = { version: string; date: string | null; body: string | null }
 export type WatchEntry = { entity_id: string; entity_name: string; entity_kind: string; entity_slug: string; terminal_id: string; terminal_name: string; price_type: string; added_at: string }
 
 /** tauri-specta globals **/

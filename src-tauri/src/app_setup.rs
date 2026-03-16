@@ -140,5 +140,25 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Spawn a delayed update check (~5s after launch).
+    let update_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        info!("Running startup update check...");
+        match commands::updates::check_for_update(update_handle.clone()).await {
+            Ok(Some(info)) => {
+                info!("Update available: v{}", info.version);
+                let _ = update_handle.emit("update-available", info);
+            }
+            Ok(None) => {
+                info!("No updates available at startup");
+            }
+            Err(e) => {
+                // Don't surface startup check failures to the user
+                error!("Startup update check failed: {}", e);
+            }
+        }
+    });
+
     Ok(())
 }
