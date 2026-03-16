@@ -176,6 +176,45 @@ steps required from users.
 
 ---
 
+## Creating a Release
+
+Releases are built automatically by GitHub Actions when you push a version tag.
+
+**1. Bump the version** in all three files at once:
+
+```powershell
+npm run bump patch   # 0.1.0 → 0.1.1
+npm run bump minor   # 0.1.0 → 0.2.0
+npm run bump major   # 0.1.0 → 1.0.0
+npm run bump 1.2.3   # explicit version
+```
+
+**2. Verify versions match** (optional — bump already sets all three):
+
+```powershell
+node scripts/check-version.mjs
+```
+
+**3. Commit, tag, and push:**
+
+```powershell
+git add -A && git commit -m "Release v0.2.0"
+git tag v0.2.0
+git push origin main --tags
+```
+
+**4. Wait for the workflow** — GitHub Actions builds the NSIS installer, signs it with Ed25519,
+and creates a **draft** release with the installer and `latest.json` update manifest.
+
+**5. Publish** — go to GitHub → Releases, review the draft, edit release notes, then click
+**Publish release**. Once published, the auto-updater endpoint goes live and existing installs
+will see the update on next launch.
+
+> **Required secrets:** `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+> must be configured in the repository's GitHub Actions secrets.
+
+---
+
 ## Configuration
 
 On first launch, open settings from the gear icon or the system tray → **Settings**:

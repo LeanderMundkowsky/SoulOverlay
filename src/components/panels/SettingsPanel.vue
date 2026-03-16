@@ -60,6 +60,22 @@ function resetDefaults() {
     <PanelHeader title="Settings" @close="emit('close')" />
 
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+      <!-- Application -->
+      <div>
+        <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
+          Application
+        </label>
+        <div class="flex items-center gap-3">
+          <span class="text-white/40 text-xs flex-1">Version {{ appVersion }}</span>
+          <button
+            @click="emit('open-update-modal')"
+            class="bg-white/5 border border-white/10 hover:border-white/20 rounded-lg px-3 py-1.5 text-sm text-white/70 hover:text-white transition-colors"
+          >
+            Check for Updates
+          </button>
+        </div>
+      </div>
+
       <!-- Keybinds editor shortcut -->
       <div>
         <button
@@ -173,22 +189,6 @@ function resetDefaults() {
 
       <!-- Cache Management -->
       <CacheSettingsPanel />
-
-      <!-- Updates -->
-      <div>
-        <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
-          Application
-        </label>
-        <div class="flex items-center gap-3">
-          <span class="text-white/40 text-xs flex-1">Version {{ appVersion }}</span>
-          <button
-            @click="emit('open-update-modal')"
-            class="bg-white/5 border border-white/10 hover:border-white/20 rounded-lg px-3 py-1.5 text-sm text-white/70 hover:text-white transition-colors"
-          >
-            Check for Updates
-          </button>
-        </div>
-      </div>
 
       <!-- Feedback -->
       <AlertBanner v-if="saveError" variant="error" :message="saveError" />

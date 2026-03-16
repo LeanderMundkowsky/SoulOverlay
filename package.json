@@ -1,14 +1,16 @@
 {
   "name": "soul-overlay",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "flush-cache": "node scripts/flush-cache.mjs"
+    "flush-cache": "node scripts/flush-cache.mjs",
+    "bump": "node scripts/bump-version.mjs",
+    "check-version": "node scripts/check-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
