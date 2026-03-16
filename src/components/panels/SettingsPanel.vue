@@ -119,7 +119,7 @@ function resetDefaults() {
         />
         <p class="text-white/30 text-xs mt-1">
           Required for Hangar. Found in your
-          <a href="https://uexcorp.space/account/settings" class="text-blue-400/60 hover:text-blue-400">account settings</a>
+          <a href="https://uexcorp.space/account" class="text-blue-400/60 hover:text-blue-400">account settings</a>
           on uexcorp.space
         </p>
       </div>

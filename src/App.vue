@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { commands } from "@/bindings";
 import type { WatchEntry } from "@/bindings";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import TabBar from "./components/layout/TabBar.vue";
 import StatusBar from "./components/layout/StatusBar.vue";
 import SearchTab from "./components/tabs/SearchTab.vue";
@@ -110,6 +111,18 @@ watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
   }
 });
 
+// Intercept all clicks on external links and open them in the system browser
+// instead of navigating the WebView away from the app.
+function handleExternalLinks(e: MouseEvent) {
+  const anchor = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+  if (!anchor) return;
+  const href = anchor.getAttribute("href");
+  if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+    e.preventDefault();
+    openUrl(href);
+  }
+}
+
 onMounted(async () => {
   // Settings already loaded in main.ts before mount; just apply layout values.
   leftPanelPx.value = settingsStore.settings.layout_widths.left_panel_px;
@@ -119,11 +132,13 @@ onMounted(async () => {
   await watchlistStore.loadWatchlist();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
+  document.addEventListener("click", handleExternalLinks);
 });
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleKeyDown);
   document.removeEventListener("keydown", blockBrowserShortcuts, true);
+  document.removeEventListener("click", handleExternalLinks);
 });
 
 useOverlayEvents({
