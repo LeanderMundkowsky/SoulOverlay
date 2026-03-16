@@ -178,6 +178,11 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
 pub fn show_overlay(app: &AppHandle) {
     use tauri::Manager;
 
+    // Dismiss the startup hint if still visible
+    if let Some(hint) = app.get_webview_window("startup-hint") {
+        let _ = hint.close();
+    }
+
     let window = match app.get_webview_window("overlay") {
         Some(w) => w,
         None => return,

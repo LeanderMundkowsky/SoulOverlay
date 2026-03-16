@@ -160,5 +160,92 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Show a brief startup hint with the hotkey
+    spawn_startup_hint(&handle, &settings.hotkey);
+
     Ok(())
+}
+
+/// Show a brief "Press {hotkey} to toggle SoulOverlay" hint at the top of the screen.
+/// Auto-closes after ~7.5s (the CSS animation completes its fade-out at 7s).
+fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
+    use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};
+
+    let logical_w = 320.0_f64;
+    let logical_h = 44.0_f64;
+
+    // Compute the physical center of the primary monitor so we can position accurately
+    let scale = handle
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    let (mx, my, mw, _) = window::get_primary_monitor_geometry();
+    let phys_w = (logical_w * scale) as i32;
+    let x = mx + (mw as i32 - phys_w) / 2;
+    let y = my + (24.0 * scale) as i32;
+
+    let encoded_hotkey = hotkey.replace('+', "%2B");
+    let url = format!("hint.html?hotkey={}", encoded_hotkey);
+
+    let result = WebviewWindowBuilder::new(handle, "startup-hint", WebviewUrl::App(url.into()))
+        .title("SoulOverlay")
+        .inner_size(logical_w, logical_h)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .visible(false)
+        .build();
+
+    match result {
+        Ok(w) => {
+            if let Ok(raw) = w.hwnd() {
+                use windows::Win32::Foundation::HWND;
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
+                    HWND_TOPMOST, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+                    WS_EX_TOOLWINDOW,
+                };
+
+                let hwnd = HWND(raw.0);
+                unsafe {
+                    // Hide from Alt+Tab, prevent focus stealing
+                    let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                    SetWindowLongPtrW(
+                        hwnd,
+                        GWL_EXSTYLE,
+                        ex | WS_EX_TOOLWINDOW.0 as isize | WS_EX_NOACTIVATE.0 as isize,
+                    );
+                    // Position at top-center and show
+                    let _ = SetWindowPos(
+                        hwnd,
+                        HWND_TOPMOST,
+                        x,
+                        y,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_SHOWWINDOW,
+                    );
+                }
+            }
+
+            // Auto-close slightly after the CSS fade-out animation finishes
+            let h = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(7500)).await;
+                if let Some(w) = h.get_webview_window("startup-hint") {
+                    let _ = w.close();
+                }
+            });
+
+            info!("Startup hint window shown");
+        }
+        Err(e) => {
+            error!("Failed to create startup hint: {}", e);
+        }
+    }
 }
