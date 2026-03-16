@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import IconSearch from "@/components/icons/IconSearch.vue";
 import IconClose from "@/components/icons/IconClose.vue";
-import IconMonitor from "@/components/icons/IconMonitor.vue";
-import IconFlag from "@/components/icons/IconFlag.vue";
-import IconDollarSign from "@/components/icons/IconDollarSign.vue";
 import IconHome from "@/components/icons/IconHome.vue";
-import IconUsers from "@/components/icons/IconUsers.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import IconSun from "@/components/icons/IconSun.vue";
 import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
@@ -41,14 +37,10 @@ const emit = defineEmits<{
 const tabs: Tab[] = [
   { id: "search",    label: "SEARCH",    shortcut: "F3",  disabled: false, action: "switch" },
   { id: "details",   label: "DETAILS",   shortcut: null,  disabled: false, action: "switch" },
-  { id: "close",     label: "CLOSE",     shortcut: null,  disabled: false, action: "close" },
-  { id: "trade",     label: "TRADE",     shortcut: "F4",  disabled: true,  action: "switch" },
-  { id: "mining",    label: "MINING",    shortcut: "F5",  disabled: true,  action: "switch" },
-  { id: "market",    label: "MARKET",    shortcut: null,  disabled: true,  action: "switch" },
-  { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
-  { id: "org",       label: "ORG",       shortcut: null,  disabled: true,  action: "switch" },
   { id: "inventory", label: "INVENTORY", shortcut: null,  disabled: false, action: "switch" },
+  { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
   { id: "settings",  label: "SETTINGS",  shortcut: "F12", disabled: false, action: "toggle-settings" },
+  { id: "close",     label: "CLOSE",     shortcut: null,  disabled: false, action: "close" },
 ];
 
 function handleTab(tab: Tab) {
@@ -99,7 +91,7 @@ function handleTab(tab: Tab) {
       <div
         v-for="tab in tabs"
         :key="tab.id"
-        class="relative flex flex-col items-center justify-center px-7 py-0 cursor-pointer group min-w-[80px]"
+        class="relative flex items-center justify-center px-7 py-3 cursor-pointer group min-w-[80px]"
         :class="[
           tab.disabled
             ? 'cursor-not-allowed opacity-30'
@@ -109,9 +101,9 @@ function handleTab(tab: Tab) {
         ]"
         @click="handleTab(tab)"
       >
-        <!-- Tab icon + label -->
+        <!-- Tab icon + label + shortcut -->
         <div
-          class="flex items-center gap-2 pt-3 pb-1"
+          class="flex items-center gap-2"
           :class="[
             tab.id === 'close'
               ? 'text-red-400'
@@ -123,26 +115,19 @@ function handleTab(tab: Tab) {
           <IconSearch    v-if="tab.id === 'search'"    class="w-4 h-4 flex-shrink-0" />
           <IconInfoCircle v-else-if="tab.id === 'details'" class="w-4 h-4 flex-shrink-0" />
           <IconClose     v-else-if="tab.id === 'close'"     class="w-4 h-4 flex-shrink-0" />
-          <IconMonitor   v-else-if="tab.id === 'trade'"     class="w-4 h-4 flex-shrink-0" />
-          <IconFlag      v-else-if="tab.id === 'mining'"    class="w-4 h-4 flex-shrink-0" />
-          <IconDollarSign v-else-if="tab.id === 'market'"   class="w-4 h-4 flex-shrink-0" />
           <IconHome      v-else-if="tab.id === 'hangar'"    class="w-4 h-4 flex-shrink-0" />
-          <IconUsers     v-else-if="tab.id === 'org'"       class="w-4 h-4 flex-shrink-0" />
           <IconPackage   v-else-if="tab.id === 'inventory'" class="w-4 h-4 flex-shrink-0" />
           <IconSun       v-else-if="tab.id === 'settings'"  class="w-4 h-4 flex-shrink-0" />
 
           <span class="text-xs font-semibold tracking-widest">{{ tab.label }}</span>
-        </div>
 
-        <!-- Shortcut badge -->
-        <div
-          v-if="tab.shortcut"
-          class="mb-1.5 px-1.5 py-0.5 rounded text-xs font-bold tracking-wide leading-none"
-          :class="tab.disabled ? 'bg-white/10 text-white/40' : 'bg-teal-500 text-white'"
-        >
-          {{ tab.shortcut }}
+          <span
+            v-if="tab.shortcut"
+            class="px-1.5 py-0.5 rounded text-[10px] font-bold leading-none bg-teal-500 text-white"
+          >
+            {{ tab.shortcut }}
+          </span>
         </div>
-        <div v-else class="mb-1.5 h-[18px]"></div>
 
         <!-- Active underline -->
         <div

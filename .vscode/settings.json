@@ -8,24 +8,24 @@
   // ── Rust (rust-analyzer) ─────────────────────────────────────────
   "[rust]": {
     "editor.tabSize": 4,
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
   },
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.cargo.allTargets": true,
   // ── Vue / TypeScript ─────────────────────────────────────────────
   "[vue]": {
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
     "editor.defaultFormatter": "Vue.volar"
   },
   "[typescript]": {
-    "editor.formatOnSave": true
+    "editor.formatOnSave": false
   },
   "[json]": {
-    "editor.formatOnSave": true
+    "editor.formatOnSave": false
   },
   "[jsonc]": {
-    "editor.formatOnSave": true
+    "editor.formatOnSave": false
   },
   "files.associations": {
     "*.vue": "vue"
