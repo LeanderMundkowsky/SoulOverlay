@@ -1,6 +1,7 @@
 pub mod api;
 pub mod cache;
 pub mod debug;
+pub mod contested_zones;
 pub mod favorites;
 pub mod hangar;
 pub mod inventory;

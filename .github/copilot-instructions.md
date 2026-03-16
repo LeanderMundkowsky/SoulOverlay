@@ -36,6 +36,12 @@ npm run tauri build
 
 # Flush all cache entries (dev utility, requires app to not be running)
 npm run flush-cache
+
+# Bump version in package.json, tauri.conf.json, and Cargo.toml simultaneously
+npm run bump patch    # or: minor, major, 1.2.3
+
+# Verify all three version files match
+npm run check-version
 ```
 
 No ESLint, Prettier, Vitest, or `#[cfg(test)]` suites exist. Quality is enforced by
@@ -64,9 +70,10 @@ src/                                 # Vue 3 + TypeScript frontend
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
 │   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, ProfileTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch,
-│                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls, InventoryBar
+│                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls,
+│                                    #   InventoryBar, UpdateBanner, UpdateModal
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch, useDragDrop
-├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts (Pinia)
+├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, update.ts (Pinia)
 ├── utils/                           # imageProxy.ts, priceFormatters.ts (locationPath, formatPrice, etc.), sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
@@ -110,7 +117,8 @@ src-tauri/src/                       # Rust backend
 │   ├── watchlist.rs                 # get_watchlist, add_watch_entry, remove_watch_entry
 │   ├── hangar.rs                    # hangar_get_fleet
 │   ├── user.rs                      # user_get_profile
-│   └── debug.rs                     # get_debug_info, get_game_state
+│   ├── debug.rs                     # get_debug_info, get_game_state
+│   └── updates.rs                   # check_for_update, backup_before_update
 └── hotkey/                          # Global keyboard hook
     ├── mod.rs                       # HookHandle, register_hotkey(hotkey_str), LL hook callback, atomics
     └── keymap.rs                    # token_to_vk() VK code lookup table
@@ -131,6 +139,44 @@ launch via `to_latest()`, which tracks applied versions internally and only exec
 - For complex changes (type changes, column removal): create new table → copy data → drop old →
   rename new. Wrap in a single migration to keep it atomic.
 - User data (favorites, watchlist, inventory) must **never** be dropped. Migrations are additive.
+
+## Auto-Update System
+
+The app uses `tauri-plugin-updater` with Ed25519 signing and GitHub Releases as the update
+endpoint. The updater config (pubkey + endpoint) lives in `tauri.conf.json` under
+`plugins.updater`. Bundle signing is enabled via `"createUpdaterArtifacts": true` in the
+`bundle` section.
+
+**Backend** (`commands/updates.rs`):
+- `check_for_update` — called on startup (5s delay in `app_setup.rs`), emits
+  `update-available` Tauri event with `UpdateInfo` payload (version, date, body)
+- `backup_before_update` — copies `soul_overlay.db` + `settings.json` to
+  `%APPDATA%\SoulOverlay\backups\` with timestamps, prunes to 3 most recent
+
+**Frontend** (`stores/update.ts`):
+- Uses `@tauri-apps/plugin-updater` JS API directly (not specta-generated commands) for
+  download/install, plus `@tauri-apps/plugin-process` for `relaunch()`
+- Listens for backend `update-available` event (startup auto-check), can also check manually
+- `installUpdate()` fetches the `Update` object via `check()` if not already available
+  (e.g., when triggered from the startup event rather than manual check)
+
+**UI**: `UpdateBanner.vue` (dismissible bar above tab bar) + `UpdateModal.vue` (full modal
+with checking/installing/up-to-date/error states and release notes display)
+
+## CI/CD
+
+Two GitHub Actions workflows in `.github/workflows/`:
+
+**`release.yml`** — triggers on `v*` tag push. Builds the NSIS installer via
+`tauri-apps/tauri-action@v0`, signs with Ed25519, generates `latest.json` update manifest,
+and creates a **draft** GitHub Release. Required secrets: `TAURI_SIGNING_PRIVATE_KEY`,
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+**`cache.yml`** — triggers on pushes to `main` when `Cargo.toml`, `Cargo.lock`, or
+`package-lock.json` change. Runs `cargo check --release` to warm the Rust compilation cache.
+Both workflows use `shared-key: "release"` in `swatinem/rust-cache` so the tag-triggered
+release build can restore from main's cache (GitHub scopes caches by ref; tag caches are
+not shared between tags, only the default branch cache is universally accessible).
 
 ## Architecture Overview
 

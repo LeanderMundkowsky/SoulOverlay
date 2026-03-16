@@ -1,4 +1,5 @@
 pub mod commodities;
+pub mod contested_zones;
 pub mod entity_info;
 pub mod fleet;
 pub mod fuel;

@@ -21,6 +21,11 @@ impl UexClient {
         }
     }
 
+    /// Expose the underlying reqwest client for non-UEX HTTP requests.
+    pub fn client(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     /// Send a GET request and deserialize the `data` array from the response.
     pub(crate) async fn get<T: DeserializeOwned>(
         &self,

@@ -8,6 +8,7 @@ import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 import IconUser from "@/components/icons/IconUser.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
 import IconEye from "@/components/icons/IconEye.vue";
+import IconShield from "@/components/icons/IconShield.vue";
 
 interface Tab {
   id: string;
@@ -39,6 +40,7 @@ const tabs: Tab[] = [
   { id: "details",   label: "DETAILS",   shortcut: null,  disabled: false, action: "switch" },
   { id: "inventory", label: "INVENTORY", shortcut: null,  disabled: false, action: "switch" },
   { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
+  { id: "cz",        label: "CZ",        shortcut: null,  disabled: false, action: "switch" },
   { id: "settings",  label: "SETTINGS",  shortcut: "F12", disabled: false, action: "toggle-settings" },
   { id: "close",     label: "CLOSE",     shortcut: null,  disabled: false, action: "close" },
 ];
@@ -117,6 +119,7 @@ function handleTab(tab: Tab) {
           <IconClose     v-else-if="tab.id === 'close'"     class="w-4 h-4 flex-shrink-0" />
           <IconHome      v-else-if="tab.id === 'hangar'"    class="w-4 h-4 flex-shrink-0" />
           <IconPackage   v-else-if="tab.id === 'inventory'" class="w-4 h-4 flex-shrink-0" />
+          <IconShield    v-else-if="tab.id === 'cz'"        class="w-4 h-4 flex-shrink-0" />
           <IconSun       v-else-if="tab.id === 'settings'"  class="w-4 h-4 flex-shrink-0" />
 
           <span class="text-xs font-semibold tracking-widest">{{ tab.label }}</span>

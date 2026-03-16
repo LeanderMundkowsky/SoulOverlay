@@ -8,6 +8,7 @@ import SearchTab from "./components/tabs/SearchTab.vue";
 import DetailsTab from "./components/tabs/DetailsTab.vue";
 import InventoryTab from "./components/tabs/InventoryTab.vue";
 import HangarTab from "./components/tabs/HangarTab.vue";
+import CZTab from "./components/tabs/CZTab.vue";
 import ProfileTab from "./components/tabs/ProfileTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
@@ -343,9 +344,10 @@ watch(isDragActive, (active) => {
             :active="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <HangarTab v-show="activeTab === 'hangar'" @switch-to-inventory="onSwitchToInventory" />
+          <CZTab v-show="activeTab === 'cz'" :active="activeTab === 'cz'" />
           <ProfileTab v-show="activeTab === 'profile'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'profile'" />
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'cz' && activeTab !== 'profile'" />
         </div>
 
         <!-- Keybinds side panel (left of settings) -->

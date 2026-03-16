@@ -75,6 +75,19 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
             CREATE UNIQUE INDEX idx_inventory_entity_location_collection
                 ON inventory(entity_id, location_id, collection);",
         ),
+        // v5: cz_self_timers for contested zone countdown timers
+        M::up(
+            "CREATE TABLE IF NOT EXISTS cz_self_timers (
+                id               TEXT PRIMARY KEY,
+                zone             TEXT NOT NULL,
+                label            TEXT NOT NULL,
+                category         TEXT NOT NULL DEFAULT '',
+                default_seconds  INTEGER NOT NULL,
+                remaining_seconds INTEGER NOT NULL,
+                end_epoch        INTEGER NOT NULL DEFAULT 0,
+                status           TEXT NOT NULL DEFAULT 'idle'
+            );",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

@@ -173,6 +173,12 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::inventory::get_storage_locations,
             commands::updates::check_for_update,
             commands::updates::backup_before_update,
+            commands::contested_zones::cz_get_cycle_start,
+            commands::contested_zones::cz_get_ships,
+            commands::contested_zones::cz_get_maps,
+            commands::contested_zones::cz_load_self_timers,
+            commands::contested_zones::cz_save_self_timer,
+            commands::contested_zones::cz_reset_all_self_timers,
         ])
 }
 

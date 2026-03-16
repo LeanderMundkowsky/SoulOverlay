@@ -465,6 +465,72 @@ async backupBeforeUpdate() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Fetch the contested zone cycle start epoch from contestedzonetimers.com.
+ */
+async czGetCycleStart() : Promise<Result<ApiResponse<number>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_get_cycle_start") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch and scrape contested zone ship data from the website.
+ */
+async czGetShips() : Promise<Result<ApiResponse<CzShip[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_get_ships") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch and scrape contested zone map data from the website.
+ */
+async czGetMaps() : Promise<Result<ApiResponse<CzMap[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_get_maps") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Load all self-timers from SQLite. Seeds defaults if the table is empty.
+ */
+async czLoadSelfTimers() : Promise<Result<CzSelfTimer[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_load_self_timers") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Save (upsert) a single self-timer's state.
+ */
+async czSaveSelfTimer(timer: CzSelfTimer) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_save_self_timer", { timer }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reset all self-timers to their default state.
+ */
+async czResetAllSelfTimers() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cz_reset_all_self_timers") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -507,6 +573,50 @@ export type CollectionDebugInfo = { key: string; display_name: string; cached_at
  * Per-collection status info for the cache management UI.
  */
 export type CollectionStatus = { collection: Collection; display_name: string; cached_at: string | null; ttl_secs: number; is_expired: boolean; entry_count: number }
+/**
+ * A contested zone map image (scraped from contestedzonetimers.com).
+ */
+export type CzMap = { name: string; image_url: string }
+/**
+ * Persisted state for a single self-timer (keycard or compboard countdown).
+ */
+export type CzSelfTimer = { 
+/**
+ * Unique timer ID, e.g. "checkmate-terminal1"
+ */
+id: string; 
+/**
+ * Zone name, e.g. "Checkmate"
+ */
+zone: string; 
+/**
+ * Timer label, e.g. "Terminal 1"
+ */
+label: string; 
+/**
+ * Category: "keycard" or "compboard"
+ */
+category: string; 
+/**
+ * Default countdown duration in seconds
+ */
+default_seconds: number; 
+/**
+ * Remaining seconds (only meaningful when status is "idle" after partial use)
+ */
+remaining_seconds: number; 
+/**
+ * Unix epoch (seconds) when the timer will reach zero, if running. 0 if not running.
+ */
+end_epoch: number; 
+/**
+ * "idle" | "running" | "done"
+ */
+status: string }
+/**
+ * A ship available in the Executive Hangar (scraped from contestedzonetimers.com).
+ */
+export type CzShip = { name: string; ship_type: string; image_url: string; wiki_url: string | null; pledge_url: string | null; credit: string }
 /**
  * Comprehensive runtime snapshot returned to the debug panel.
  */
