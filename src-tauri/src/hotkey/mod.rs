@@ -8,9 +8,6 @@ mod keymap;
 
 use log::{info, warn};
 use std::sync::{Arc, Mutex};
-use tauri::AppHandle;
-
-use crate::game_tracker::SharedGameState;
 
 /// Handle to the running hook thread. Dropping it stops the thread.
 pub struct HookHandle {
@@ -32,10 +29,10 @@ impl Drop for HookHandle {
     }
 }
 
-/// Global slot for the current hook state, shared between the hook callback and
-/// the thread that owns it.  We need a static because `SetWindowsHookExW` only
-/// accepts a bare fn pointer, not a closure.
-static HOOK_STATE: std::sync::OnceLock<Arc<Mutex<HookState>>> = std::sync::OnceLock::new();
+/// Global re-entrancy guard shared between the hook callback and registration.
+/// We use a Mutex<()> because SetWindowsHookExW only accepts a bare fn pointer,
+/// not a closure, so we need a static.
+static HOOK_GUARD: std::sync::OnceLock<Arc<Mutex<()>>> = std::sync::OnceLock::new();
 
 /// Tracks whether the overlay is currently visible. Maintained by the hotkey
 /// handler so the LL hook callback can read it without touching Tauri APIs
@@ -50,15 +47,10 @@ static MOD_ALT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 static MOD_SHIFT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Target VK code stored as an atomic so the hook can fast-reject without
-/// locking HOOK_STATE. Avoids mutex contention inside the time-critical callback.
+/// locking HOOK_GUARD. Avoids mutex contention inside the time-critical callback.
 static TARGET_VK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Required modifiers as packed bits: bit 0 = ctrl, bit 1 = alt, bit 2 = shift.
 static TARGET_MODS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-
-struct HookState {
-    app: AppHandle,
-    game_state: SharedGameState,
-}
 
 /// Parse a hotkey string like "Alt+Shift+S" or "Ctrl+Alt+F9" into a
 /// (virtual_key_code, requires_ctrl, requires_alt, requires_shift) tuple.
@@ -88,9 +80,7 @@ fn parse_hotkey(hotkey: &str) -> Option<(u32, bool, bool, bool)> {
 }
 
 pub fn register_hotkey(
-    app: &AppHandle,
     hotkey: &str,
-    game_state: SharedGameState,
 ) -> Result<HookHandle, String> {
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -117,29 +107,8 @@ pub fn register_hotkey(
     MOD_ALT.store(false, std::sync::atomic::Ordering::SeqCst);
     MOD_SHIFT.store(false, std::sync::atomic::Ordering::SeqCst);
 
-    // Store state in the global slot so the bare-fn callback can access it.
-    // If the OnceLock is already set we replace the inner value.
-    let state = Arc::new(Mutex::new(HookState {
-        app: app.clone(),
-        game_state,
-    }));
-
-    // HOOK_STATE may already be initialised from a previous call; update in place.
-    match HOOK_STATE.get() {
-        Some(existing) => {
-            *existing.lock().unwrap() = HookState {
-                app: app.clone(),
-                game_state: {
-                    // We can't move game_state twice; re-extract from the Arc we just made.
-                    let s = state.lock().unwrap();
-                    s.game_state.clone()
-                },
-            };
-        }
-        None => {
-            let _ = HOOK_STATE.set(state);
-        }
-    }
+    // Initialise the re-entrancy guard once.
+    let _ = HOOK_GUARD.get_or_init(|| Arc::new(Mutex::new(())));
 
     // The low-level keyboard hook callback (bare fn — no captures allowed).
     unsafe extern "system" fn ll_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -194,21 +163,23 @@ pub fn register_hotkey(
                 }
 
                 if modifiers_match {
-                    // Only lock the mutex to grab app + game_state handles.
-                    if let Some(slot) = HOOK_STATE.get() {
-                        if let Ok(s) = slot.try_lock() {
-                            let app = s.app.clone();
-                            let game_state = s.game_state.clone();
-                            drop(s);
+                    // Use the mutex as a re-entrancy gate — if already locked, skip.
+                    if let Some(guard) = HOOK_GUARD.get() {
+                        if let Ok(_lock) = guard.try_lock() {
+                            // Grant our process the foreground privilege so the
+                            // main thread's SetForegroundWindow call succeeds.
+                            let _ = windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                                windows::Win32::System::Threading::GetCurrentProcessId(),
+                            );
 
                             let was_visible = OVERLAY_VISIBLE.fetch_xor(true, SeqCst);
                             info!("LL hook: hotkey matched, was_visible={}", was_visible);
-                            handle_hotkey_press(&app, &game_state, was_visible);
+                            handle_hotkey_press(was_visible);
 
                             // Swallow the keypress — do NOT pass it to the game.
                             return LRESULT(1);
                         } else {
-                            info!("LL hook: hotkey matched but HOOK_STATE locked, skipping");
+                            info!("LL hook: hotkey matched but HOOK_GUARD locked, skipping");
                         }
                     }
                 }
@@ -267,22 +238,8 @@ pub fn notify_overlay_shown() {
     OVERLAY_VISIBLE.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-fn handle_hotkey_press(_app: &AppHandle, game_state: &SharedGameState, was_visible: bool) {
-    // Snapshot the SC hwnd while we hold the lock, then release immediately.
-    let sc_hwnd_val: isize = {
-        let state = game_state.lock().unwrap();
-        state.sc_hwnd.unwrap_or(0)
-    };
-
-    // Post a custom message to the overlay window. This is fully async —
-    // it enqueues a message and returns immediately. The overlay's subclass
-    // WNDPROC on the main thread will process it after the current keyboard
-    // event finishes, avoiding the deadlock that run_on_main_thread caused
-    // when the overlay was focused.
+fn handle_hotkey_press(was_visible: bool) {
     let show = !was_visible;
-    info!(
-        "Hotkey: posting WM_HOTKEY_TOGGLE (show={}, sc_hwnd={})",
-        show, sc_hwnd_val
-    );
-    crate::window::post_hotkey_toggle(show, sc_hwnd_val);
+    info!("Hotkey: posting WM_HOTKEY_TOGGLE (show={})", show);
+    crate::window::post_hotkey_toggle(show);
 }

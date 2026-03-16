@@ -2,7 +2,7 @@
 ///
 /// Uses Win32 API calls to:
 /// - Set WS_EX_TOOLWINDOW (no taskbar entry)
-/// - Position the overlay over the SC window
+/// - Position the overlay on the active monitor
 /// - Show/hide with proper focus management
 use log::info;
 use tauri::{AppHandle, Emitter, WebviewWindow};
@@ -14,10 +14,11 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST,
-    SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
-    WS_BORDER, WS_DLGFRAME, WS_EX_CLIENTEDGE, WS_EX_TOOLWINDOW, WS_EX_WINDOWEDGE, WS_THICKFRAME,
+    BringWindowToTop, GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
+    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE,
+    HWND_TOPMOST, SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SWP_SHOWWINDOW, SW_HIDE, WS_BORDER, WS_DLGFRAME, WS_EX_CLIENTEDGE, WS_EX_TOOLWINDOW,
+    WS_EX_WINDOWEDGE, WS_THICKFRAME,
 };
 
 /// Cached overlay HWND as isize so any thread can call Win32 show/hide directly.
@@ -29,6 +30,11 @@ pub fn get_overlay_hwnd_raw() -> isize {
     OVERLAY_HWND.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// HWND of the window that was foreground before we showed the overlay.
+/// Restored on hide so focus returns to the previously active application.
+static PREV_FOREGROUND_HWND: std::sync::atomic::AtomicIsize =
+    std::sync::atomic::AtomicIsize::new(0);
+
 /// Original WNDPROC of the overlay window, saved during subclassing.
 static ORIGINAL_WNDPROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
@@ -36,7 +42,7 @@ static ORIGINAL_WNDPROC: std::sync::atomic::AtomicIsize = std::sync::atomic::Ato
 static SUBCLASS_APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 
 /// Custom message used by the hotkey hook to request show/hide.
-/// WPARAM: 0 = hide, 1 = show. LPARAM: SC HWND as isize (0 if unknown).
+/// WPARAM: 0 = hide, 1 = show. LPARAM: unused.
 /// WM_APP is 0x8000; we add 42 to avoid collisions with other custom messages.
 const WM_HOTKEY_TOGGLE: u32 = 0x8000 + 42;
 
@@ -51,31 +57,14 @@ unsafe extern "system" fn overlay_subclass_proc(
 
     if msg == WM_HOTKEY_TOGGLE {
         let show = wparam.0 != 0;
-        let sc_hwnd_val = lparam.0;
 
         if let Some(app) = SUBCLASS_APP.get() {
             if show {
                 info!("WM_HOTKEY_TOGGLE: showing overlay (main thread)");
-                if sc_hwnd_val != 0 {
-                    show_overlay(app, sc_hwnd_val);
-                } else {
-                    use tauri::Manager;
-                    if let Some(w) = app.get_webview_window("overlay") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                    let _ = app.emit("overlay-shown", ());
-                }
+                show_overlay(app);
             } else {
                 info!("WM_HOTKEY_TOGGLE: hiding overlay (main thread)");
-                if sc_hwnd_val != 0 {
-                    hide_overlay(app, sc_hwnd_val);
-                } else {
-                    use tauri::Manager;
-                    if let Some(w) = app.get_webview_window("overlay") {
-                        let _ = w.hide();
-                    }
-                }
+                hide_overlay(app);
             }
         }
         return windows::Win32::Foundation::LRESULT(0);
@@ -90,8 +79,7 @@ unsafe extern "system" fn overlay_subclass_proc(
 /// Post a hotkey toggle message to the overlay window from any thread.
 /// This is safe to call from the LL keyboard hook callback — it just enqueues
 /// a message, never blocks on the main thread.
-/// `show`: true to show, false to hide. `sc_hwnd_val`: SC HWND as isize (0 if unknown).
-pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
+pub fn post_hotkey_toggle(show: bool) {
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
@@ -106,7 +94,7 @@ pub fn post_hotkey_toggle(show: bool, sc_hwnd_val: isize) {
             hwnd,
             WM_HOTKEY_TOGGLE,
             WPARAM(if show { 1 } else { 0 }),
-            LPARAM(sc_hwnd_val),
+            LPARAM(0),
         );
     }
 }
@@ -186,8 +174,8 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     info!("Overlay window initialized with WS_EX_TOOLWINDOW + subclass WNDPROC");
 }
 
-/// Show the overlay window, stealing focus from SC.
-pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
+/// Show the overlay on the currently active monitor and take focus.
+pub fn show_overlay(app: &AppHandle) {
     use tauri::Manager;
 
     let window = match app.get_webview_window("overlay") {
@@ -200,23 +188,50 @@ pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
         None => return,
     };
 
-    let sc_hwnd = crate::platform::hwnd_from_isize(sc_hwnd_val);
-
     unsafe {
-        // Attach input threads so we can steal focus
-        let sc_thread = GetWindowThreadProcessId(sc_hwnd, None);
-        let our_thread = GetCurrentThreadId();
-
-        if sc_thread != our_thread {
-            let _ = AttachThreadInput(our_thread, sc_thread, BOOL::from(true));
+        // Remember the currently focused window so we can restore it on hide.
+        let fg = GetForegroundWindow();
+        if fg != overlay_hwnd && !fg.is_invalid() {
+            PREV_FOREGROUND_HWND.store(
+                crate::platform::hwnd_to_isize(fg),
+                std::sync::atomic::Ordering::SeqCst,
+            );
         }
 
-        let _ = BringWindowToTop(overlay_hwnd);
-        let _ = ShowWindow(overlay_hwnd, SW_SHOW);
-        let _ = SetForegroundWindow(overlay_hwnd);
+        // Position the overlay on whichever monitor contains the foreground window.
+        let (mx, my, mw, mh) = if !fg.is_invalid() {
+            get_monitor_geometry_for_window(fg)
+        } else {
+            get_primary_monitor_geometry()
+        };
+        let _ = SetWindowPos(
+            overlay_hwnd,
+            HWND_TOPMOST,
+            mx,
+            my,
+            mw as i32,
+            mh as i32,
+            SWP_SHOWWINDOW,
+        );
 
-        if sc_thread != our_thread {
-            let _ = AttachThreadInput(our_thread, sc_thread, BOOL::from(false));
+        // Try to claim foreground. AllowSetForegroundWindow was called in
+        // the LL hook callback, so this should usually succeed.
+        if !SetForegroundWindow(overlay_hwnd).as_bool() {
+            info!("SetForegroundWindow failed, using AttachThreadInput fallback");
+            // Fallback: briefly join our input queue to the current foreground
+            // thread so SetForegroundWindow is guaranteed to succeed. The
+            // attach + detach is immediate — no sustained link is created.
+            let fg_now = GetForegroundWindow();
+            if !fg_now.is_invalid() && fg_now != overlay_hwnd {
+                let fg_thread = GetWindowThreadProcessId(fg_now, None);
+                let our_thread = GetCurrentThreadId();
+                if fg_thread != 0 && fg_thread != our_thread {
+                    let _ = AttachThreadInput(our_thread, fg_thread, BOOL::from(true));
+                    let _ = BringWindowToTop(overlay_hwnd);
+                    let _ = SetForegroundWindow(overlay_hwnd);
+                    let _ = AttachThreadInput(our_thread, fg_thread, BOOL::from(false));
+                }
+            }
         }
     }
 
@@ -224,8 +239,8 @@ pub fn show_overlay(app: &AppHandle, sc_hwnd_val: isize) {
     info!("Overlay shown");
 }
 
-/// Hide the overlay and return focus to SC.
-pub fn hide_overlay(app: &AppHandle, sc_hwnd_val: isize) {
+/// Hide the overlay and return focus to the previously active window.
+pub fn hide_overlay(app: &AppHandle) {
     use tauri::Manager;
 
     let window = match app.get_webview_window("overlay") {
@@ -238,14 +253,18 @@ pub fn hide_overlay(app: &AppHandle, sc_hwnd_val: isize) {
         None => return,
     };
 
-    let sc_hwnd = crate::platform::hwnd_from_isize(sc_hwnd_val);
-
     unsafe {
         let _ = ShowWindow(overlay_hwnd, SW_HIDE);
-        let _ = SetForegroundWindow(sc_hwnd);
+
+        // Restore focus to whatever was active before we showed the overlay.
+        let prev = PREV_FOREGROUND_HWND.swap(0, std::sync::atomic::Ordering::SeqCst);
+        if prev != 0 {
+            let prev_hwnd = crate::platform::hwnd_from_isize(prev);
+            let _ = SetForegroundWindow(prev_hwnd);
+        }
     }
 
-    info!("Overlay hidden, focus returned to SC");
+    info!("Overlay hidden");
 }
 
 /// Position and resize the overlay to match the SC window geometry.

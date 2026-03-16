@@ -83,7 +83,7 @@ src-tauri/src/                       # Rust backend
 ├── logging.rs                       # fern dual-logger setup (stderr + file, path from config)
 ├── platform.rs                      # HWND <-> isize helpers (breaks circular deps)
 ├── image_proxy.rs                   # Async image proxy for UEX photo URLs via custom URI scheme
-├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry
+├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry, focus mgmt
 ├── game_tracker.rs                  # SC window polling thread, SharedGameState
 ├── log_watcher.rs                   # game.log tail + regex parse + Tauri event emit
 ├── uex/                             # UEX Corp API transport + shared types
@@ -112,9 +112,25 @@ src-tauri/src/                       # Rust backend
 │   ├── user.rs                      # user_get_profile
 │   └── debug.rs                     # get_debug_info, get_game_state
 └── hotkey/                          # Global keyboard hook
-    ├── mod.rs                       # HookHandle, register_hotkey, LL hook callback, atomics
+    ├── mod.rs                       # HookHandle, register_hotkey(hotkey_str), LL hook callback, atomics
     └── keymap.rs                    # token_to_vk() VK code lookup table
 ```
+
+## Database Migrations
+
+Schema is managed by `rusqlite_migration` in `database.rs`. Migrations are an ordered list of
+`M::up(...)` entries in a single vec — not separate files. They run automatically on every app
+launch via `to_latest()`, which tracks applied versions internally and only executes new entries.
+
+**Rules:**
+- **Never modify existing migrations.** They are immutable history. Only append new `M::up()`
+  entries at the end of the vec.
+- **Never run raw DDL** (e.g. `ALTER TABLE`) outside of migrations. All schema changes must go
+  through the migration vec so they're applied exactly once and in order.
+- For column renames: `ALTER TABLE t RENAME COLUMN old TO new;` (SQLite ≥ 3.25, bundled).
+- For complex changes (type changes, column removal): create new table → copy data → drop old →
+  rename new. Wrap in a single migration to keep it atomic.
+- User data (favorites, watchlist, inventory) must **never** be dropped. Migrations are additive.
 
 ## Architecture Overview
 
@@ -126,7 +142,7 @@ for types, defaults, and data. Key modules:
 - `app_setup.rs` — `.setup()` hook, spawns background `prefetch_all` task + 30s refresh timer
 - `cache_store.rs` — dual-layer cache: in-memory `HashMap` + SQLite (`rmp-serde` blobs)
 - `providers/mod.rs` — trait-based provider system; all fetch+cache logic lives here
-- `window.rs` — Win32 WNDPROC subclass; manages show/hide, geometry, transparency
+- `window.rs` — Win32 WNDPROC subclass; manages show/hide, geometry, focus (SC-agnostic)
 - `hotkey/mod.rs` — `WH_KEYBOARD_LL` global hook; toggles via `PostMessageW(WM_APP+42)`
 - `commands/api.rs` — primary IPC surface; returns `ApiResponse<T>` envelope
 
@@ -227,6 +243,33 @@ All `commands/api.rs` commands return `ApiResponse<T>`:
 Other commands (settings, cache, overlay, etc.) return `Result<T, String>` which
 tauri-specta wraps as `Promise<Result<T, string>>` with `status: "ok" | "error"`.
 
+## Overlay Window Management
+
+The overlay show/hide system is **fully application-agnostic** — it works with any foreground
+window, not just Star Citizen. No `game_state` or SC HWND is involved.
+
+**Key functions** in `window.rs`:
+- `show_overlay(&AppHandle)` — saves current foreground HWND in `PREV_FOREGROUND_HWND` atomic,
+  positions overlay on that window's monitor via `MonitorFromWindow`, shows with `SetWindowPos(HWND_TOPMOST)`,
+  then steals focus with `SetForegroundWindow` (+ `AttachThreadInput` fallback)
+- `hide_overlay(&AppHandle)` — hides overlay, restores focus to saved `PREV_FOREGROUND_HWND`
+- `post_hotkey_toggle(show: bool)` — safe to call from any thread; posts `WM_APP+42` to overlay HWND
+
+**Focus stealing strategy** (two-tier, do not change the order):
+1. LL hook callback calls `AllowSetForegroundWindow(GetCurrentProcessId())` — grants our
+   process the one-shot foreground privilege while processing keyboard input
+2. Main thread calls `SetForegroundWindow` — usually succeeds with the privilege
+3. If `SetForegroundWindow` returns false, brief `AttachThreadInput` fallback:
+   attach → `BringWindowToTop` → `SetForegroundWindow` → detach (immediate, no sustained link)
+
+**Do NOT** use `AttachThreadInput` as the primary approach — it permanently links input queues
+and causes a focus-fight loop with fullscreen games (rapid focused/unfocused cycling, system lag).
+
+**Hotkey module** (`hotkey/mod.rs`):
+- `register_hotkey(hotkey_str)` — takes only a hotkey string, no `AppHandle` or game state
+- LL hook callback uses atomics for VK/modifier matching (lock-free fast path)
+- `Mutex<()>` re-entrancy guard prevents double-fire
+
 ## Settings — Single Source of Truth
 
 `settings.rs` defines `Settings`, `Keybinds`, `LayoutWidths` with `impl Default` — these
@@ -243,7 +286,7 @@ When cloning Pinia store state for editing (e.g. in SettingsPanel), use
 
 **Two keybind systems**:
 1. **Global hook** (`hotkey/mod.rs`) — processes keys even when overlay is hidden, used only
-   for the overlay toggle. Stored in `settings.hotkey`. Registered via `register_hotkey`.
+   for the overlay toggle. Stored in `settings.hotkey`. Registered via `register_hotkey(hotkey_str)`.
 2. **In-app keys** (`settings.keybinds.*`) — checked in `App.vue`'s `handleKeyDown` via
    `matchesHotkey()`. Only fire while the overlay is visible.
 
@@ -280,18 +323,18 @@ Each variant provides `display_name()`, `ttl_secs()` (default), `storage_key()`,
 
 | Collection | Default TTL | Key pattern | Per-entity |
 |------------|-------------|-------------|------------|
-| `Commodities` | 10 min | `commodities` | No |
-| `CommodityPrices` | 1 h | `commodity_prices:{id}` | Yes |
-| `RawCommodityPrices` | 1 h | `raw_commodity_prices:{id}` | Yes |
-| `ItemPrices` | 1 h | `item_prices:{id}` | Yes |
-| `VehiclePurchasePrices` | 1 h | `vehicle_purchase_prices:{id}` | Yes |
-| `VehicleRentalPrices` | 1 h | `vehicle_rental_prices:{id}` | Yes |
-| `FuelPrices` | 1 h | `fuel_prices:{id}` | Yes |
-| `Vehicles` | 24 h | `vehicles` | No |
-| `Items` | 24 h | `items` | No |
+| `Commodities` | 12 h | `commodities` | No |
+| `CommodityPrices` | 20 min | `commodity_prices:{id}` | Yes |
+| `RawCommodityPrices` | 20 min | `raw_commodity_prices:{id}` | Yes |
+| `ItemPrices` | 20 min | `item_prices:{id}` | Yes |
+| `VehiclePurchasePrices` | 12 h | `vehicle_purchase_prices:{id}` | Yes |
+| `VehicleRentalPrices` | 12 h | `vehicle_rental_prices:{id}` | Yes |
+| `FuelPrices` | 20 min | `fuel_prices:{id}` | Yes |
+| `Vehicles` | 12 h | `vehicles` | No |
+| `Items` | 12 h | `items` | No |
 | `Locations` | 24 h | `locations` | No |
-| `Fleet` | 10 min | `fleet` | No |
-| `UserProfile` | 10 min | `user_profile` | No |
+| `Fleet` | 12 h | `fleet` | No |
+| `UserProfile` | 1 h | `user_profile` | No |
 | `EntityInfo` | 24 h | `entity_info:{kind}:{id}` | Yes |
 
 Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides are stored in

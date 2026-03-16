@@ -40,8 +40,7 @@ pub async fn save_settings(
 
     // Side effects: re-register hotkey if changed
     if old_settings.hotkey != new_settings.hotkey {
-        let game_state = state.game_state.clone();
-        let new_handle = hotkey::register_hotkey(&app, &new_settings.hotkey, game_state);
+        let new_handle = hotkey::register_hotkey(&new_settings.hotkey);
         match new_handle {
             Ok(handle) => {
                 // Drop the old handle (stops the old hook thread) and store the new one.

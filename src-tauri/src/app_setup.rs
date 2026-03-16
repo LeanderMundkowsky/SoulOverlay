@@ -67,8 +67,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Register global hotkey (LL keyboard hook)
     let state = handle.state::<AppState>();
-    let gs_for_hotkey = state.game_state.clone();
-    match hotkey::register_hotkey(&handle, &settings.hotkey, gs_for_hotkey) {
+    match hotkey::register_hotkey(&settings.hotkey) {
         Ok(handle_hook) => {
             *state.hotkey_handle.lock().unwrap() = Some(handle_hook);
         }
