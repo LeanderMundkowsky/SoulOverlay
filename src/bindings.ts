@@ -301,9 +301,9 @@ async getFavorites() : Promise<Result<Favorite[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async addFavorite(id: string, name: string, kind: string, slug: string, uuid: string) : Promise<Result<null, string>> {
+async addFavorite(id: string, name: string, kind: string, slug: string, uuid: string, source: string) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("add_favorite", { id, name, kind, slug, uuid }) };
+    return { status: "ok", data: await TAURI_INVOKE("add_favorite", { id, name, kind, slug, uuid, source }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -669,7 +669,7 @@ export type EntityInfo = { id: string; name: string; kind: string; slug: string;
  * UUID for cross-referencing with the Star Citizen Wiki API.
  */
 uuid: string | null; commodity_kind: string | null; weight_scu: number | null; avg_buy: number | null; avg_sell: number | null; is_illegal: boolean | null; is_buyable: boolean | null; is_sellable: boolean | null; is_mineral: boolean | null; is_raw: boolean | null; is_refined: boolean | null; is_harvestable: boolean | null; section: string | null; category: string | null; size: string | null; color: string | null; name_full: string | null; scu: number | null; crew: string | null; length: number | null; width: number | null; height: number | null; mass: number | null; pad_type: string | null; url_photo: string | null; url_store: string | null; roles: string[] }
-export type Favorite = { id: string; name: string; kind: string; slug: string; uuid: string; added_at: string }
+export type Favorite = { id: string; name: string; kind: string; slug: string; uuid: string; source: string; added_at: string }
 /**
  * A single backend fetch event (prefetch, timer refresh, or manual cache refresh).
  */

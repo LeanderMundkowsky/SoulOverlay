@@ -97,7 +97,7 @@ function onUnpinLocation() {
   pinnedLocation.value = null;
 }
 
-function selectEntity(entity: { id: string; name: string; kind: string; slug?: string }) {
+function selectEntity(entity: { id: string; name: string; kind: string; slug?: string; source?: string; uuid?: string }) {
   if (selectedResult.value) {
     navHistory.value.push({ ...selectedResult.value });
   }

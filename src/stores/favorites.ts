@@ -31,6 +31,7 @@ export const useFavoritesStore = defineStore("favorites", () => {
     kind: string;
     slug: string;
     uuid?: string;
+    source?: string;
   }) {
     try {
       const result = await commands.addFavorite(
@@ -39,6 +40,7 @@ export const useFavoritesStore = defineStore("favorites", () => {
         entity.kind,
         entity.slug,
         entity.uuid ?? "",
+        entity.source ?? "uex",
       );
       if (result.status === "error") throw result.error;
       await loadFavorites();
@@ -69,6 +71,7 @@ export const useFavoritesStore = defineStore("favorites", () => {
     kind: string;
     slug: string;
     uuid?: string;
+    source?: string;
   }) {
     if (isFavorite(entity.id, entity.kind)) {
       await removeFavorite(entity.id, entity.kind);

@@ -35,14 +35,25 @@ onMounted(() => { fetchInfo(); });
 watch(() => props.entityId, () => { fetchInfo(); });
 
 function toggleFavorite() {
-  if (!entityInfo.value) return;
-  favoritesStore.toggleFavorite({
-    id: entityInfo.value.id,
-    name: entityInfo.value.name,
-    kind: entityInfo.value.kind,
-    slug: entityInfo.value.slug,
-    uuid: "",
-  });
+  if (entityInfo.value) {
+    favoritesStore.toggleFavorite({
+      id: entityInfo.value.id,
+      name: entityInfo.value.name,
+      kind: entityInfo.value.kind,
+      slug: entityInfo.value.slug,
+      uuid: entityInfo.value.uuid ?? "",
+      source: "uex",
+    });
+  } else if (props.entitySource === "wiki") {
+    favoritesStore.toggleFavorite({
+      id: props.entityId,
+      name: props.entityName ?? "",
+      kind: props.entityKind,
+      slug: "",
+      uuid: props.entityUuid ?? props.entityId,
+      source: "wiki",
+    });
+  }
 }
 
 function formatDimensions(info: EntityInfo): string {
@@ -67,6 +78,20 @@ function formatPrice(val: number): string {
 
     <!-- Error — show message to help diagnose -->
     <div v-else-if="entityInfoError" class="px-4 py-2 text-xs text-white/30">{{ entityInfoError }}</div>
+
+    <!-- Wiki-only entity (no UEX data) -->
+    <template v-else-if="entitySource === 'wiki' && !entityInfo">
+      <div class="px-4 py-3 space-y-2">
+        <div class="flex items-center gap-2 flex-wrap text-xs">
+          <span class="text-white font-semibold text-sm">{{ entityName }}</span>
+          <button @click="toggleFavorite" class="p-0.5 rounded transition-colors" :class="favoritesStore.isFavorite(entityId, entityKind) ? 'text-red-400 hover:text-red-300' : 'text-white/20 hover:text-red-400'" :title="favoritesStore.isFavorite(entityId, entityKind) ? 'Remove from favorites' : 'Add to favorites'">
+            <IconHeart class="w-3.5 h-3.5" :filled="favoritesStore.isFavorite(entityId, entityKind)" />
+          </button>
+          <span class="px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 font-medium">{{ entityKind }}</span>
+        </div>
+        <div class="text-xs text-white/30">Not tracked by UEX — data from Star Citizen Wiki</div>
+      </div>
+    </template>
 
     <!-- Commodity info -->
     <template v-else-if="entityInfo && entityInfo.kind === 'commodity'">

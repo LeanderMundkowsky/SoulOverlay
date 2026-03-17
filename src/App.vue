@@ -242,11 +242,11 @@ function onToggleDebug() {
   showDebug.value = !showDebug.value;
 }
 
-function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: string; uuid: string }) {
+function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: string; uuid: string; source: string }) {
   if (activeTab.value === "search") {
     searchTabRef.value?.selectEntity(fav);
   } else {
-    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid, source: "uex" };
+    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid, source: fav.source };
   }
 }
 

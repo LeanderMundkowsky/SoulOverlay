@@ -88,6 +88,10 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
                 status           TEXT NOT NULL DEFAULT 'idle'
             );",
         ),
+        // v6: add source column to favorites for wiki-only items
+        M::up(
+            "ALTER TABLE favorites ADD COLUMN source TEXT NOT NULL DEFAULT 'uex';",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

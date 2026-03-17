@@ -12,6 +12,7 @@ pub struct Favorite {
     pub kind: String,
     pub slug: String,
     pub uuid: String,
+    pub source: String,
     pub added_at: String,
 }
 
@@ -20,7 +21,7 @@ pub struct Favorite {
 pub async fn get_favorites(state: State<'_, AppState>) -> Result<Vec<Favorite>, String> {
     let db = state.cache.db().lock().unwrap();
     let mut stmt = db
-        .prepare("SELECT id, name, kind, slug, uuid, added_at FROM favorites ORDER BY kind, name")
+        .prepare("SELECT id, name, kind, slug, uuid, source, added_at FROM favorites ORDER BY kind, name")
         .map_err(|e| format!("Failed to prepare favorites query: {}", e))?;
 
     let rows = stmt
@@ -31,7 +32,8 @@ pub async fn get_favorites(state: State<'_, AppState>) -> Result<Vec<Favorite>, 
                 kind: row.get(2)?,
                 slug: row.get(3)?,
                 uuid: row.get(4)?,
-                added_at: row.get(5)?,
+                source: row.get(5)?,
+                added_at: row.get(6)?,
             })
         })
         .map_err(|e| format!("Failed to query favorites: {}", e))?;
@@ -51,16 +53,17 @@ pub async fn add_favorite(
     kind: String,
     slug: String,
     uuid: String,
+    source: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = state.cache.db().lock().unwrap();
     db.execute(
-        "INSERT OR IGNORE INTO favorites (id, name, kind, slug, uuid) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![id, name, kind, slug, uuid],
+        "INSERT OR IGNORE INTO favorites (id, name, kind, slug, uuid, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![id, name, kind, slug, uuid, source],
     )
     .map_err(|e| format!("Failed to add favorite: {}", e))?;
 
-    info!("Added favorite: {} ({})", name, kind);
+    info!("Added favorite: {} ({}, source={})", name, kind, source);
     Ok(())
 }
 
