@@ -54,6 +54,7 @@ function viewVehicle(idVehicle: string, modelName: string) {
     kind: "vehicle",
     slug: "",
     uuid: "",
+    source: "uex",
   });
 }
 

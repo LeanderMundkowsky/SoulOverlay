@@ -49,6 +49,7 @@ impl From<&ItemDto> for UexResult {
             kind: "item".to_string(),
             slug: dto.slug.clone(),
             uuid: dto.uuid.clone().unwrap_or_default(),
+            source: "uex".to_string(),
         }
     }
 }
@@ -60,6 +61,7 @@ impl From<&ItemDto> for EntityInfo {
             name: dto.name.clone(),
             kind: "item".to_string(),
             slug: dto.slug.clone(),
+            uuid: dto.uuid.clone(),
             section: dto.section.clone(),
             category: dto.category.clone(),
             company_name: dto.company_name.clone(),

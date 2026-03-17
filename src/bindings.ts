@@ -531,6 +531,30 @@ async czResetAllSelfTimers() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Search the Star Citizen Wiki for items and vehicles by name.
+ * Returns results formatted as UexResult with `source: "wiki"`.
+ */
+async wikiSearch(query: string) : Promise<Result<ApiResponse<UexResult[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("wiki_search", { query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch detailed specifications for an entity from the Wiki API.
+ * Results are cached for 7 days.
+ */
+async wikiEntitySpecs(kind: string, entityId: string, entityName: string, uuid: string) : Promise<Result<ApiResponse<WikiEntitySpecs>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("wiki_entity_specs", { kind, entityId, entityName, uuid }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -564,7 +588,7 @@ export type CacheRefreshResult = { ok: boolean; collection: string; error: strin
 /**
  * Known collection names used as cache keys.
  */
-export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info"
+export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info" | "wiki_specs"
 /**
  * Per-collection debug status (CollectionStatus extended with is_refreshing + expires_at).
  */
@@ -640,7 +664,11 @@ fetch_log: FetchEvent[] }
 /**
  * Detailed entity metadata from UEX API, with type-specific optional fields.
  */
-export type EntityInfo = { id: string; name: string; kind: string; slug: string; code: string | null; company_name: string | null; wiki: string | null; game_version: string | null; commodity_kind: string | null; weight_scu: number | null; avg_buy: number | null; avg_sell: number | null; is_illegal: boolean | null; is_buyable: boolean | null; is_sellable: boolean | null; is_mineral: boolean | null; is_raw: boolean | null; is_refined: boolean | null; is_harvestable: boolean | null; section: string | null; category: string | null; size: string | null; color: string | null; name_full: string | null; scu: number | null; crew: string | null; length: number | null; width: number | null; height: number | null; mass: number | null; pad_type: string | null; url_photo: string | null; url_store: string | null; roles: string[] }
+export type EntityInfo = { id: string; name: string; kind: string; slug: string; code: string | null; company_name: string | null; wiki: string | null; game_version: string | null; 
+/**
+ * UUID for cross-referencing with the Star Citizen Wiki API.
+ */
+uuid: string | null; commodity_kind: string | null; weight_scu: number | null; avg_buy: number | null; avg_sell: number | null; is_illegal: boolean | null; is_buyable: boolean | null; is_sellable: boolean | null; is_mineral: boolean | null; is_raw: boolean | null; is_refined: boolean | null; is_harvestable: boolean | null; section: string | null; category: string | null; size: string | null; color: string | null; name_full: string | null; scu: number | null; crew: string | null; length: number | null; width: number | null; height: number | null; mass: number | null; pad_type: string | null; url_photo: string | null; url_store: string | null; roles: string[] }
 export type Favorite = { id: string; name: string; kind: string; slug: string; uuid: string; added_at: string }
 /**
  * A single backend fetch event (prefetch, timer refresh, or manual cache refresh).
@@ -794,13 +822,17 @@ font_size: number;
  */
 keybinds: Keybinds }
 /**
- * A search result from UEX API.
+ * A search result from UEX API (or Wiki API for supplemental results).
  */
 export type UexResult = { id: string; name: string; kind: string; slug: string; 
 /**
- * UUID (items only). Used to fetch item details from the UEX API.
+ * UUID (items only from UEX; always present for Wiki results).
  */
-uuid?: string }
+uuid: string; 
+/**
+ * Data source: `"uex"` (default) or `"wiki"` for Wiki-only items.
+ */
+source: string }
 /**
  * Authenticated user profile from the UEX API `GET /user` endpoint.
  */
@@ -810,6 +842,15 @@ export type UexUserProfile = { id: number; name: string; username: string; email
  */
 export type UpdateInfo = { version: string; date: string | null; body: string | null }
 export type WatchEntry = { entity_id: string; entity_name: string; entity_kind: string; entity_slug: string; terminal_id: string; terminal_name: string; price_type: string; added_at: string }
+/**
+ * Flattened Wiki entity specs for frontend consumption.
+ * Covers both items and vehicles — unused fields are None.
+ */
+export type WikiEntitySpecs = { uuid: string | null; name: string | null; wiki_url: string | null; description: string | null; classification: string | null; class_name: string | null; item_class: string | null; grade: string | null; manufacturer_name: string | null; manufacturer_code: string | null; game_version: string | null; item_type: string | null; sub_type: string | null; size: number | null; health: number | null; resist_physical: number | null; resist_energy: number | null; resist_thermal: number | null; resist_distortion: number | null; resist_biochemical: number | null; resist_stun: number | null; distortion_max: number | null; distortion_decay_rate: number | null; distortion_shutdown_time: number | null; max_temp: number | null; overheat_temp: number | null; cooling_rate_max: number | null; misfire_min_temp: number | null; misfire_max_temp: number | null; ir_emission: number | null; power_draw: number | null; power_to_em: number | null; em_min: number | null; em_max: number | null; em_decay: number | null; power_output: number | null; weapon_class: string | null; weapon_type: string | null; damage_per_shot: number | null; dps_physical: number | null; dps_energy: number | null; dps_distortion: number | null; dps_thermal: number | null; weapon_range: number | null; weapon_rpm: number | null; ammo_speed: number | null; ammo_range: number | null; fire_modes: WikiFireMode[]; scm_speed: number | null; max_speed: number | null; boost_forward: number | null; boost_backward: number | null; zero_to_scm: number | null; zero_to_max: number | null; pitch: number | null; yaw: number | null; roll: number | null; pitch_boosted: number | null; yaw_boosted: number | null; roll_boosted: number | null; accel_main: number | null; accel_retro: number | null; quantum_speed: number | null; quantum_fuel_capacity: number | null; quantum_range: number | null; quantum_spool_time: number | null; shield_hp: number | null; shield_regen: number | null; shield_face_type: string | null; armor_health: number | null; armor_dmg_physical: number | null; armor_dmg_energy: number | null; armor_dmg_distortion: number | null; armor_dmg_thermal: number | null; cargo_capacity: number | null; vehicle_inventory: number | null; crew_min: number | null; crew_max: number | null; msrp: number | null; pledge_url: string | null; insurance_claim_time: number | null; insurance_expedite_time: number | null; insurance_expedite_cost: number | null; fuel_capacity: number | null; length: number | null; width: number | null; height: number | null; mass: number | null }
+/**
+ * Fire mode info for weapons (IPC-safe).
+ */
+export type WikiFireMode = { mode: string | null; fire_type: string | null; rounds_per_minute: number | null; damage_per_second: number | null }
 
 /** tauri-specta globals **/
 

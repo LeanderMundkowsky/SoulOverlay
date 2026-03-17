@@ -11,3 +11,4 @@ pub mod uex;
 pub mod updates;
 pub mod user;
 pub mod watchlist;
+pub mod wiki;

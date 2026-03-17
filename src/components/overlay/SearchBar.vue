@@ -6,6 +6,7 @@ import IconClose from "@/components/icons/IconClose.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import SearchResultRow from "@/components/overlay/SearchResultRow.vue";
 import { useUex, type UexResult } from "@/composables/useUex";
+import { useWiki } from "@/composables/useWiki";
 import { useSettingsStore } from "@/stores/settings";
 import { matchesHotkey } from "@/composables/useHotkeyMatch";
 
@@ -21,7 +22,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "select", result: { id: string; name: string; kind: string; slug?: string }): void;
+  (e: "select", result: { id: string; name: string; kind: string; slug?: string; source?: string; uuid?: string }): void;
   (e: "pin", result: { id: string; name: string; kind: string; slug?: string }): void;
   (e: "unpin"): void;
   (e: "addToInventory", entity: { id: string; name: string; kind: string }): void;
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore();
 const query = ref("");
 const { loading, error, results, total, stale, search } = useUex();
+const { wikiLoading, searchWiki } = useWiki();
 const activeIndex = ref(-1);
 const inputEl = ref<HTMLInputElement | null>(null);
 const rowRefs = ref<InstanceType<typeof SearchResultRow>[]>([]);
@@ -55,13 +57,46 @@ watch(results, () => {
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Check if two names refer to the same entity, handling manufacturer prefixes
+// e.g. "RSI Aurora MR" vs "Aurora MR". Only considers suffix match when the shorter
+// name is at least 50% of the longer name's length to avoid false positives.
+function namesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  if (shorter.length / longer.length < 0.5) return false;
+  return longer.endsWith(shorter);
+}
+
 watch(query, (val) => {
   if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => { search(val); }, 300);
+  debounceTimer = setTimeout(async () => {
+    await search(val);
+    // Parallel wiki search for supplemental results (skip prefix-filtered searches)
+    if (val.trim() && !val.match(/^:[cvilt]\s/i)) {
+      const wikiHits = await searchWiki(val.trim());
+      if (wikiHits.length > 0 && results.value.length > 0) {
+        // Dedup: match by UUID or name similarity (handles manufacturer prefixes)
+        const uexUuids = new Set(results.value.map(r => r.uuid).filter(Boolean));
+        const uexNames = results.value.map(r => r.name.toLowerCase());
+        const unique = wikiHits.filter(w => {
+          const wUuid = w.uuid || w.id;
+          if (uexUuids.has(wUuid)) return false;
+          const wName = w.name.toLowerCase();
+          if (uexNames.some(n => namesMatch(n, wName))) return false;
+          return true;
+        });
+        if (unique.length > 0) {
+          results.value = [...results.value, ...unique];
+        }
+      } else if (wikiHits.length > 0) {
+        results.value = wikiHits;
+      }
+    }
+  }, 300);
 });
 
 function selectResult(result: UexResult) {
-  emit("select", { id: result.id, name: result.name, kind: result.kind, slug: result.slug });
+  emit("select", { id: result.id, name: result.name, kind: result.kind, slug: result.slug, source: result.source, uuid: result.uuid });
 }
 
 function pinResult(result: UexResult) {
@@ -160,7 +195,7 @@ function handleEsc(): boolean {
   return false;
 }
 
-defineExpose({ focusInput, stale, handleEsc });
+defineExpose({ focusInput, stale, wikiLoading, handleEsc });
 </script>
 
 <template>

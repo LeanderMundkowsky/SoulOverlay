@@ -15,6 +15,7 @@ mod settings;
 pub mod state;
 mod tray;
 mod uex;
+mod wiki;
 mod window;
 
 use log::{error, info};
@@ -183,6 +184,8 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::contested_zones::cz_load_self_timers,
             commands::contested_zones::cz_save_self_timer,
             commands::contested_zones::cz_reset_all_self_timers,
+            commands::wiki::wiki_search,
+            commands::wiki::wiki_entity_specs,
         ])
 }
 

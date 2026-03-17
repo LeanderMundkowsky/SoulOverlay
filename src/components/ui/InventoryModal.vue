@@ -238,6 +238,7 @@ onMounted(async () => {
       kind: props.prefillEntity.kind,
       slug: "",
       uuid: "",
+      source: "uex",
     };
     entityQuery.value = props.prefillEntity.name;
   }
@@ -249,6 +250,7 @@ onMounted(async () => {
       slug: props.prefillLocation.slug,
       kind: "",
       uuid: "",
+      source: "uex",
     };
     locationQuery.value = props.prefillLocation.name;
   }

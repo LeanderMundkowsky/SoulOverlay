@@ -282,7 +282,7 @@ fn fleet_to_location(v: &HangarVehicle) -> UexResult {
         name: display_name,
         kind: "location".to_string(),
         slug: "fleet_vehicle".to_string(),
-        uuid: String::new(),
+        ..Default::default()
     }
 }
 

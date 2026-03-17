@@ -25,6 +25,7 @@ pub enum Collection {
     Fleet,
     UserProfile,
     EntityInfo,
+    WikiSpecs,
 }
 
 impl Collection {
@@ -44,6 +45,7 @@ impl Collection {
             Self::Fleet => "Fleet",
             Self::UserProfile => "User Profile",
             Self::EntityInfo => "Entity Info",
+            Self::WikiSpecs => "Wiki Specifications",
         }
     }
 
@@ -63,6 +65,7 @@ impl Collection {
             Self::UserProfile => 3600,
             Self::EntityInfo => 86400,
             Self::Locations => 86400,
+            Self::WikiSpecs => 604800,
         }
     }
 
@@ -82,6 +85,7 @@ impl Collection {
             Self::Fleet => "fleet".to_string(),
             Self::UserProfile => "user_profile".to_string(),
             Self::EntityInfo => "entity_info".to_string(),
+            Self::WikiSpecs => "wiki_specs".to_string(),
         }
     }
 
@@ -106,6 +110,7 @@ impl Collection {
             Collection::Fleet,
             Collection::UserProfile,
             Collection::EntityInfo,
+            Collection::WikiSpecs,
         ]
     }
 
@@ -125,6 +130,7 @@ impl Collection {
                 | Self::VehicleRentalPrices
                 | Self::FuelPrices
                 | Self::EntityInfo
+                | Self::WikiSpecs
         )
     }
 

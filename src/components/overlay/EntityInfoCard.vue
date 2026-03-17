@@ -3,6 +3,7 @@ import { watch, onMounted } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
+import WikiSpecsSection from "@/components/overlay/WikiSpecsSection.vue";
 import { useUex } from "@/composables/useUex";
 import { useFavoritesStore } from "@/stores/favorites";
 import { proxyImageUrl } from "@/utils/imageProxy";
@@ -11,12 +12,22 @@ import type { EntityInfo } from "@/composables/useUex";
 const props = defineProps<{
   entityId: string;
   entityKind: string;
+  entityName?: string;
+  entitySource?: string;
+  entityUuid?: string;
 }>();
 
 const { entityInfo, entityInfoLoading, entityInfoError, getEntityInfo } = useUex();
 const favoritesStore = useFavoritesStore();
 
 function fetchInfo() {
+  if (props.entitySource === "wiki") {
+    // Wiki-only entities have no UEX info — clear stale data
+    entityInfo.value = null;
+    entityInfoError.value = null;
+    entityInfoLoading.value = false;
+    return;
+  }
   getEntityInfo(props.entityKind, props.entityId);
 }
 
@@ -54,8 +65,8 @@ function formatPrice(val: number): string {
       <LoadingSpinner text="Loading info..." />
     </div>
 
-    <!-- Error (silent — just hide the card) -->
-    <template v-else-if="entityInfoError" />
+    <!-- Error — show message to help diagnose -->
+    <div v-else-if="entityInfoError" class="px-4 py-2 text-xs text-white/30">{{ entityInfoError }}</div>
 
     <!-- Commodity info -->
     <template v-else-if="entityInfo && entityInfo.kind === 'commodity'">
@@ -137,4 +148,12 @@ function formatPrice(val: number): string {
       </div>
     </template>
   </div>
+
+  <!-- Wiki specs enrichment section -->
+  <WikiSpecsSection
+    :entity-id="entityId"
+    :entity-kind="entityKind"
+    :entity-name="entityName ?? entityInfo?.name ?? ''"
+    :uuid="entityUuid ?? entityInfo?.uuid ?? ''"
+  />
 </template>

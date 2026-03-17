@@ -50,7 +50,7 @@ impl From<&CommodityDto> for UexResult {
             name: dto.name.clone(),
             kind: "commodity".to_string(),
             slug: dto.slug.clone(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }

@@ -17,6 +17,8 @@ interface SelectedResult {
   name: string;
   kind: string;
   slug?: string;
+  source?: string;
+  uuid?: string;
 }
 
 const settingsStore = useSettingsStore();
@@ -178,10 +180,22 @@ defineExpose({ focusInput, handleEsc, selectEntity, pinLocation: onPinLocation }
           <EntityInfoCard
             :entity-id="selectedResult.id"
             :entity-kind="selectedResult.kind"
+            :entity-name="selectedResult.name"
+            :entity-source="selectedResult.source"
+            :entity-uuid="selectedResult.uuid"
           />
 
-          <!-- Prices card -->
-          <div class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+          <!-- Wiki-only banner -->
+          <div
+            v-if="selectedResult.source === 'wiki'"
+            class="bg-teal-500/10 border border-teal-500/20 rounded-xl px-4 py-2 text-teal-300 text-xs flex items-center gap-2"
+          >
+            <span class="font-semibold">Wiki only</span>
+            <span class="text-teal-300/60">— This item is not tracked by UEX. No price data available.</span>
+          </div>
+
+          <!-- Prices card (hidden for wiki-only entities) -->
+          <div v-if="selectedResult.source !== 'wiki'" class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
             <PricePanel
               :entity-id="selectedResult.id"
               :entity-name="selectedResult.name"

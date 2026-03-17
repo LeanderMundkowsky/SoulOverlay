@@ -125,6 +125,7 @@ impl From<&VehicleDto> for UexResult {
             kind: dto.kind_str().to_string(),
             slug: dto.slug.clone(),
             uuid: String::new(),
+            source: "uex".to_string(),
         }
     }
 }

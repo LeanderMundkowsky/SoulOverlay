@@ -3,16 +3,31 @@ use specta::Type;
 
 // ── Public app-level types ─────────────────────────────────────────────────
 
-/// A search result from UEX API.
+/// A search result from UEX API (or Wiki API for supplemental results).
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(default)]
 pub struct UexResult {
     pub id: String,
     pub name: String,
     pub kind: String,
     pub slug: String,
-    /// UUID (items only). Used to fetch item details from the UEX API.
-    #[serde(default)]
+    /// UUID (items only from UEX; always present for Wiki results).
     pub uuid: String,
+    /// Data source: `"uex"` (default) or `"wiki"` for Wiki-only items.
+    pub source: String,
+}
+
+impl Default for UexResult {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            kind: String::new(),
+            slug: String::new(),
+            uuid: String::new(),
+            source: "uex".to_string(),
+        }
+    }
 }
 
 /// A terminal entry with hierarchy context for the location terminals view.
@@ -28,6 +43,7 @@ pub struct LocationTerminal {
 
 /// Detailed entity metadata from UEX API, with type-specific optional fields.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Type)]
+#[serde(default)]
 pub struct EntityInfo {
     pub id: String,
     pub name: String,
@@ -38,6 +54,8 @@ pub struct EntityInfo {
     pub company_name: Option<String>,
     pub wiki: Option<String>,
     pub game_version: Option<String>,
+    /// UUID for cross-referencing with the Star Citizen Wiki API.
+    pub uuid: Option<String>,
     // Commodity
     pub commodity_kind: Option<String>,
     pub weight_scu: Option<f64>,

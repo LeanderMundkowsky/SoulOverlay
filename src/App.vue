@@ -246,7 +246,7 @@ function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: s
   if (activeTab.value === "search") {
     searchTabRef.value?.selectEntity(fav);
   } else {
-    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid };
+    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid, source: "uex" };
   }
 }
 
@@ -263,7 +263,7 @@ function onWatchSelect(entry: WatchEntry) {
   if (activeTab.value === "search") {
     searchTabRef.value?.selectEntity(entity);
   } else {
-    detailsStore.currentEntity = { ...entity, uuid: "" };
+    detailsStore.currentEntity = { ...entity, uuid: "", source: "uex" };
   }
 }
 

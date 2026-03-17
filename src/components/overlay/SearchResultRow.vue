@@ -122,6 +122,11 @@ function onPointerDown(e: PointerEvent) {
       <span class="flex-1 text-white text-sm font-medium leading-snug">{{ result.name }}</span>
 
       <span
+        v-if="result.source === 'wiki'"
+        class="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-teal-500/15 text-teal-400/80 border border-teal-500/20"
+      >Wiki</span>
+
+      <span
         class="flex-shrink-0 text-xs uppercase tracking-widest font-medium"
         :class="{
           'text-blue-400/50':   result.kind === 'commodity',

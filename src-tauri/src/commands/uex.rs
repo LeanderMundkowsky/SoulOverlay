@@ -67,7 +67,8 @@ pub async fn uex_search_all(
                     | Collection::FuelPrices
                     | Collection::Fleet
                     | Collection::UserProfile
-                    | Collection::EntityInfo => Ok(vec![]),
+                    | Collection::EntityInfo
+                    | Collection::WikiSpecs => Ok(vec![]),
                 };
                 if let Ok(mut v) = fetched {
                     results.append(&mut v);

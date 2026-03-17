@@ -98,7 +98,8 @@ async fn search_cached_or_fetch(
                 | Collection::FuelPrices
                 | Collection::Fleet
                 | Collection::UserProfile
-                | Collection::EntityInfo => return Err("Use specific price commands".to_string()),
+                | Collection::EntityInfo
+                | Collection::WikiSpecs => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }

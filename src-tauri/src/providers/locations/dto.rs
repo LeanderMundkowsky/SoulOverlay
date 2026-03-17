@@ -149,7 +149,7 @@ impl From<&TerminalDto> for UexResult {
             name: display,
             kind: "location".to_string(),
             slug: "terminal".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -178,7 +178,7 @@ impl From<&StarSystemDto> for UexResult {
             name: format!("[System] {}", dto.name),
             kind: "location".to_string(),
             slug: "star_system".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -211,7 +211,7 @@ impl From<&PlanetDto> for UexResult {
             name: format!("[Planet] {}", dto.name),
             kind: "location".to_string(),
             slug: "planet".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -244,7 +244,7 @@ impl From<&MoonDto> for UexResult {
             name: format!("[Moon] {}", dto.name),
             kind: "location".to_string(),
             slug: "moon".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -275,7 +275,7 @@ impl From<&OrbitDto> for UexResult {
             name: format!("[Orbit] {}", dto.name),
             kind: "location".to_string(),
             slug: "orbit".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -310,7 +310,7 @@ impl From<&SpaceStationDto> for UexResult {
             name: format!("[Station] {}", dto.name),
             kind: "location".to_string(),
             slug: "space_station".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -343,7 +343,7 @@ impl From<&OutpostDto> for UexResult {
             name: format!("[Outpost] {}", dto.name),
             kind: "location".to_string(),
             slug: "outpost".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -372,7 +372,7 @@ impl From<&PoiDto> for UexResult {
             name: format!("[POI] {}", dto.name),
             kind: "location".to_string(),
             slug: "poi".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -405,7 +405,7 @@ impl From<&CityDto> for UexResult {
             name: format!("[City] {}", dto.name),
             kind: "location".to_string(),
             slug: "city".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -434,7 +434,7 @@ impl From<&FactionDto> for UexResult {
             name: format!("[Faction] {}", dto.name),
             kind: "location".to_string(),
             slug: "faction".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
@@ -463,7 +463,7 @@ impl From<&CompanyDto> for UexResult {
             name: format!("[Company] {}", dto.name),
             kind: "location".to_string(),
             slug: "company".to_string(),
-            uuid: String::new(),
+            ..Default::default()
         }
     }
 }
