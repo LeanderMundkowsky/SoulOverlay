@@ -1,11 +1,14 @@
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::AtomicBool,
+    {Arc, Mutex},
+};
 
 use crate::cache_store::CacheStore;
 use crate::config::AppPaths;
-use crate::game_tracker;
 use crate::hotkey;
 use crate::log_watcher;
+use crate::process_tracker;
 use crate::settings::Settings;
 use crate::uex::UexClient;
 use crate::activity::ActivityLog;
@@ -13,8 +16,10 @@ use crate::activity::ActivityLog;
 /// Application state managed by Tauri
 pub struct AppState {
     pub paths: AppPaths,
-    pub game_tracker: Mutex<Option<game_tracker::GameTracker>>,
-    pub game_state: game_tracker::SharedGameState,
+    /// Whether StarCitizen.exe is currently running.
+    pub sc_running: Arc<AtomicBool>,
+    /// Keeps the process tracker thread alive (dropped on shutdown).
+    pub process_tracker: Mutex<Option<process_tracker::ProcessTracker>>,
     pub log_watcher: Mutex<Option<log_watcher::LogWatcher>>,
     pub uex: UexClient,
     pub cache: Arc<CacheStore>,

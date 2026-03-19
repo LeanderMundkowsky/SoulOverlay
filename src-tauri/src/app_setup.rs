@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use tauri::{App, Emitter, Manager};
 
 use crate::commands;
-use crate::game_tracker;
 use crate::hotkey;
 use crate::log_watcher;
+use crate::process_tracker;
 use crate::state::AppState;
 use crate::tray;
 use crate::window;
@@ -43,27 +43,10 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         error!("Failed to setup tray: {}", e);
     }
 
-    // Start game tracker
-    let tracker = game_tracker::GameTracker::new(handle.clone());
-    let tracker_game_state = tracker.state();
+    // Start process tracker (detects StarCitizen.exe running/stopping)
+    let tracker = process_tracker::ProcessTracker::new(handle.clone());
     tracker.start();
-
-    {
-        let state = handle.state::<AppState>();
-        // Copy initial game state from tracker into our managed state
-        {
-            let mut gs = state.game_state.lock().unwrap();
-            let tracker_gs = tracker_game_state.lock().unwrap();
-            gs.sc_hwnd = tracker_gs.sc_hwnd;
-            gs.is_focused = tracker_gs.is_focused;
-            gs.is_running = tracker_gs.is_running;
-            gs.window_x = tracker_gs.window_x;
-            gs.window_y = tracker_gs.window_y;
-            gs.window_w = tracker_gs.window_w;
-            gs.window_h = tracker_gs.window_h;
-        }
-        *state.game_tracker.lock().unwrap() = Some(tracker);
-    }
+    *handle.state::<AppState>().process_tracker.lock().unwrap() = Some(tracker);
 
     // Register global hotkey (LL keyboard hook)
     let state = handle.state::<AppState>();

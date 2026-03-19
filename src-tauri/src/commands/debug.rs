@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use chrono::Utc;
 use serde::Serialize;
 use specta::Type;
@@ -15,9 +17,8 @@ pub struct GameState {
 #[tauri::command]
 #[specta::specta]
 pub async fn get_game_state(state: State<'_, AppState>) -> Result<GameState, String> {
-    let gs = state.game_state.lock().unwrap();
     Ok(GameState {
-        sc_detected: gs.sc_hwnd.is_some(),
+        sc_detected: state.sc_running.load(Ordering::Relaxed),
     })
 }
 
@@ -39,12 +40,6 @@ pub struct CollectionDebugInfo {
 pub struct DebugInfo {
     // ── Game ──────────────────────────────────────────────────────────────────
     pub sc_detected: bool,
-    pub sc_focused: bool,
-    pub sc_hwnd: Option<i32>,
-    pub sc_window_x: i32,
-    pub sc_window_y: i32,
-    pub sc_window_w: u32,
-    pub sc_window_h: u32,
     // ── Settings ──────────────────────────────────────────────────────────────
     pub hotkey: String,
     pub log_path: Option<String>,
@@ -80,7 +75,7 @@ const BG_TIMER_INTERVAL_SECS: i64 = 30;
 #[tauri::command]
 #[specta::specta]
 pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, String> {
-    let gs = state.game_state.lock().unwrap();
+    let sc_detected = state.sc_running.load(Ordering::Relaxed);
     let settings = state.current_settings.lock().unwrap().clone();
     let log_watcher_active = state.log_watcher.lock().unwrap().is_some();
     let hotkey_registered = state.hotkey_handle.lock().unwrap().is_some();
@@ -133,13 +128,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
     };
 
     Ok(DebugInfo {
-        sc_detected: gs.sc_hwnd.is_some(),
-        sc_focused: gs.is_focused,
-        sc_hwnd: gs.sc_hwnd.map(|h| h as i32),
-        sc_window_x: gs.window_x,
-        sc_window_y: gs.window_y,
-        sc_window_w: gs.window_w,
-        sc_window_h: gs.window_h,
+        sc_detected,
         hotkey: settings.hotkey,
         log_path: settings.log_path,
         overlay_opacity: settings.overlay_opacity,

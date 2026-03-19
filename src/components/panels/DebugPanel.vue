@@ -41,11 +41,6 @@ onUnmounted(() => {
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
-function formatHwnd(hwnd: number | null): string {
-  if (hwnd === null) return "—";
-  return `0x${(hwnd >>> 0).toString(16).toUpperCase()}`;
-}
-
 function formatTime(d: Date | null): string {
   if (!d) return "—";
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -138,29 +133,13 @@ function fmtMs(ms: number): string {
     <!-- ══ SYSTEM ══════════════════════════════════════════════════════════ -->
     <div v-else-if="activeSection === 'system'" class="flex-1 overflow-y-auto p-2 space-y-2.5">
 
-      <!-- Game Window -->
+      <!-- Game -->
       <div>
         <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Game</p>
         <div class="space-y-0.5">
           <div class="flex justify-between gap-1">
-            <span class="text-white/40">Detected</span>
-            <span :class="info.sc_detected ? 'text-green-400' : 'text-red-400'">{{ info.sc_detected ? "yes" : "no" }}</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">Focused</span>
-            <span :class="info.sc_focused ? 'text-green-400' : 'text-white/30'">{{ info.sc_focused ? "yes" : "no" }}</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">HWND</span>
-            <span class="text-white/55">{{ formatHwnd(info.sc_hwnd) }}</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">Pos</span>
-            <span class="text-white/55">{{ info.sc_window_x }}, {{ info.sc_window_y }}</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">Size</span>
-            <span class="text-white/55">{{ info.sc_window_w }}×{{ info.sc_window_h }}</span>
+            <span class="text-white/40">Star Citizen</span>
+            <span :class="info.sc_detected ? 'text-green-400' : 'text-red-400'">{{ info.sc_detected ? "running" : "not detected" }}</span>
           </div>
         </div>
       </div>

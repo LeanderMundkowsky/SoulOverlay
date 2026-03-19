@@ -644,7 +644,7 @@ export type CzShip = { name: string; ship_type: string; image_url: string; wiki_
 /**
  * Comprehensive runtime snapshot returned to the debug panel.
  */
-export type DebugInfo = { sc_detected: boolean; sc_focused: boolean; sc_hwnd: number | null; sc_window_x: number; sc_window_y: number; sc_window_w: number; sc_window_h: number; hotkey: string; log_path: string | null; overlay_opacity: number; uex_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
+export type DebugInfo = { sc_detected: boolean; hotkey: string; log_path: string | null; overlay_opacity: number; uex_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
 /**
  * ISO8601 timestamp of the last background check tick.
  */

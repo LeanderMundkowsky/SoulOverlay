@@ -4,12 +4,12 @@ mod cache_store;
 mod commands;
 pub mod config;
 mod database;
-mod game_tracker;
 mod hotkey;
 mod image_proxy;
 mod log_watcher;
 mod logging;
 mod platform;
+mod process_tracker;
 mod providers;
 mod settings;
 pub mod state;
@@ -46,14 +46,12 @@ pub fn run() {
         }
     };
 
-    let game_state = std::sync::Arc::new(std::sync::Mutex::new(
-        game_tracker::GameTrackerState::default(),
-    ));
+    let sc_running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     let app_state = AppState {
         paths,
-        game_tracker: Mutex::new(None),
-        game_state: game_state.clone(),
+        sc_running: sc_running.clone(),
+        process_tracker: Mutex::new(None),
         log_watcher: Mutex::new(None),
         uex: uex::UexClient::new(),
         cache: std::sync::Arc::new(cache_store::CacheStore::new(db_conn)),
