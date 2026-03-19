@@ -68,12 +68,12 @@ src/                                 # Vue 3 + TypeScript frontend
 │                                    #   FuelPriceView, TerminalPriceView
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
-│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, CZTab, ProfileTab, PlaceholderTab
+│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, CZTab, WikiloTab, ProfileTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch,
 │                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls,
 │                                    #   InventoryBar, InventoryModal, UpdateBanner, UpdateModal
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch, useDragDrop
-├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, inventory.ts, update.ts (Pinia)
+├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, inventory.ts, wikelo.ts, update.ts (Pinia)
 ├── utils/                           # imageProxy.ts, priceFormatters.ts (locationPath, formatPrice, etc.), sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
@@ -107,6 +107,7 @@ src-tauri/src/                       # Rust backend
 │   ├── user/                        # dto.rs + provider.rs: user profile (requires secret key)
 │   ├── entity_info/                 # provider.rs: aggregates commodity/vehicle/item infos
 │   ├── contested_zones/             # scraper.rs + types.rs: CZ timer data (scraped from contestedzonetimers.com)
+│   ├── wikelo/                      # dto.rs + provider.rs: Wikelo data provider
 │   └── wiki_specs/                  # provider.rs: lazy per-entity wiki specs (no bulk refresh)
 ├── wiki/                            # Star Citizen Wiki API (api.star-citizen.wiki)
 │   ├── client.rs                    # get_item, get_vehicle, search_items, search_vehicles
@@ -128,6 +129,7 @@ src-tauri/src/                       # Rust backend
 │   ├── debug.rs                     # get_debug_info, get_game_state
 │   ├── contested_zones.rs           # CZ map/timer commands: get_cz_map, get_self_timers, update/reset timer
 │   ├── wiki.rs                      # wiki_search, wiki_get_specs
+│   ├── wikelo.rs                    # Wikelo-specific commands
 │   └── updates.rs                   # check_for_update, backup_before_update
 └── hotkey/                          # Global keyboard hook
     ├── mod.rs                       # HookHandle, register_hotkey(hotkey_str), LL hook callback, atomics
@@ -183,10 +185,12 @@ and creates a **draft** GitHub Release. Required secrets: `TAURI_SIGNING_PRIVATE
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 
 **`cache.yml`** — triggers on pushes to `main` when `Cargo.toml`, `Cargo.lock`, or
-`package-lock.json` change. Runs `cargo check --release` to warm the Rust compilation cache.
-Both workflows use `shared-key: "release"` in `swatinem/rust-cache` so the tag-triggered
-release build can restore from main's cache (GitHub scopes caches by ref; tag caches are
-not shared between tags, only the default branch cache is universally accessible).
+`package-lock.json` change. Builds the frontend then runs `cargo build --release` to fully
+warm the Rust compilation cache on `main`. Both workflows use `shared-key: "release"` and
+`add-rust-environment-hash-key: false` in `swatinem/rust-cache` so the tag-triggered release
+build can restore from main's cache regardless of Rust version changes. (GitHub scopes caches
+by ref; tag caches are not shared between tags, only the default branch cache is universally
+accessible.)
 
 ## Architecture Overview
 
