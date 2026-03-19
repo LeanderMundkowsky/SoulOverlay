@@ -100,6 +100,38 @@ export const useInventoryStore = defineStore("inventory", () => {
     }
   }
 
+  async function updateEntry(params: {
+    id: number;
+    entityId: string;
+    entityName: string;
+    entityKind: string;
+    locationId: string;
+    locationName: string;
+    locationSlug: string;
+    quantity: number;
+    collection: string;
+  }) {
+    try {
+      const result = await commands.updateInventoryEntry(
+        params.id,
+        params.entityId,
+        params.entityName,
+        params.entityKind,
+        params.locationId,
+        params.locationName,
+        params.locationSlug,
+        params.quantity,
+        params.collection,
+      );
+      if (result.status === "error") throw result.error;
+      await loadInventory();
+      await loadCollections();
+    } catch (e) {
+      console.error("Failed to update inventory entry:", e);
+      throw e;
+    }
+  }
+
   async function transferEntry(params: {
     id: number;
     quantity: number;
@@ -141,6 +173,7 @@ export const useInventoryStore = defineStore("inventory", () => {
     removeEntry,
     removeQuantity,
     updateQuantity,
+    updateEntry,
     transferEntry,
   };
 });

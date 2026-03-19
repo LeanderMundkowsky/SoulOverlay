@@ -236,6 +236,14 @@ function openAddModalForGroup(group: Group) {
   showModal.value = true;
 }
 
+function openEditModal(entry: InventoryEntry) {
+  modalMode.value = "edit";
+  modalSourceEntry.value = entry;
+  modalPrefillLocation.value = null;
+  modalPrefillCollection.value = null;
+  showModal.value = true;
+}
+
 function openRemoveModal(entry: InventoryEntry) {
   modalMode.value = "remove";
   modalSourceEntry.value = entry;
@@ -447,6 +455,13 @@ function slugIcon(slug: string): string {
 
             <!-- Action buttons -->
             <div class="flex items-center gap-1 opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0">
+              <button
+                @click.stop="openEditModal(entry)"
+                class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+                title="Edit"
+              >
+                ✎ Edit
+              </button>
               <button
                 @click.stop="openTransferModal(entry)"
                 class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"

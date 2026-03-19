@@ -7,7 +7,7 @@ import IconClose from "@/components/icons/IconClose.vue";
 
 // ── Props & Emits ──────────────────────────────────────────────────────────
 
-export type ModalMode = "add" | "remove" | "transfer";
+export type ModalMode = "add" | "remove" | "transfer" | "edit";
 
 const props = defineProps<{
   mode: ModalMode;
@@ -148,6 +148,8 @@ const title = computed(() => {
       return "Remove from Inventory";
     case "transfer":
       return "Transfer Item";
+    case "edit":
+      return "Edit Inventory Entry";
   }
 });
 
@@ -158,6 +160,7 @@ const canSubmit = computed(() => {
   if (quantity.value < 1) return false;
   switch (props.mode) {
     case "add":
+    case "edit":
       return selectedEntity.value !== null && selectedLocation.value !== null;
     case "remove":
       return true;
@@ -179,6 +182,23 @@ async function handleSubmit() {
         const entity = selectedEntity.value!;
         const loc = selectedLocation.value!;
         await inventoryStore.addEntry({
+          entityId: entity.id,
+          entityName: entity.name,
+          entityKind: entity.kind,
+          locationId: loc.id,
+          locationName: loc.name,
+          locationSlug: loc.slug,
+          quantity: quantity.value,
+          collection: collectionQuery.value.trim(),
+        });
+        break;
+      }
+      case "edit": {
+        const entry = props.sourceEntry!;
+        const entity = selectedEntity.value!;
+        const loc = selectedLocation.value!;
+        await inventoryStore.updateEntry({
+          id: entry.id,
           entityId: entity.id,
           entityName: entity.name,
           entityKind: entity.kind,
@@ -263,6 +283,16 @@ onMounted(async () => {
     quantity.value = props.sourceEntry.quantity;
   }
 
+  if (props.mode === "edit" && props.sourceEntry) {
+    const e = props.sourceEntry;
+    selectedEntity.value = { id: e.entity_id, name: e.entity_name, kind: e.entity_kind, slug: "", uuid: "", source: "uex" };
+    entityQuery.value = e.entity_name;
+    selectedLocation.value = { id: e.location_id, name: e.location_name, slug: e.location_slug, kind: "", uuid: "", source: "uex" };
+    locationQuery.value = e.location_name;
+    quantity.value = e.quantity;
+    collectionQuery.value = e.collection;
+  }
+
   if (props.mode === "transfer" && props.sourceEntry) {
     quantity.value = props.sourceEntry.quantity;
     collectionQuery.value = props.sourceEntry.collection;
@@ -284,6 +314,8 @@ onMounted(async () => {
     document.getElementById("inv-quantity-input")?.focus();
   } else if (props.mode === "transfer") {
     document.getElementById("inv-location-input")?.focus();
+  } else if (props.mode === "edit") {
+    document.getElementById("inv-entity-input")?.focus();
   }
 });
 
@@ -384,8 +416,8 @@ function locationSlugLabel(slug: string): string {
             <div class="text-white/30 text-xs">Current: {{ sourceEntry.quantity }}×</div>
           </div>
 
-          <!-- Entity search (add mode only) -->
-          <div v-if="mode === 'add'" class="space-y-1.5 relative">
+          <!-- Entity search (add + edit modes) -->
+          <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5 relative">
             <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Item / Commodity</label>
             <input
               id="inv-entity-input"
@@ -419,8 +451,8 @@ function locationSlugLabel(slug: string): string {
             <div v-if="entitySearching" class="text-white/20 text-xs mt-1">Searching...</div>
           </div>
 
-          <!-- Location search (add + transfer) -->
-          <div v-if="mode === 'add' || mode === 'transfer'" class="space-y-1.5 relative">
+          <!-- Location search (add + edit + transfer) -->
+          <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
             <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
               {{ mode === 'transfer' ? 'Transfer To' : 'Location' }}
             </label>
@@ -473,8 +505,8 @@ function locationSlugLabel(slug: string): string {
             </div>
           </div>
 
-          <!-- Collection (add + transfer) -->
-          <div v-if="mode === 'add' || mode === 'transfer'" class="space-y-1.5 relative">
+          <!-- Collection (add + edit + transfer) -->
+          <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
             <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
               Collection
               <span class="text-white/20 font-normal normal-case tracking-normal">(optional)</span>
@@ -514,7 +546,7 @@ function locationSlugLabel(slug: string): string {
               ? 'bg-red-600 hover:bg-red-500 disabled:bg-red-600/30 text-white'
               : 'bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white'"
           >
-            {{ saving ? 'Saving...' : mode === 'remove' ? 'Remove' : mode === 'transfer' ? 'Transfer' : 'Add' }}
+            {{ saving ? 'Saving...' : mode === 'remove' ? 'Remove' : mode === 'transfer' ? 'Transfer' : mode === 'edit' ? 'Save' : 'Add' }}
           </button>
           <button
             @click="emit('close')"

@@ -389,6 +389,14 @@ async addInventoryEntry(entityId: string, entityName: string, entityKind: string
     else return { status: "error", error: e  as any };
 }
 },
+async updateInventoryEntry(id: number, entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collection: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_inventory_entry", { id, entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collection }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async updateInventoryQuantity(id: number, quantity: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("update_inventory_quantity", { id, quantity }) };

@@ -267,6 +267,53 @@ pub async fn get_inventory_collections(
     Ok(collections)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn update_inventory_entry(
+    id: i32,
+    entity_id: String,
+    entity_name: String,
+    entity_kind: String,
+    location_id: String,
+    location_name: String,
+    location_slug: String,
+    quantity: i32,
+    collection: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let db = state.cache.db().lock().unwrap();
+
+    // Delete the old entry, then upsert with the new values.
+    // The upsert merges with any existing conflicting entry (same entity+location+collection)
+    // and fully replaces its fields with the edited values.
+    db.execute("DELETE FROM inventory WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| format!("Failed to remove old inventory entry: {}", e))?;
+
+    db.execute(
+        "INSERT INTO inventory (entity_id, entity_name, entity_kind, location_id, location_name, location_slug, quantity, collection)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(entity_id, location_id, collection) DO UPDATE SET
+             entity_name    = excluded.entity_name,
+             entity_kind    = excluded.entity_kind,
+             location_name  = excluded.location_name,
+             location_slug  = excluded.location_slug,
+             quantity       = excluded.quantity,
+             updated_at     = datetime('now')",
+        rusqlite::params![entity_id, entity_name, entity_kind, location_id, location_name, location_slug, quantity, collection],
+    )
+    .map_err(|e| format!("Failed to save updated inventory entry: {}", e))?;
+
+    info!(
+        "Updated inventory entry {} → {}x {} at {} (collection: {})",
+        id,
+        quantity,
+        entity_name,
+        location_name,
+        if collection.is_empty() { "none" } else { &collection }
+    );
+    Ok(())
+}
+
 // ── Storage location search ────────────────────────────────────────────────
 
 /// Convert a fleet vehicle into a UexResult for the location picker.

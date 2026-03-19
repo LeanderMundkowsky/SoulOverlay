@@ -168,6 +168,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::watchlist::remove_watch_entry,
             commands::inventory::get_inventory,
             commands::inventory::add_inventory_entry,
+            commands::inventory::update_inventory_entry,
             commands::inventory::update_inventory_quantity,
             commands::inventory::remove_inventory_entry,
             commands::inventory::remove_inventory_quantity,
