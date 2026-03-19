@@ -26,6 +26,7 @@ pub enum Collection {
     UserProfile,
     EntityInfo,
     WikiSpecs,
+    WikiloTrades,
 }
 
 impl Collection {
@@ -46,6 +47,7 @@ impl Collection {
             Self::UserProfile => "User Profile",
             Self::EntityInfo => "Entity Info",
             Self::WikiSpecs => "Wiki Specifications",
+            Self::WikiloTrades => "Wikelo Trades",
         }
     }
 
@@ -66,6 +68,7 @@ impl Collection {
             Self::EntityInfo => 86400,
             Self::Locations => 86400,
             Self::WikiSpecs => 604800,
+            Self::WikiloTrades => 86400,
         }
     }
 
@@ -86,6 +89,7 @@ impl Collection {
             Self::UserProfile => "user_profile".to_string(),
             Self::EntityInfo => "entity_info".to_string(),
             Self::WikiSpecs => "wiki_specs".to_string(),
+            Self::WikiloTrades => "wikelo_trades".to_string(),
         }
     }
 
@@ -111,6 +115,7 @@ impl Collection {
             Collection::UserProfile,
             Collection::EntityInfo,
             Collection::WikiSpecs,
+            Collection::WikiloTrades,
         ]
     }
 

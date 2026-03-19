@@ -12,3 +12,4 @@ pub mod updates;
 pub mod user;
 pub mod watchlist;
 pub mod wiki;
+pub mod wikelo;

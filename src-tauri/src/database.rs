@@ -92,6 +92,13 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
         M::up(
             "ALTER TABLE favorites ADD COLUMN source TEXT NOT NULL DEFAULT 'uex';",
         ),
+        // v7: wikelo_completions table for tracking completed Wikelo contracts
+        M::up(
+            "CREATE TABLE IF NOT EXISTS wikelo_completions (
+                mission_id   TEXT PRIMARY KEY,
+                completed_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

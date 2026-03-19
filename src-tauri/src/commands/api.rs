@@ -99,7 +99,8 @@ async fn search_cached_or_fetch(
                 | Collection::Fleet
                 | Collection::UserProfile
                 | Collection::EntityInfo
-                | Collection::WikiSpecs => return Err("Use specific price commands".to_string()),
+                | Collection::WikiSpecs
+                | Collection::WikiloTrades => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }

@@ -8,6 +8,7 @@ pub mod locations;
 pub mod user;
 pub mod vehicles;
 pub mod wiki_specs;
+pub mod wikelo;
 
 use async_trait::async_trait;
 
@@ -113,6 +114,8 @@ pub fn all_providers() -> Vec<AnyProvider> {
         AnyProvider::Blob(Box::new(user::provider::UserProfileProvider)),
         // Wiki specs (lazy, no-op refresh)
         AnyProvider::PerEntity(Box::new(wiki_specs::provider::WikiSpecsProvider)),
+        // Wikelo trades (fetched from wikelotrades.com, cached 24h)
+        AnyProvider::Blob(Box::new(wikelo::WikiloTradesProvider)),
     ]
 }
 

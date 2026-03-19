@@ -68,7 +68,8 @@ pub async fn uex_search_all(
                     | Collection::Fleet
                     | Collection::UserProfile
                     | Collection::EntityInfo
-                    | Collection::WikiSpecs => Ok(vec![]),
+                    | Collection::WikiSpecs
+                    | Collection::WikiloTrades => Ok(vec![]),
                 };
                 if let Ok(mut v) = fetched {
                     results.append(&mut v);

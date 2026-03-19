@@ -563,6 +563,39 @@ async wikiEntitySpecs(kind: string, entityId: string, entityName: string, uuid: 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Return all Wikelo contracts, fetching and caching from wikelotrades.com if needed.
+ */
+async wikeloGetTrades() : Promise<Result<ApiResponse<WikeloTrade[]>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("wikelo_get_trades") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Return all completed contract mission IDs from the local DB.
+ */
+async wikeloGetCompletions() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("wikelo_get_completions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Toggle a contract's completion status. Returns `true` if now completed, `false` if cleared.
+ */
+async wikeloToggleCompletion(missionId: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("wikelo_toggle_completion", { missionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -596,7 +629,7 @@ export type CacheRefreshResult = { ok: boolean; collection: string; error: strin
 /**
  * Known collection names used as cache keys.
  */
-export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info" | "wiki_specs"
+export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info" | "wiki_specs" | "wikilo_trades"
 /**
  * Per-collection debug status (CollectionStatus extended with is_refreshing + expires_at).
  */
@@ -776,6 +809,7 @@ export type LocationTerminal = { id: string; name: string; nickname: string; sys
  * Unified across all price types — entity metadata identifies the source.
  */
 export type PriceEntry = { entity_id: string; entity_name: string; price_type: string; location: string; terminal: string; terminal_id: string; buy_price: number; sell_price: number; rent_price: number; scu_available: number | null; date_updated: string; orbit?: string; system?: string; faction?: string; scu_last?: number; scu_users?: number; scu_avg?: number; scu_min?: number; scu_max?: number; price_last?: number; price_users?: number; price_avg?: number; price_min?: number; price_max?: number; inventory_status?: number; inventory_status_avg?: number; container_sizes?: string; is_buy_location?: boolean; category?: string }
+export type RequiredItem = { quantity: number; item: string }
 /**
  * Application settings persisted as JSON to `%APPDATA%\SoulOverlay\settings.json`
  */
@@ -850,6 +884,7 @@ export type UexUserProfile = { id: number; name: string; username: string; email
  */
 export type UpdateInfo = { version: string; date: string | null; body: string | null }
 export type WatchEntry = { entity_id: string; entity_name: string; entity_kind: string; entity_slug: string; terminal_id: string; terminal_name: string; price_type: string; added_at: string }
+export type WikeloTrade = { id: string; mission_name: string; reward_names: string[]; category: string; patch: string; reputation: string; required_items: RequiredItem[]; description: string; active: boolean }
 /**
  * Flattened Wiki entity specs for frontend consumption.
  * Covers both items and vehicles — unused fields are None.
