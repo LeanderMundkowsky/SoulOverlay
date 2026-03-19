@@ -260,10 +260,18 @@ pub async fn get_inventory_collections(
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|e| format!("Failed to query collections: {}", e))?;
 
+    let mut seen = std::collections::HashSet::new();
     let mut collections = Vec::new();
     for row in rows {
-        collections.push(row.map_err(|e| format!("Failed to read collection: {}", e))?);
+        let coll_str = row.map_err(|e| format!("Failed to read collection: {}", e))?;
+        for c in coll_str.split(',') {
+            let c = c.trim().to_string();
+            if !c.is_empty() && seen.insert(c.clone()) {
+                collections.push(c);
+            }
+        }
     }
+    collections.sort();
     Ok(collections)
 }
 

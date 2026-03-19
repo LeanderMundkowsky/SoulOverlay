@@ -63,17 +63,18 @@ const uniqueLocations = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label));
 });
 
-/** Unique collections from current inventory entries */
+/** Unique collections from current inventory entries (split comma-separated) */
 const uniqueCollections = computed(() => {
   const set = new Set<string>();
-  for (const e of inventoryStore.entries) set.add(e.collection);
+  for (const e of inventoryStore.entries) {
+    for (const c of e.collection.split(",")) {
+      const trimmed = c.trim();
+      if (trimmed) set.add(trimmed);
+    }
+  }
   return Array.from(set)
-    .sort((a, b) => {
-      if (a === "") return 1;
-      if (b === "") return -1;
-      return a.localeCompare(b);
-    })
-    .map((c) => ({ id: c, label: c === "" ? "No Collection" : c }));
+    .sort((a, b) => a.localeCompare(b))
+    .map((c) => ({ id: c, label: c }));
 });
 
 const filterOptions = computed(() =>
@@ -138,13 +139,23 @@ watch(() => inventoryStore.pendingLocationFilter, (pending) => {
 const filteredEntries = computed(() => {
   let result = inventoryStore.entries;
 
+  // Apply sidebar collection filter
+  if (sidebarCollection.value !== null) {
+    const target = sidebarCollection.value;
+    result = result.filter((e) =>
+      e.collection.split(",").map((c) => c.trim()).includes(target),
+    );
+  }
+
   // Apply dropdown filter
   if (selectedFilter.value) {
     if (groupMode.value === "location") {
       result = result.filter((e) => e.location_id === selectedFilter.value!.id);
     } else {
-      const coll = selectedFilter.value.id; // "" for no collection
-      result = result.filter((e) => e.collection === coll);
+      const coll = selectedFilter.value.id;
+      result = result.filter((e) =>
+        e.collection.split(",").map((c) => c.trim()).includes(coll),
+      );
     }
   }
 
@@ -265,14 +276,20 @@ function onModalSaved() {
   inventoryStore.loadCollections();
 }
 
-// ── Subtext for entries ────────────────────────────────────────────────────
+// ── Sidebar collection filter ──────────────────────────────────────────────
 
-function entrySubtext(entry: InventoryEntry): string {
-  if (groupMode.value === "location") {
-    return entry.collection || "";
+const sidebarCollection = ref<string | null>(null);
+
+const collectionEntryCounts = computed(() => {
+  const map = new Map<string, number>();
+  for (const e of inventoryStore.entries) {
+    for (const c of e.collection.split(",")) {
+      const trimmed = c.trim();
+      if (trimmed) map.set(trimmed, (map.get(trimmed) ?? 0) + 1);
+    }
   }
-  return entry.location_name;
-}
+  return map;
+});
 
 function slugIcon(slug: string): string {
   switch (slug) {
@@ -324,57 +341,6 @@ function slugIcon(slug: string): string {
       </div>
     </div>
 
-    <!-- Search + Dropdown filter row -->
-    <div class="flex items-center gap-2">
-      <!-- Text search -->
-      <div class="flex-1 relative">
-        <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Filter inventory..."
-          class="w-full bg-[#111318] border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
-        />
-      </div>
-
-      <!-- Dropdown filter (location or collection depending on mode) -->
-      <div class="relative w-56 flex-shrink-0">
-        <input
-          type="text"
-          :value="filterQuery"
-          @input="onFilterInput(($event.target as HTMLInputElement).value)"
-          @focus="onFilterFocus"
-          @blur="closeFilterDropdownDelayed"
-          autocomplete="off"
-          :placeholder="groupMode === 'location' ? 'Filter by location...' : 'Filter by collection...'"
-          class="w-full bg-[#111318] border rounded-lg pl-3 pr-8 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-          :class="selectedFilter ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
-        />
-        <!-- Clear button -->
-        <button
-          v-if="selectedFilter"
-          @mousedown.prevent="clearFilter"
-          class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
-        >
-          <IconClose class="w-3.5 h-3.5" />
-        </button>
-        <!-- Dropdown -->
-        <div
-          v-if="filterDropdownOpen && filteredFilterOptions.length > 0"
-          class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-        >
-          <button
-            v-for="opt in filteredFilterOptions"
-            :key="opt.id"
-            @mousedown.prevent="selectFilter(opt)"
-            class="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/8 transition-colors truncate"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Loading -->
     <div v-if="inventoryStore.loading && inventoryStore.entries.length === 0" class="flex justify-center py-12">
       <LoadingSpinner />
@@ -389,93 +355,188 @@ function slugIcon(slug: string): string {
       <p class="mt-1">Click <strong>+ Add</strong> or use the 📦 button in search results.</p>
     </div>
 
-    <!-- No results for filter -->
-    <div
-      v-if="inventoryStore.entries.length > 0 && groupedEntries.length === 0"
-      class="text-center text-white/30 py-8 text-sm"
-    >
-      No matching entries found.
-    </div>
+    <!-- Sidebar + list row (only when entries exist) -->
+    <div v-if="inventoryStore.entries.length > 0" class="flex gap-4 items-start">
 
-    <!-- Grouped list -->
-    <div v-if="groupedEntries.length > 0" class="space-y-3">
-      <div
-        v-for="group in groupedEntries"
-        :key="group.key"
-        class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
-      >
-        <!-- Group header -->
+      <!-- Collections sidebar -->
+      <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5">
+        <div class="text-white/40 text-xs font-semibold uppercase tracking-wider px-1 pb-1.5">Collections</div>
+        <!-- All -->
         <button
-          @click="toggleGroup(group.key)"
-          class="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
+          @click="sidebarCollection = null"
+          class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-1"
+          :class="sidebarCollection === null
+            ? 'bg-white/10 text-white'
+            : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
         >
-          <span class="text-xs text-white/30 transition-transform" :class="collapsedGroups.has(group.key) ? '' : 'rotate-90'">▶</span>
-          <span v-if="groupMode === 'location'" class="text-sm">{{ slugIcon(group.entries[0]?.location_slug ?? '') }}</span>
-          <span v-else class="text-sm">🏷️</span>
-          <span class="text-white text-sm font-medium flex-1">{{ group.label }}</span>
-          <span class="text-white/30 text-xs">{{ group.totalQuantity }}× total</span>
-          <span
-            @click.stop="openAddModalForGroup(group)"
-            class="text-white/20 hover:text-green-400 text-xs px-1.5 py-0.5 rounded-md hover:bg-green-400/10 transition-colors ml-1"
-            title="Add item here"
-          >+</span>
+          <span class="truncate">All</span>
+          <span class="text-white/30 text-xs shrink-0">{{ inventoryStore.entries.length }}</span>
         </button>
+        <!-- Each collection -->
+        <button
+          v-for="coll in uniqueCollections"
+          :key="coll.id"
+          @click="sidebarCollection = coll.id"
+          class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-1"
+          :class="sidebarCollection === coll.id
+            ? 'bg-blue-500/20 text-blue-300'
+            : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
+        >
+          <span class="truncate">{{ coll.label }}</span>
+          <span class="text-white/30 text-xs shrink-0">{{ collectionEntryCounts.get(coll.id) ?? 0 }}</span>
+        </button>
+      </div>
 
-        <!-- Group entries -->
-        <div v-show="!collapsedGroups.has(group.key)" class="border-t border-white/5">
-          <div
-            v-for="entry in group.entries"
-            :key="entry.id"
-            class="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors group/entry border-b border-white/5 last:border-b-0"
-          >
-            <!-- Icon -->
-            <div
-              class="flex-shrink-0 w-6 h-6 rounded-md border bg-white/5 border-white/10 flex items-center justify-center text-white/40"
+      <!-- Grouped list -->
+      <div class="flex-1 min-w-0 space-y-3">
+        <!-- Search + Dropdown filter row -->
+        <div class="flex items-center gap-2">
+          <!-- Text search -->
+          <div class="flex-1 relative">
+            <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Filter inventory..."
+              class="w-full bg-[#111318] border border-white/10 rounded-lg pl-9 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
+              :class="searchQuery ? 'pr-8' : 'pr-3'"
+            />
+            <button
+              v-if="searchQuery"
+              @click="searchQuery = ''"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
             >
-              <IconCommodity v-if="entry.entity_kind === 'commodity'" class="w-3 h-3" />
-              <IconPackage v-else class="w-3 h-3" />
-            </div>
+              <IconClose class="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-            <!-- Info -->
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-white text-sm truncate">{{ entry.entity_name }}</span>
-                <span class="text-white/60 text-xs font-medium shrink-0">{{ entry.quantity }}×</span>
-                <span
-                  v-if="entry.collection && groupMode === 'location'"
-                  class="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/70 shrink-0 truncate max-w-[100px]"
+          <!-- Dropdown filter (location or collection depending on mode) -->
+          <div class="relative w-48 flex-shrink-0">
+            <input
+              type="text"
+              :value="filterQuery"
+              @input="onFilterInput(($event.target as HTMLInputElement).value)"
+              @focus="onFilterFocus"
+              @blur="closeFilterDropdownDelayed"
+              autocomplete="off"
+              :placeholder="groupMode === 'location' ? 'Filter by location...' : 'Filter by collection...'"
+              class="w-full bg-[#111318] border rounded-lg pl-3 pr-8 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
+              :class="selectedFilter ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+            />
+            <!-- Clear button -->
+            <button
+              v-if="selectedFilter"
+              @mousedown.prevent="clearFilter"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
+            >
+              <IconClose class="w-3.5 h-3.5" />
+            </button>
+            <!-- Dropdown -->
+            <div
+              v-if="filterDropdownOpen && filteredFilterOptions.length > 0"
+              class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
+            >
+              <button
+                v-for="opt in filteredFilterOptions"
+                :key="opt.id"
+                @mousedown.prevent="selectFilter(opt)"
+                class="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/8 transition-colors truncate"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- No results for filter -->
+        <div
+          v-if="groupedEntries.length === 0"
+          class="text-center text-white/30 py-8 text-sm"
+        >
+          No matching entries found.
+        </div>
+
+        <div v-if="groupedEntries.length > 0" class="space-y-3">
+          <div
+            v-for="group in groupedEntries"
+            :key="group.key"
+            class="bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden"
+          >
+            <!-- Group header -->
+            <button
+              @click="toggleGroup(group.key)"
+              class="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
+            >
+              <span class="text-xs text-white/30 transition-transform" :class="collapsedGroups.has(group.key) ? '' : 'rotate-90'">▶</span>
+              <span v-if="groupMode === 'location'" class="text-sm">{{ slugIcon(group.entries[0]?.location_slug ?? '') }}</span>
+              <span v-else class="text-sm">🏷️</span>
+              <span class="text-white text-sm font-medium flex-1">{{ group.label }}</span>
+              <span class="text-white/30 text-xs">{{ group.totalQuantity }}× total</span>
+              <span
+                @click.stop="openAddModalForGroup(group)"
+                class="text-white/20 hover:text-green-400 text-xs px-1.5 py-0.5 rounded-md hover:bg-green-400/10 transition-colors ml-1"
+                title="Add item here"
+              >+</span>
+            </button>
+
+            <!-- Group entries -->
+            <div v-show="!collapsedGroups.has(group.key)" class="border-t border-white/5">
+              <div
+                v-for="entry in group.entries"
+                :key="entry.id"
+                class="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors group/entry"
+              >
+                <!-- Icon -->
+                <div
+                  class="flex-shrink-0 w-6 h-6 rounded-md border bg-white/5 border-white/10 flex items-center justify-center text-white/40"
                 >
-                  {{ entry.collection }}
-                </span>
-              </div>
-              <div v-if="entrySubtext(entry)" class="text-white/30 text-xs truncate mt-0.5">
-                {{ entrySubtext(entry) }}
-              </div>
-            </div>
+                  <IconCommodity v-if="entry.entity_kind === 'commodity'" class="w-3 h-3" />
+                  <IconPackage v-else class="w-3 h-3" />
+                </div>
 
-            <!-- Action buttons -->
-            <div class="flex items-center gap-1 opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0">
-              <button
-                @click.stop="openEditModal(entry)"
-                class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
-                title="Edit"
-              >
-                ✎ Edit
-              </button>
-              <button
-                @click.stop="openTransferModal(entry)"
-                class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
-                title="Transfer"
-              >
-                ↗ Transfer
-              </button>
-              <button
-                @click.stop="openRemoveModal(entry)"
-                class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                title="Remove"
-              >
-                ✕ Remove
-              </button>
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-white text-sm truncate">{{ entry.entity_name }}</span>
+                    <span class="text-white/60 text-xs font-medium shrink-0">{{ entry.quantity }}×</span>
+                    <template v-if="groupMode === 'location'">
+                      <span
+                        v-for="c in entry.collection.split(',').map((s) => s.trim()).filter(Boolean)"
+                        :key="c"
+                        class="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/70 shrink-0 truncate max-w-[80px]"
+                      >{{ c }}</span>
+                    </template>
+                  </div>
+                  <div v-if="groupMode === 'collection'" class="text-white/30 text-xs truncate mt-0.5">
+                    {{ entry.location_name }}
+                  </div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="flex items-center gap-1 opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0">
+                  <button
+                    @click.stop="openEditModal(entry)"
+                    class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+                    title="Edit"
+                  >
+                    ✎ Edit
+                  </button>
+                  <button
+                    @click.stop="openTransferModal(entry)"
+                    class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
+                    title="Transfer"
+                  >
+                    ↗ Transfer
+                  </button>
+                  <button
+                    @click.stop="openRemoveModal(entry)"
+                    class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                    title="Remove"
+                  >
+                    ✕ Remove
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

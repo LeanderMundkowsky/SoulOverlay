@@ -68,12 +68,12 @@ src/                                 # Vue 3 + TypeScript frontend
 │                                    #   FuelPriceView, TerminalPriceView
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
-│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, ProfileTab, PlaceholderTab
+│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, CZTab, ProfileTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch,
 │                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls,
-│                                    #   InventoryBar, UpdateBanner, UpdateModal
+│                                    #   InventoryBar, InventoryModal, UpdateBanner, UpdateModal
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch, useDragDrop
-├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, update.ts (Pinia)
+├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, inventory.ts, update.ts (Pinia)
 ├── utils/                           # imageProxy.ts, priceFormatters.ts (locationPath, formatPrice, etc.), sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
@@ -91,7 +91,7 @@ src-tauri/src/                       # Rust backend
 ├── platform.rs                      # HWND <-> isize helpers (breaks circular deps)
 ├── image_proxy.rs                   # Async image proxy for UEX photo URLs via custom URI scheme
 ├── window.rs                        # Win32 overlay: WNDPROC subclass, show/hide, geometry, focus mgmt
-├── game_tracker.rs                  # SC window polling thread, SharedGameState
+├── process_tracker.rs               # SC process polling thread (ToolHelp32 snapshot, emits sc-window-found/lost)
 ├── log_watcher.rs                   # game.log tail + regex parse + Tauri event emit
 ├── uex/                             # UEX Corp API transport + shared types
 │   ├── client.rs                    # UexClient struct: shared reqwest::Client, generic get<T>
@@ -105,7 +105,14 @@ src-tauri/src/                       # Rust backend
 │   ├── fuel/                        # dto.rs + provider.rs: fuel prices
 │   ├── fleet/                       # dto.rs + provider.rs: user fleet (requires secret key)
 │   ├── user/                        # dto.rs + provider.rs: user profile (requires secret key)
-│   └── entity_info/                 # provider.rs: aggregates commodity/vehicle/item infos
+│   ├── entity_info/                 # provider.rs: aggregates commodity/vehicle/item infos
+│   ├── contested_zones/             # scraper.rs + types.rs: CZ timer data (scraped from contestedzonetimers.com)
+│   └── wiki_specs/                  # provider.rs: lazy per-entity wiki specs (no bulk refresh)
+├── wiki/                            # Star Citizen Wiki API (api.star-citizen.wiki)
+│   ├── client.rs                    # get_item, get_vehicle, search_items, search_vehicles
+│   ├── dto.rs                       # API response DTOs (WikiItemDto, WikiVehicleDto, WikiApiResponse)
+│   ├── types.rs                     # Shared type WikiEntitySpecs (IPC-safe)
+│   └── mod.rs                       # Module declarations
 ├── tray.rs                          # System tray icon + menu
 ├── commands/                        # All #[tauri::command] + #[specta::specta] functions
 │   ├── api.rs                       # api_search, api_commodity_prices + ApiResponse<T> envelope
@@ -115,9 +122,12 @@ src-tauri/src/                       # Rust backend
 │   ├── overlay.rs                   # show_overlay_cmd, hide_overlay_cmd
 │   ├── favorites.rs                 # get_favorites, add_favorite, remove_favorite, is_favorite
 │   ├── watchlist.rs                 # get_watchlist, add_watch_entry, remove_watch_entry
+│   ├── inventory.rs                 # inventory CRUD + collections: InventoryEntry, add/remove/transfer/update/get_collections
 │   ├── hangar.rs                    # hangar_get_fleet
 │   ├── user.rs                      # user_get_profile
 │   ├── debug.rs                     # get_debug_info, get_game_state
+│   ├── contested_zones.rs           # CZ map/timer commands: get_cz_map, get_self_timers, update/reset timer
+│   ├── wiki.rs                      # wiki_search, wiki_get_specs
 │   └── updates.rs                   # check_for_update, backup_before_update
 └── hotkey/                          # Global keyboard hook
     ├── mod.rs                       # HookHandle, register_hotkey(hotkey_str), LL hook callback, atomics
@@ -382,6 +392,7 @@ Each variant provides `display_name()`, `ttl_secs()` (default), `storage_key()`,
 | `Fleet` | 12 h | `fleet` | No |
 | `UserProfile` | 1 h | `user_profile` | No |
 | `EntityInfo` | 24 h | `entity_info:{kind}:{id}` | Yes |
+| `WikiSpecs` | 24 h | `wiki_specs:{kind}:{id}` | Yes |
 
 Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides are stored in
 `settings.cache_ttls` (`HashMap<String, u32>`) keyed by `Collection::storage_key()`.
@@ -573,3 +584,71 @@ with full module paths — `pub use` re-exports do NOT carry the hidden `__cmd__
 - Different price endpoints return different location fields: `/items_prices_all` has none,
   `/commodities_prices` has all names. All providers enrich from terminal hierarchy to
   ensure consistent location data.
+
+## Inventory System
+
+Inventory entries live in a SQLite table managed entirely by `commands/inventory.rs`.
+The `InventoryEntry` struct (defined there, not in `uex/types.rs`) is the IPC type.
+
+**Collections** are stored as a sorted comma-separated string in the `collection` TEXT column
+(e.g., `"Refining,Trading"`). There is no separate collections table — they are inferred at
+query time by splitting on commas. The unique constraint is `(entity_id, location_id, collection)`.
+
+**Multi-select collections in `InventoryModal.vue`**:
+- The modal uses `selectedCollections: ref<string[]>` (not a text input)
+- `serializeCollections()` sorts and joins with `,` before saving
+- `parseCollections(raw)` splits on `,`, trims, and filters empty strings for prefill
+- New collections typed in the panel's "New..." input are added to `newlyAdded` and auto-selected
+
+**`get_inventory_collections`** splits each row's `collection` field by comma, deduplicates,
+and returns a sorted flat list — callers never need to split themselves.
+
+**`update_inventory_entry`** uses delete + upsert (DELETE by id → INSERT ON CONFLICT DO UPDATE)
+to gracefully handle edits that collide with an existing entry's unique constraint.
+
+**`InventoryTab.vue` sidebar**: Left panel shows individual collection names (split from stored
+values). Sidebar filter uses `.includes()` so entries with multiple collections match any
+selected tag. Collection badges render one `<span>` per tag in location group mode.
+
+**Storage location filter**: Only `space_station`, `city`, `outpost`, `poi` slugs are accepted
+as inventory locations (enforced in `commands/inventory.rs` via `STORAGE_SLUGS`).
+
+## Contested Zones (CZ) Tab
+
+**Data sources** (two independent systems):
+
+1. **Live CZ map** (`providers/contested_zones/scraper.rs`) — scrapes `contestedzonetimers.com`
+   for current zone control state, cycle timing (`cfg.dat`), and ship lists. No UEX API involved.
+   Result cached as `Collection::ContestedZones` blob.
+
+2. **Self-timers** (`commands/contested_zones.rs`) — fully client-side timers the user sets
+   manually (keycard, cache, etc.). Persisted in SQLite `cz_self_timers` table. Returned as
+   `Vec<CzSelfTimer>` with `remaining_seconds` / `end_epoch` / `status` fields.
+
+`CZTab.vue` polls both via Tauri commands and manages countdown logic in the frontend.
+
+## Wiki Integration
+
+`wiki/` is a **separate HTTP client** for `api.star-citizen.wiki` (not UEX). It lives alongside
+`uex/` and follows the same pattern: transport in `client.rs`, DTOs in `dto.rs`, shared IPC
+types in `types.rs`.
+
+**`wiki_search`** (`commands/wiki.rs`): searches items and vehicles in parallel, returns
+`ApiResponse<Vec<UexResult>>` with `source: "wiki"` so the frontend can distinguish results.
+
+**`wiki_get_specs`** / `fetch_wiki_specs` (`providers/wiki_specs/`): lazy per-entity fetch —
+no bulk refresh. Lookup order: cache → UUID direct lookup → name search fallback. Cached under
+`wiki_specs:{kind}:{id}` with 24-hour TTL.
+
+`WikiEntitySpecs` (in `wiki/types.rs`) is the IPC type — used in `DetailsTab.vue` to show
+ship specs, item stats, etc. alongside UEX price data.
+
+## SC Process Detection
+
+`process_tracker.rs` replaces the old `game_tracker.rs`. It polls the Windows process list
+every 2 seconds using `CreateToolhelp32Snapshot` / `Process32NextW` (ToolHelp32 API) to
+detect whether `StarCitizen.exe` is running. Emits `sc-window-found` and `sc-window-lost`
+Tauri events when state changes. `AppState.process_tracker` holds the `Arc<AtomicBool>` flag.
+
+The frontend `stores/game.ts` listens to these events to update the "Connected" status
+indicator in the status bar. No HWND or window title matching is needed for connection detection.

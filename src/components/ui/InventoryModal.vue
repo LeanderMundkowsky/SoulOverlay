@@ -118,24 +118,39 @@ function selectLocation(r: UexResult) {
   locationDropdownOpen.value = false;
 }
 
-// ── Collection input ──────────────────────────────────────────────────────
+// ── Collections multi-select ──────────────────────────────────────────────
 
-const collectionQuery = ref("");
-const collectionDropdownOpen = ref(false);
-
-const filteredCollections = computed(() => {
-  const q = collectionQuery.value.toLowerCase();
-  if (!q) return inventoryStore.collections;
-  return inventoryStore.collections.filter((c) => c.toLowerCase().includes(q));
+const selectedCollections = ref<string[]>([]);
+const newCollectionInput = ref("");
+const newlyAdded = ref<string[]>([]);
+const allCollections = computed(() => {
+  const combined = new Set([...inventoryStore.collections, ...newlyAdded.value]);
+  return [...combined].sort();
 });
 
-function selectCollection(c: string) {
-  collectionQuery.value = c;
-  collectionDropdownOpen.value = false;
+function toggleCollection(c: string) {
+  const idx = selectedCollections.value.indexOf(c);
+  if (idx >= 0) {
+    selectedCollections.value.splice(idx, 1);
+  } else {
+    selectedCollections.value.push(c);
+  }
 }
 
-function onCollectionFocus() {
-  collectionDropdownOpen.value = inventoryStore.collections.length > 0;
+function addNewCollection() {
+  const name = newCollectionInput.value.trim();
+  if (!name) return;
+  if (!allCollections.value.includes(name)) {
+    newlyAdded.value.push(name);
+  }
+  if (!selectedCollections.value.includes(name)) {
+    selectedCollections.value.push(name);
+  }
+  newCollectionInput.value = "";
+}
+
+function serializeCollections(): string {
+  return [...selectedCollections.value].sort().join(",");
 }
 
 // ── Form title ─────────────────────────────────────────────────────────────
@@ -189,7 +204,7 @@ async function handleSubmit() {
           locationName: loc.name,
           locationSlug: loc.slug,
           quantity: quantity.value,
-          collection: collectionQuery.value.trim(),
+          collection: serializeCollections(),
         });
         break;
       }
@@ -206,7 +221,7 @@ async function handleSubmit() {
           locationName: loc.name,
           locationSlug: loc.slug,
           quantity: quantity.value,
-          collection: collectionQuery.value.trim(),
+          collection: serializeCollections(),
         });
         break;
       }
@@ -228,7 +243,7 @@ async function handleSubmit() {
           targetLocationId: loc.id,
           targetLocationName: loc.name,
           targetLocationSlug: loc.slug,
-          targetCollection: collectionQuery.value.trim(),
+          targetCollection: serializeCollections(),
         });
         break;
       }
@@ -247,6 +262,10 @@ async function handleSubmit() {
 const maxQuantity = computed(() => props.sourceEntry?.quantity ?? 999999);
 
 // ── Prefill on mount ───────────────────────────────────────────────────────
+
+function parseCollections(raw: string): string[] {
+  return raw.split(",").map((c) => c.trim()).filter(Boolean);
+}
 
 onMounted(async () => {
   await inventoryStore.loadCollections();
@@ -276,7 +295,7 @@ onMounted(async () => {
   }
 
   if (props.mode === "add" && props.prefillCollection) {
-    collectionQuery.value = props.prefillCollection;
+    selectedCollections.value = parseCollections(props.prefillCollection);
   }
 
   if (props.mode === "remove" && props.sourceEntry) {
@@ -290,12 +309,12 @@ onMounted(async () => {
     selectedLocation.value = { id: e.location_id, name: e.location_name, slug: e.location_slug, kind: "", uuid: "", source: "uex" };
     locationQuery.value = e.location_name;
     quantity.value = e.quantity;
-    collectionQuery.value = e.collection;
+    selectedCollections.value = parseCollections(e.collection);
   }
 
   if (props.mode === "transfer" && props.sourceEntry) {
     quantity.value = props.sourceEntry.quantity;
-    collectionQuery.value = props.sourceEntry.collection;
+    selectedCollections.value = parseCollections(props.sourceEntry.collection);
   }
 
   // Load initial locations
@@ -325,6 +344,17 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     e.stopPropagation();
     emit("close");
+  } else if (e.key === "Enter" && canSubmit.value) {
+    // Don't submit when the new-collection input is focused
+    if ((e.target as HTMLElement)?.id === "inv-new-collection-input") return;
+    // Only submit when no dropdown item is highlighted — those take priority
+    const dropdownItemActive =
+      (entityDropdownOpen.value && entityHighlight.value >= 0) ||
+      (locationDropdownOpen.value && locationHighlight.value >= 0);
+    if (!dropdownItemActive) {
+      e.preventDefault();
+      handleSubmit();
+    }
   }
 }
 
@@ -340,25 +370,59 @@ function onBackdropClick(e: MouseEvent) {
   }
 }
 
-// Close entity/location dropdowns when clicking anywhere inside the modal but outside the dropdown
 watch(entityDropdownOpen, (open) => {
-  if (open) {
-    locationDropdownOpen.value = false;
-    collectionDropdownOpen.value = false;
-  }
+  if (open) locationDropdownOpen.value = false;
 });
 watch(locationDropdownOpen, (open) => {
-  if (open) {
-    entityDropdownOpen.value = false;
-    collectionDropdownOpen.value = false;
-  }
+  if (open) entityDropdownOpen.value = false;
 });
-watch(collectionDropdownOpen, (open) => {
-  if (open) {
-    entityDropdownOpen.value = false;
-    locationDropdownOpen.value = false;
+
+// ── Dropdown keyboard navigation ──────────────────────────────────────────
+
+const entityHighlight = ref(-1);
+const locationHighlight = ref(-1);
+
+watch(entityDropdownOpen, (open) => { if (!open) entityHighlight.value = -1; });
+watch(locationDropdownOpen, (open) => { if (!open) locationHighlight.value = -1; });
+
+function scrollHighlighted(dropdownId: string, index: number) {
+  nextTick(() => {
+    document.querySelector(`#${dropdownId} [data-idx="${index}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  });
+}
+
+function onEntityKeyDown(e: KeyboardEvent) {
+  if (!entityDropdownOpen.value) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    entityHighlight.value = Math.min(entityHighlight.value + 1, entityResults.value.length - 1);
+    scrollHighlighted("inv-entity-dropdown", entityHighlight.value);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    entityHighlight.value = Math.max(entityHighlight.value - 1, 0);
+    scrollHighlighted("inv-entity-dropdown", entityHighlight.value);
+  } else if (e.key === "Enter" && entityHighlight.value >= 0) {
+    e.preventDefault();
+    selectEntity(entityResults.value[entityHighlight.value]);
   }
-});
+}
+
+function onLocationKeyDown(e: KeyboardEvent) {
+  if (!locationDropdownOpen.value) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    locationHighlight.value = Math.min(locationHighlight.value + 1, locationResults.value.length - 1);
+    scrollHighlighted("inv-location-dropdown", locationHighlight.value);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    locationHighlight.value = Math.max(locationHighlight.value - 1, 0);
+    scrollHighlighted("inv-location-dropdown", locationHighlight.value);
+  } else if (e.key === "Enter" && locationHighlight.value >= 0) {
+    e.preventDefault();
+    selectLocation(locationResults.value[locationHighlight.value]);
+  }
+}
 
 function locationSlugLabel(slug: string): string {
   switch (slug) {
@@ -379,165 +443,191 @@ function locationSlugLabel(slug: string): string {
       @mousedown="onBackdropClick"
     >
       <div
-        class="bg-[#1a1d24] border border-white/10 rounded-xl shadow-2xl w-[420px] max-h-[80vh] flex flex-col overflow-hidden"
+        class="bg-[#1a1d24] border border-white/10 rounded-xl shadow-2xl max-h-[80vh] flex flex-col overflow-hidden"
+        :class="mode === 'remove' ? 'w-[420px]' : 'w-[580px]'"
         @mousedown.stop
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-5 py-3.5 border-b border-white/10">
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
           <h2 class="text-white text-sm font-semibold">{{ title }}</h2>
-          <button
-            @click="emit('close')"
-            class="text-white/30 hover:text-white transition-colors"
-          >
+          <button @click="emit('close')" class="text-white/30 hover:text-white transition-colors">
             <IconClose class="w-4 h-4" />
           </button>
         </div>
 
-        <!-- Body -->
-        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <!-- Error banner -->
-          <div
-            v-if="errorMsg"
-            class="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg px-3 py-2"
-          >
-            {{ errorMsg }}
-          </div>
-
-          <!-- Source info (remove/transfer) -->
-          <div
-            v-if="(mode === 'remove' || mode === 'transfer') && sourceEntry"
-            class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 space-y-1"
-          >
-            <div class="text-white text-sm font-medium">{{ sourceEntry.entity_name }}</div>
-            <div class="text-white/40 text-xs flex items-center gap-2">
-              <span>{{ sourceEntry.location_name }}</span>
-              <span v-if="sourceEntry.collection" class="text-blue-400/60">• {{ sourceEntry.collection }}</span>
-            </div>
-            <div class="text-white/30 text-xs">Current: {{ sourceEntry.quantity }}×</div>
-          </div>
-
-          <!-- Entity search (add + edit modes) -->
-          <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5 relative">
-            <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Item / Commodity</label>
-            <input
-              id="inv-entity-input"
-              type="text"
-              :value="entityQuery"
-              @input="searchEntity(($event.target as HTMLInputElement).value)"
-              @focus="entityDropdownOpen = entityResults.length > 0 && !selectedEntity"
-              autocomplete="off"
-              placeholder="Search commodities or items..."
-              class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-              :class="selectedEntity ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
-            />
-            <div v-if="selectedEntity" class="text-green-400/60 text-xs">
-              ✓ {{ selectedEntity.kind }}
-            </div>
-            <!-- Dropdown -->
+        <!-- Body: two-column for add/edit/transfer, single-column for remove -->
+        <div class="flex flex-1 min-h-0">
+          <!-- Left: main form fields -->
+          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            <!-- Error banner -->
             <div
-              v-if="entityDropdownOpen && entityResults.length > 0"
-              class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
+              v-if="errorMsg"
+              class="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg px-3 py-2"
             >
-              <button
-                v-for="r in entityResults"
-                :key="r.id + r.kind"
-                @mousedown.prevent="selectEntity(r)"
-                class="w-full text-left px-3 py-2 text-sm hover:bg-white/8 transition-colors flex items-center gap-2"
+              {{ errorMsg }}
+            </div>
+
+            <!-- Source info (remove/transfer) -->
+            <div
+              v-if="(mode === 'remove' || mode === 'transfer') && sourceEntry"
+              class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 space-y-1"
+            >
+              <div class="text-white text-sm font-medium">{{ sourceEntry.entity_name }}</div>
+              <div class="text-white/40 text-xs flex items-center gap-2">
+                <span>{{ sourceEntry.location_name }}</span>
+                <span v-if="sourceEntry.collection" class="text-blue-400/60">• {{ sourceEntry.collection }}</span>
+              </div>
+              <div class="text-white/30 text-xs">Current: {{ sourceEntry.quantity }}×</div>
+            </div>
+
+            <!-- Entity search (add + edit) -->
+            <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5 relative">
+              <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Item / Commodity</label>
+              <input
+                id="inv-entity-input"
+                type="text"
+                :value="entityQuery"
+                @input="searchEntity(($event.target as HTMLInputElement).value)"
+                @focus="entityDropdownOpen = entityResults.length > 0 && !selectedEntity"
+                @keydown="onEntityKeyDown"
+                autocomplete="off"
+                placeholder="Search commodities or items..."
+                class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
+                :class="selectedEntity ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+              />
+              <div v-if="selectedEntity" class="text-green-400/60 text-xs">✓ {{ selectedEntity.kind }}</div>
+              <div
+                v-if="entityDropdownOpen && entityResults.length > 0"
+                id="inv-entity-dropdown"
+                class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
               >
-                <span class="text-white">{{ r.name }}</span>
-                <span class="text-white/30 text-xs ml-auto uppercase">{{ r.kind }}</span>
-              </button>
+                <button
+                  v-for="(r, i) in entityResults"
+                  :key="r.id + r.kind"
+                  :data-idx="i"
+                  @mousedown.prevent="selectEntity(r)"
+                  class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
+                  :class="i === entityHighlight ? 'bg-white/10 text-white' : 'hover:bg-white/8 text-white'"
+                >
+                  <span>{{ r.name }}</span>
+                  <span class="text-white/30 text-xs ml-auto uppercase">{{ r.kind }}</span>
+                </button>
+              </div>
+              <div v-if="entitySearching" class="text-white/20 text-xs mt-1">Searching...</div>
             </div>
-            <div v-if="entitySearching" class="text-white/20 text-xs mt-1">Searching...</div>
-          </div>
 
-          <!-- Location search (add + edit + transfer) -->
-          <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
-            <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
-              {{ mode === 'transfer' ? 'Transfer To' : 'Location' }}
-            </label>
-            <input
-              id="inv-location-input"
-              type="text"
-              :value="locationQuery"
-              @input="searchLocation(($event.target as HTMLInputElement).value)"
-              @focus="locationDropdownOpen = locationResults.length > 0 && !selectedLocation"
-              autocomplete="off"
-              placeholder="Search stations, cities, ships..."
-              class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-              :class="selectedLocation ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
-            />
-            <div v-if="selectedLocation" class="text-green-400/60 text-xs">
-              ✓ {{ locationSlugLabel(selectedLocation.slug) }}
-            </div>
-            <!-- Dropdown -->
-            <div
-              v-if="locationDropdownOpen && locationResults.length > 0"
-              class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-            >
-              <button
-                v-for="r in locationResults"
-                :key="r.id"
-                @mousedown.prevent="selectLocation(r)"
-                class="w-full text-left px-3 py-2 text-sm hover:bg-white/8 transition-colors flex items-center gap-2"
+            <!-- Location search (add + edit + transfer) -->
+            <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
+              <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
+                {{ mode === 'transfer' ? 'Transfer To' : 'Location' }}
+              </label>
+              <input
+                id="inv-location-input"
+                type="text"
+                :value="locationQuery"
+                @input="searchLocation(($event.target as HTMLInputElement).value)"
+                @focus="locationDropdownOpen = locationResults.length > 0 && !selectedLocation"
+                @keydown="onLocationKeyDown"
+                autocomplete="off"
+                placeholder="Search stations, cities, ships..."
+                class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
+                :class="selectedLocation ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+              />
+              <div v-if="selectedLocation" class="text-green-400/60 text-xs">
+                ✓ {{ locationSlugLabel(selectedLocation.slug) }}
+              </div>
+              <div
+                v-if="locationDropdownOpen && locationResults.length > 0"
+                id="inv-location-dropdown"
+                class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
               >
-                <span class="text-white">{{ r.name }}</span>
-                <span class="text-white/30 text-xs ml-auto">{{ locationSlugLabel(r.slug) }}</span>
-              </button>
+                <button
+                  v-for="(r, i) in locationResults"
+                  :key="r.id"
+                  :data-idx="i"
+                  @mousedown.prevent="selectLocation(r)"
+                  class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
+                  :class="i === locationHighlight ? 'bg-white/10 text-white' : 'hover:bg-white/8 text-white'"
+                >
+                  <span>{{ r.name }}</span>
+                  <span class="text-white/30 text-xs ml-auto">{{ locationSlugLabel(r.slug) }}</span>
+                </button>
+              </div>
+              <div v-if="locationSearching" class="text-white/20 text-xs mt-1">Searching...</div>
             </div>
-            <div v-if="locationSearching" class="text-white/20 text-xs mt-1">Searching...</div>
+
+            <!-- Quantity -->
+            <div class="space-y-1.5">
+              <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Quantity</label>
+              <input
+                id="inv-quantity-input"
+                type="number"
+                v-model.number="quantity"
+                :min="1"
+                :max="mode === 'remove' || mode === 'transfer' ? maxQuantity : undefined"
+                :placeholder="mode === 'remove' ? `Max: ${maxQuantity}` : '1'"
+                class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
+              />
+              <div v-if="mode === 'remove'" class="text-white/20 text-xs">
+                Leave empty or enter {{ maxQuantity }} to remove all
+              </div>
+            </div>
           </div>
 
-          <!-- Quantity -->
-          <div class="space-y-1.5">
-            <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Quantity</label>
-            <input
-              id="inv-quantity-input"
-              type="number"
-              v-model.number="quantity"
-              :min="1"
-              :max="mode === 'remove' || mode === 'transfer' ? maxQuantity : undefined"
-              :placeholder="mode === 'remove' ? `Max: ${maxQuantity}` : '1'"
-              class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
-            />
-            <div v-if="mode === 'remove'" class="text-white/20 text-xs">
-              Leave empty or enter {{ maxQuantity }} to remove all
+          <!-- Right: collections panel (add/edit/transfer only) -->
+          <div
+            v-if="mode !== 'remove'"
+            class="w-[168px] flex-shrink-0 border-l border-white/10 flex flex-col"
+          >
+            <div class="px-3 py-2.5 text-white/40 text-xs font-semibold uppercase tracking-wider border-b border-white/10 shrink-0">
+              Collections
             </div>
-          </div>
-
-          <!-- Collection (add + edit + transfer) -->
-          <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
-            <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
-              Collection
-              <span class="text-white/20 font-normal normal-case tracking-normal">(optional)</span>
-            </label>
-            <input
-              type="text"
-              v-model="collectionQuery"
-              @focus="onCollectionFocus"
-              autocomplete="off"
-              placeholder="e.g. Trading, Refining..."
-              class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
-            />
-            <!-- Dropdown -->
-            <div
-              v-if="collectionDropdownOpen && filteredCollections.length > 0"
-              class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[150px] overflow-y-auto"
-            >
+            <!-- List -->
+            <div class="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-0.5">
+              <div v-if="allCollections.length === 0" class="text-white/20 text-xs px-2 py-1.5">
+                No collections yet
+              </div>
               <button
-                v-for="c in filteredCollections"
+                v-for="c in allCollections"
                 :key="c"
-                @mousedown.prevent="selectCollection(c)"
-                class="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/8 transition-colors"
+                @click="toggleCollection(c)"
+                class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left"
+                :class="selectedCollections.includes(c)
+                  ? 'bg-blue-500/20 text-blue-300'
+                  : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
               >
-                {{ c }}
+                <span
+                  class="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors"
+                  :class="selectedCollections.includes(c) ? 'border-blue-400 bg-blue-400/20' : 'border-white/20'"
+                >
+                  <span v-if="selectedCollections.includes(c)" class="text-blue-400 text-[9px] leading-none font-bold">✓</span>
+                </span>
+                <span class="truncate">{{ c }}</span>
               </button>
+            </div>
+            <!-- Add new collection -->
+            <div class="px-1.5 pb-2 pt-1.5 border-t border-white/10 shrink-0">
+              <div class="flex items-center gap-1">
+                <input
+                  id="inv-new-collection-input"
+                  type="text"
+                  v-model="newCollectionInput"
+                  @keydown.enter.stop.prevent="addNewCollection"
+                  placeholder="New..."
+                  class="flex-1 min-w-0 bg-[#111318] border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors"
+                />
+                <button
+                  @click="addNewCollection"
+                  :disabled="!newCollectionInput.trim()"
+                  class="px-2 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/20 disabled:cursor-not-allowed text-white text-xs transition-colors shrink-0"
+                >+</button>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Footer -->
-        <div class="px-5 py-3.5 border-t border-white/10 flex items-center gap-3">
+        <div class="px-5 py-3.5 border-t border-white/10 flex items-center gap-3 shrink-0">
           <button
             @click="handleSubmit"
             :disabled="!canSubmit"
