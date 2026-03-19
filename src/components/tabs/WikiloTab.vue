@@ -6,6 +6,8 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
 import IconClose from "@/components/icons/IconClose.vue";
+import SearchableDropdown from "@/components/ui/SearchableDropdown.vue";
+import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
 
 const wikeloStore = useWikeloStore();
 const inventoryStore = useInventoryStore();
@@ -26,16 +28,18 @@ onMounted(async () => {
 
 const searchQuery = ref("");
 const showActiveOnly = ref(false);
-const filterCategory = ref("all");
-const filterReputation = ref("all");
-const categoryDropdownOpen = ref(false);
-const reputationDropdownOpen = ref(false);
+const selectedCategory = ref<DropdownOption | null>(null);
+const selectedReputation = ref<DropdownOption | null>(null);
 
 const categories = computed(() => {
   const set = new Set<string>();
   for (const t of wikeloStore.trades) set.add(t.category);
   return Array.from(set).sort();
 });
+
+const categoryOptions = computed<DropdownOption[]>(() =>
+  categories.value.map((c) => ({ id: c, label: c })),
+);
 
 const reputationRanks = computed(() => {
   const order = ["New Customer", "Very Good Customer", "Very Best Customer"];
@@ -44,12 +48,16 @@ const reputationRanks = computed(() => {
   return order.filter((r) => set.has(r));
 });
 
+const reputationOptions = computed<DropdownOption[]>(() =>
+  reputationRanks.value.map((r) => ({ id: r, label: r })),
+);
+
 const filteredTrades = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   return wikeloStore.trades.filter((t) => {
     if (showActiveOnly.value && !t.active) return false;
-    if (filterCategory.value !== "all" && t.category !== filterCategory.value) return false;
-    if (filterReputation.value !== "all" && t.reputation !== filterReputation.value) return false;
+    if (selectedCategory.value && t.category !== selectedCategory.value.id) return false;
+    if (selectedReputation.value && t.reputation !== selectedReputation.value.id) return false;
     if (q) {
       const haystack =
         t.mission_name.toLowerCase() +
@@ -65,24 +73,6 @@ const filteredTrades = computed(() => {
 
 const completedInView = computed(
   () => filteredTrades.value.filter((t) => wikeloStore.isCompleted(t.id)).length,
-);
-
-function pickCategory(cat: string) {
-  filterCategory.value = cat;
-  categoryDropdownOpen.value = false;
-}
-
-function pickReputation(rep: string) {
-  filterReputation.value = rep;
-  reputationDropdownOpen.value = false;
-}
-
-const categoryLabel = computed(() =>
-  filterCategory.value === "all" ? "All categories" : filterCategory.value,
-);
-
-const reputationLabel = computed(() =>
-  filterReputation.value === "all" ? "All reputation" : filterReputation.value,
 );
 
 // -- Inventory cross-reference ---------------------------------------------
@@ -112,7 +102,7 @@ function reputationColor(rep: string): string {
 </script>
 
 <template>
-  <div class="p-4 max-w-5xl mx-auto w-full space-y-4" @click="categoryDropdownOpen = false; reputationDropdownOpen = false">
+  <div class="p-4 max-w-5xl mx-auto w-full space-y-4">
 
     <!-- Loading -->
     <div v-if="wikeloStore.loading" class="flex justify-center py-16">
@@ -151,7 +141,7 @@ function reputationColor(rep: string): string {
             v-model="searchQuery"
             type="text"
             placeholder="Search contracts..."
-            class="w-full bg-[#0d0f14] border border-white/10 rounded pl-8 pr-8 py-1.5 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-white/25"
+            class="w-full bg-[#111318] border border-white/10 rounded-lg pl-8 pr-8 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/30 transition-colors"
           />
           <button
             v-if="searchQuery"
@@ -164,11 +154,11 @@ function reputationColor(rep: string): string {
 
         <!-- Active toggle -->
         <button
-          class="px-3 py-1.5 rounded text-xs font-medium transition-colors border"
+          class="px-3 py-2 rounded-lg text-sm font-medium transition-colors border"
           :class="
             showActiveOnly
               ? 'bg-teal-500/20 border-teal-500/50 text-teal-300'
-              : 'bg-[#0d0f14] border-white/10 text-white/50 hover:text-white/70'
+              : 'bg-[#111318] border-white/10 text-white/50 hover:text-white/70'
           "
           @click.stop="showActiveOnly = !showActiveOnly"
         >
@@ -176,59 +166,21 @@ function reputationColor(rep: string): string {
         </button>
 
         <!-- Category filter -->
-        <div class="relative">
-          <button
-            class="px-3 py-1.5 rounded text-xs font-medium bg-[#0d0f14] border border-white/10 text-white/50 hover:text-white/70 transition-colors"
-            @click.stop="categoryDropdownOpen = !categoryDropdownOpen; reputationDropdownOpen = false"
-          >
-            {{ categoryLabel }}
-          </button>
-          <div
-            v-if="categoryDropdownOpen"
-            class="absolute top-full left-0 mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[9rem] py-1"
-            @click.stop
-          >
-            <button
-              class="w-full text-left px-3 py-1.5 text-xs transition-colors"
-              :class="filterCategory === 'all' ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'"
-              @click="pickCategory('all')"
-            >All categories</button>
-            <button
-              v-for="cat in categories"
-              :key="cat"
-              class="w-full text-left px-3 py-1.5 text-xs transition-colors"
-              :class="filterCategory === cat ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'"
-              @click="pickCategory(cat)"
-            >{{ cat }}</button>
-          </div>
+        <div class="w-40 flex-shrink-0">
+          <SearchableDropdown
+            v-model="selectedCategory"
+            :options="categoryOptions"
+            placeholder="All categories"
+          />
         </div>
 
         <!-- Reputation filter -->
-        <div class="relative">
-          <button
-            class="px-3 py-1.5 rounded text-xs font-medium bg-[#0d0f14] border border-white/10 text-white/50 hover:text-white/70 transition-colors"
-            @click.stop="reputationDropdownOpen = !reputationDropdownOpen; categoryDropdownOpen = false"
-          >
-            {{ reputationLabel }}
-          </button>
-          <div
-            v-if="reputationDropdownOpen"
-            class="absolute top-full left-0 mt-1 bg-gray-900 border border-white/10 rounded-lg shadow-lg z-20 min-w-[12rem] py-1"
-            @click.stop
-          >
-            <button
-              class="w-full text-left px-3 py-1.5 text-xs transition-colors"
-              :class="filterReputation === 'all' ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'"
-              @click="pickReputation('all')"
-            >All reputation</button>
-            <button
-              v-for="rep in reputationRanks"
-              :key="rep"
-              class="w-full text-left px-3 py-1.5 text-xs transition-colors"
-              :class="filterReputation === rep ? 'text-white bg-white/10' : 'text-white/50 hover:text-white/80 hover:bg-white/5'"
-              @click="pickReputation(rep)"
-            >{{ rep }}</button>
-          </div>
+        <div class="w-48 flex-shrink-0">
+          <SearchableDropdown
+            v-model="selectedReputation"
+            :options="reputationOptions"
+            placeholder="All reputation"
+          />
         </div>
       </div>
 

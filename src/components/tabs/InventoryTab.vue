@@ -8,6 +8,8 @@ import IconSearch from "@/components/icons/IconSearch.vue";
 import IconClose from "@/components/icons/IconClose.vue";
 import IconCommodity from "@/components/icons/IconCommodity.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
+import SearchableDropdown from "@/components/ui/SearchableDropdown.vue";
+import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 
@@ -49,9 +51,7 @@ function toggleGroup(key: string) {
 
 // ── Dropdown filter (location in location mode, collection in collection mode) ──
 
-const filterQuery = ref("");
-const filterDropdownOpen = ref(false);
-const selectedFilter = ref<{ id: string; label: string } | null>(null);
+const selectedFilter = ref<DropdownOption | null>(null);
 
 /** Unique locations from current inventory entries */
 const uniqueLocations = computed(() => {
@@ -81,40 +81,8 @@ const filterOptions = computed(() =>
   groupMode.value === "location" ? uniqueLocations.value : uniqueCollections.value,
 );
 
-const filteredFilterOptions = computed(() => {
-  const q = filterQuery.value.toLowerCase();
-  if (!q) return filterOptions.value;
-  return filterOptions.value.filter((o) => o.label.toLowerCase().includes(q));
-});
-
-function selectFilter(option: { id: string; label: string }) {
-  selectedFilter.value = option;
-  filterQuery.value = option.label;
-  filterDropdownOpen.value = false;
-}
-
 function clearFilter() {
   selectedFilter.value = null;
-  filterQuery.value = "";
-  filterDropdownOpen.value = false;
-}
-
-function onFilterInput(value: string) {
-  filterQuery.value = value;
-  selectedFilter.value = null;
-  filterDropdownOpen.value = value.length === 0
-    ? filterOptions.value.length > 0
-    : filteredFilterOptions.value.length > 0;
-}
-
-function onFilterFocus() {
-  if (!selectedFilter.value) {
-    filterDropdownOpen.value = filterOptions.value.length > 0;
-  }
-}
-
-function closeFilterDropdownDelayed() {
-  globalThis.setTimeout(() => { filterDropdownOpen.value = false; }, 150);
 }
 
 // Reset filter when grouping changes
@@ -129,7 +97,6 @@ watch(() => inventoryStore.pendingLocationFilter, (pending) => {
   if (pending) {
     groupMode.value = "location";
     selectedFilter.value = { id: pending.id, label: pending.name };
-    filterQuery.value = pending.name;
     inventoryStore.pendingLocationFilter = null;
   }
 }, { immediate: true });
@@ -411,40 +378,12 @@ function slugIcon(slug: string): string {
           </div>
 
           <!-- Dropdown filter (location or collection depending on mode) -->
-          <div class="relative w-48 flex-shrink-0">
-            <input
-              type="text"
-              :value="filterQuery"
-              @input="onFilterInput(($event.target as HTMLInputElement).value)"
-              @focus="onFilterFocus"
-              @blur="closeFilterDropdownDelayed"
-              autocomplete="off"
+          <div class="w-48 flex-shrink-0">
+            <SearchableDropdown
+              v-model="selectedFilter"
+              :options="filterOptions"
               :placeholder="groupMode === 'location' ? 'Filter by location...' : 'Filter by collection...'"
-              class="w-full bg-[#111318] border rounded-lg pl-3 pr-8 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-              :class="selectedFilter ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
             />
-            <!-- Clear button -->
-            <button
-              v-if="selectedFilter"
-              @mousedown.prevent="clearFilter"
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
-            >
-              <IconClose class="w-3.5 h-3.5" />
-            </button>
-            <!-- Dropdown -->
-            <div
-              v-if="filterDropdownOpen && filteredFilterOptions.length > 0"
-              class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-            >
-              <button
-                v-for="opt in filteredFilterOptions"
-                :key="opt.id"
-                @mousedown.prevent="selectFilter(opt)"
-                class="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/8 transition-colors truncate"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
           </div>
         </div>
 

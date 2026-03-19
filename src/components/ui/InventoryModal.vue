@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { commands } from "@/bindings";
 import type { UexResult, InventoryEntry } from "@/bindings";
 import { useInventoryStore } from "@/stores/inventory";
 import IconClose from "@/components/icons/IconClose.vue";
+import SearchableDropdown from "@/components/ui/SearchableDropdown.vue";
+import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
 
 // ── Props & Emits ──────────────────────────────────────────────────────────
 
@@ -36,39 +38,46 @@ const quantity = ref(1);
 
 // ── Entity search (add mode) ──────────────────────────────────────────────
 
-const entityQuery = ref("");
 const entityResults = ref<UexResult[]>([]);
 const selectedEntity = ref<UexResult | null>(null);
-const entityDropdownOpen = ref(false);
 const entitySearching = ref(false);
 let entityDebounce: ReturnType<typeof setTimeout> | null = null;
+const entityDropdownRef = ref<InstanceType<typeof SearchableDropdown> | null>(null);
 
-function searchEntity(q: string) {
-  entityQuery.value = q;
-  selectedEntity.value = null;
+const entityDropdownValue = computed<DropdownOption | null>(() =>
+  selectedEntity.value
+    ? { id: `${selectedEntity.value.id}:${selectedEntity.value.kind}`, label: selectedEntity.value.name, meta: selectedEntity.value.kind }
+    : null,
+);
+
+const entityDropdownOptions = computed<DropdownOption[]>(() =>
+  entityResults.value.map((r) => ({
+    id: `${r.id}:${r.kind}`,
+    label: r.name,
+    meta: r.kind,
+  })),
+);
+
+function onEntitySelect(opt: DropdownOption | null) {
+  if (!opt) { selectedEntity.value = null; return; }
+  const [id, kind] = opt.id.split(":");
+  selectedEntity.value = entityResults.value.find((r) => r.id === id && r.kind === kind) ?? null;
+}
+
+async function searchEntity(q: string) {
   if (entityDebounce) clearTimeout(entityDebounce);
-  if (q.trim().length < 2) {
-    entityResults.value = [];
-    entityDropdownOpen.value = false;
-    return;
-  }
+  if (q.trim().length < 2) { entityResults.value = []; return; }
   entityDebounce = setTimeout(async () => {
     entitySearching.value = true;
     try {
-      // Search commodities and items only
       const [commodities, items] = await Promise.all([
         commands.apiSearchCommodities(q),
         commands.apiSearchItems(q),
       ]);
       const results: UexResult[] = [];
-      if (commodities.status === "ok" && commodities.data.data) {
-        results.push(...commodities.data.data);
-      }
-      if (items.status === "ok" && items.data.data) {
-        results.push(...items.data.data);
-      }
+      if (commodities.status === "ok" && commodities.data.data) results.push(...commodities.data.data);
+      if (items.status === "ok" && items.data.data) results.push(...items.data.data);
       entityResults.value = results.slice(0, 20);
-      entityDropdownOpen.value = results.length > 0;
     } catch {
       entityResults.value = [];
     } finally {
@@ -77,45 +86,46 @@ function searchEntity(q: string) {
   }, 250);
 }
 
-function selectEntity(r: UexResult) {
-  selectedEntity.value = r;
-  entityQuery.value = r.name;
-  entityDropdownOpen.value = false;
-}
-
 // ── Location search ───────────────────────────────────────────────────────
 
-const locationQuery = ref("");
 const locationResults = ref<UexResult[]>([]);
 const selectedLocation = ref<UexResult | null>(null);
-const locationDropdownOpen = ref(false);
 const locationSearching = ref(false);
 let locationDebounce: ReturnType<typeof setTimeout> | null = null;
+const locationDropdownRef = ref<InstanceType<typeof SearchableDropdown> | null>(null);
 
-function searchLocation(q: string) {
-  locationQuery.value = q;
-  selectedLocation.value = null;
+const locationDropdownValue = computed<DropdownOption | null>(() =>
+  selectedLocation.value
+    ? { id: selectedLocation.value.id, label: selectedLocation.value.name, meta: locationSlugLabel(selectedLocation.value.slug) }
+    : null,
+);
+
+const locationDropdownOptions = computed<DropdownOption[]>(() =>
+  locationResults.value.map((r) => ({
+    id: r.id,
+    label: r.name,
+    meta: locationSlugLabel(r.slug),
+  })),
+);
+
+function onLocationSelect(opt: DropdownOption | null) {
+  if (!opt) { selectedLocation.value = null; return; }
+  selectedLocation.value = locationResults.value.find((r) => r.id === opt.id) ?? null;
+}
+
+async function searchLocation(q: string) {
   if (locationDebounce) clearTimeout(locationDebounce);
   locationDebounce = setTimeout(async () => {
     locationSearching.value = true;
     try {
       const result = await commands.getStorageLocations(q);
-      if (result.status === "ok") {
-        locationResults.value = result.data;
-        locationDropdownOpen.value = result.data.length > 0;
-      }
+      if (result.status === "ok") locationResults.value = result.data;
     } catch {
       locationResults.value = [];
     } finally {
       locationSearching.value = false;
     }
   }, 200);
-}
-
-function selectLocation(r: UexResult) {
-  selectedLocation.value = r;
-  locationQuery.value = r.name;
-  locationDropdownOpen.value = false;
 }
 
 // ── Collections multi-select ──────────────────────────────────────────────
@@ -279,7 +289,6 @@ onMounted(async () => {
       uuid: "",
       source: "uex",
     };
-    entityQuery.value = props.prefillEntity.name;
   }
 
   if (props.mode === "add" && props.prefillLocation) {
@@ -291,7 +300,6 @@ onMounted(async () => {
       uuid: "",
       source: "uex",
     };
-    locationQuery.value = props.prefillLocation.name;
   }
 
   if (props.mode === "add" && props.prefillCollection) {
@@ -305,9 +313,7 @@ onMounted(async () => {
   if (props.mode === "edit" && props.sourceEntry) {
     const e = props.sourceEntry;
     selectedEntity.value = { id: e.entity_id, name: e.entity_name, kind: e.entity_kind, slug: "", uuid: "", source: "uex" };
-    entityQuery.value = e.entity_name;
     selectedLocation.value = { id: e.location_id, name: e.location_name, slug: e.location_slug, kind: "", uuid: "", source: "uex" };
-    locationQuery.value = e.location_name;
     quantity.value = e.quantity;
     selectedCollections.value = parseCollections(e.collection);
   }
@@ -317,28 +323,25 @@ onMounted(async () => {
     selectedCollections.value = parseCollections(props.sourceEntry.collection);
   }
 
-  // Load initial locations
+  // Load initial locations list for the location dropdown.
   const locResult = await commands.getStorageLocations("");
   if (locResult.status === "ok") {
     locationResults.value = locResult.data;
   }
 
   await nextTick();
-  // Focus the first relevant input
   if (props.mode === "add" && !props.prefillEntity) {
-    document.getElementById("inv-entity-input")?.focus();
+    entityDropdownRef.value?.focus();
   } else if (props.mode === "add") {
-    document.getElementById("inv-location-input")?.focus();
+    locationDropdownRef.value?.focus();
   } else if (props.mode === "remove") {
     document.getElementById("inv-quantity-input")?.focus();
   } else if (props.mode === "transfer") {
-    document.getElementById("inv-location-input")?.focus();
+    locationDropdownRef.value?.focus();
   } else if (props.mode === "edit") {
-    document.getElementById("inv-entity-input")?.focus();
+    entityDropdownRef.value?.focus();
   }
 });
-
-// ── Keyboard: Escape to close ──────────────────────────────────────────────
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape") {
@@ -347,10 +350,10 @@ function onKeyDown(e: KeyboardEvent) {
   } else if (e.key === "Enter" && canSubmit.value) {
     // Don't submit when the new-collection input is focused
     if ((e.target as HTMLElement)?.id === "inv-new-collection-input") return;
-    // Only submit when no dropdown item is highlighted — those take priority
+    // Don't submit when a dropdown item is highlighted — those take priority
     const dropdownItemActive =
-      (entityDropdownOpen.value && entityHighlight.value >= 0) ||
-      (locationDropdownOpen.value && locationHighlight.value >= 0);
+      entityDropdownRef.value?.isDropdownActive() ||
+      locationDropdownRef.value?.isDropdownActive();
     if (!dropdownItemActive) {
       e.preventDefault();
       handleSubmit();
@@ -361,66 +364,10 @@ function onKeyDown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeyDown, true));
 onUnmounted(() => window.removeEventListener("keydown", onKeyDown, true));
 
-// ── Close dropdowns on outside click ───────────────────────────────────────
-
 function onBackdropClick(e: MouseEvent) {
   const target = e.target as HTMLElement;
   if (target.classList.contains("modal-backdrop")) {
     emit("close");
-  }
-}
-
-watch(entityDropdownOpen, (open) => {
-  if (open) locationDropdownOpen.value = false;
-});
-watch(locationDropdownOpen, (open) => {
-  if (open) entityDropdownOpen.value = false;
-});
-
-// ── Dropdown keyboard navigation ──────────────────────────────────────────
-
-const entityHighlight = ref(-1);
-const locationHighlight = ref(-1);
-
-watch(entityDropdownOpen, (open) => { if (!open) entityHighlight.value = -1; });
-watch(locationDropdownOpen, (open) => { if (!open) locationHighlight.value = -1; });
-
-function scrollHighlighted(dropdownId: string, index: number) {
-  nextTick(() => {
-    document.querySelector(`#${dropdownId} [data-idx="${index}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  });
-}
-
-function onEntityKeyDown(e: KeyboardEvent) {
-  if (!entityDropdownOpen.value) return;
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    entityHighlight.value = Math.min(entityHighlight.value + 1, entityResults.value.length - 1);
-    scrollHighlighted("inv-entity-dropdown", entityHighlight.value);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    entityHighlight.value = Math.max(entityHighlight.value - 1, 0);
-    scrollHighlighted("inv-entity-dropdown", entityHighlight.value);
-  } else if (e.key === "Enter" && entityHighlight.value >= 0) {
-    e.preventDefault();
-    selectEntity(entityResults.value[entityHighlight.value]);
-  }
-}
-
-function onLocationKeyDown(e: KeyboardEvent) {
-  if (!locationDropdownOpen.value) return;
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    locationHighlight.value = Math.min(locationHighlight.value + 1, locationResults.value.length - 1);
-    scrollHighlighted("inv-location-dropdown", locationHighlight.value);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    locationHighlight.value = Math.max(locationHighlight.value - 1, 0);
-    scrollHighlighted("inv-location-dropdown", locationHighlight.value);
-  } else if (e.key === "Enter" && locationHighlight.value >= 0) {
-    e.preventDefault();
-    selectLocation(locationResults.value[locationHighlight.value]);
   }
 }
 
@@ -481,79 +428,35 @@ function locationSlugLabel(slug: string): string {
             </div>
 
             <!-- Entity search (add + edit) -->
-            <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5 relative">
+            <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5">
               <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Item / Commodity</label>
-              <input
-                id="inv-entity-input"
-                type="text"
-                :value="entityQuery"
-                @input="searchEntity(($event.target as HTMLInputElement).value)"
-                @focus="entityDropdownOpen = entityResults.length > 0 && !selectedEntity"
-                @keydown="onEntityKeyDown"
-                autocomplete="off"
+              <SearchableDropdown
+                ref="entityDropdownRef"
+                :model-value="entityDropdownValue"
+                :options="entityDropdownOptions"
+                :loading="entitySearching"
+                :clearable="false"
                 placeholder="Search commodities or items..."
-                class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-                :class="selectedEntity ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+                @update:model-value="onEntitySelect"
+                @search="searchEntity"
               />
-              <div v-if="selectedEntity" class="text-green-400/60 text-xs">✓ {{ selectedEntity.kind }}</div>
-              <div
-                v-if="entityDropdownOpen && entityResults.length > 0"
-                id="inv-entity-dropdown"
-                class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-              >
-                <button
-                  v-for="(r, i) in entityResults"
-                  :key="r.id + r.kind"
-                  :data-idx="i"
-                  @mousedown.prevent="selectEntity(r)"
-                  class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
-                  :class="i === entityHighlight ? 'bg-white/10 text-white' : 'hover:bg-white/8 text-white'"
-                >
-                  <span>{{ r.name }}</span>
-                  <span class="text-white/30 text-xs ml-auto uppercase">{{ r.kind }}</span>
-                </button>
-              </div>
-              <div v-if="entitySearching" class="text-white/20 text-xs mt-1">Searching...</div>
             </div>
 
             <!-- Location search (add + edit + transfer) -->
-            <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5 relative">
+            <div v-if="mode === 'add' || mode === 'edit' || mode === 'transfer'" class="space-y-1.5">
               <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">
                 {{ mode === 'transfer' ? 'Transfer To' : 'Location' }}
               </label>
-              <input
-                id="inv-location-input"
-                type="text"
-                :value="locationQuery"
-                @input="searchLocation(($event.target as HTMLInputElement).value)"
-                @focus="locationDropdownOpen = locationResults.length > 0 && !selectedLocation"
-                @keydown="onLocationKeyDown"
-                autocomplete="off"
+              <SearchableDropdown
+                ref="locationDropdownRef"
+                :model-value="locationDropdownValue"
+                :options="locationDropdownOptions"
+                :loading="locationSearching"
+                :clearable="false"
                 placeholder="Search stations, cities, ships..."
-                class="w-full bg-[#111318] border rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none transition-colors"
-                :class="selectedLocation ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+                @update:model-value="onLocationSelect"
+                @search="searchLocation"
               />
-              <div v-if="selectedLocation" class="text-green-400/60 text-xs">
-                ✓ {{ locationSlugLabel(selectedLocation.slug) }}
-              </div>
-              <div
-                v-if="locationDropdownOpen && locationResults.length > 0"
-                id="inv-location-dropdown"
-                class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-              >
-                <button
-                  v-for="(r, i) in locationResults"
-                  :key="r.id"
-                  :data-idx="i"
-                  @mousedown.prevent="selectLocation(r)"
-                  class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
-                  :class="i === locationHighlight ? 'bg-white/10 text-white' : 'hover:bg-white/8 text-white'"
-                >
-                  <span>{{ r.name }}</span>
-                  <span class="text-white/30 text-xs ml-auto">{{ locationSlugLabel(r.slug) }}</span>
-                </button>
-              </div>
-              <div v-if="locationSearching" class="text-white/20 text-xs mt-1">Searching...</div>
             </div>
 
             <!-- Quantity -->
