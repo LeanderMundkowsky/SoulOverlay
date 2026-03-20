@@ -168,6 +168,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::hangar::hangar_import_fleet,
             commands::hangar::hangar_update_vehicle,
             commands::hangar::hangar_delete_vehicle,
+            commands::hangar::hangar_add_vehicle,
             commands::backend::backend_login,
             commands::backend::backend_register,
             commands::backend::backend_get_account,

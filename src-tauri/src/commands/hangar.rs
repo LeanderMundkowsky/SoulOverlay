@@ -223,3 +223,62 @@ pub async fn hangar_delete_vehicle(
         Err(extract_error_message(&json))
     }
 }
+
+/// Manually add a ship to the fleet (without importing from UEX).
+#[tauri::command]
+#[specta::specta]
+pub async fn hangar_add_vehicle(
+    model_name: String,
+    uex_vehicle_id: Option<String>,
+    name: Option<String>,
+    serial: Option<String>,
+    description: Option<String>,
+    is_pledged: bool,
+    is_hidden: bool,
+    state: State<'_, AppState>,
+) -> Result<HangarVehicle, String> {
+    let token = get_token(&state)?;
+    let client = http_client()?;
+    let url = format!("{}/api/fleet", BACKEND_URL);
+
+    let mut body = serde_json::Map::new();
+    body.insert("modelName".to_string(), serde_json::Value::String(model_name));
+    body.insert("uexVehicleId".to_string(), match uex_vehicle_id {
+        Some(id) if !id.is_empty() => serde_json::Value::String(id),
+        _ => serde_json::Value::Null,
+    });
+    if let Some(n) = name {
+        body.insert("name".to_string(), serde_json::Value::String(n));
+    }
+    if let Some(s) = serial {
+        body.insert("serial".to_string(), serde_json::Value::String(s));
+    }
+    body.insert("description".to_string(), match description {
+        Some(d) => serde_json::Value::String(d),
+        None => serde_json::Value::Null,
+    });
+    body.insert("isPledged".to_string(), serde_json::Value::Bool(is_pledged));
+    body.insert("isHidden".to_string(), serde_json::Value::Bool(is_hidden));
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::Value::Object(body))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    let status = resp.status();
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    if !status.is_success() {
+        return Err(extract_error_message(&json));
+    }
+
+    let vehicle = parse_vehicle(&json["data"])?;
+    info!("Added fleet vehicle: {} ({})", vehicle.model_name, vehicle.id);
+    Ok(vehicle)
+}

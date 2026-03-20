@@ -68,6 +68,27 @@ export const useHangarStore = defineStore("hangar", () => {
     }
   }
 
+  async function addVehicle(
+    modelName: string,
+    uexVehicleId: string | null,
+    name: string | null,
+    serial: string | null,
+    description: string | null,
+    isPledged: boolean,
+    isHidden: boolean,
+  ): Promise<HangarVehicle | null> {
+    try {
+      const result = await commands.hangarAddVehicle(modelName, uexVehicleId, name, serial, description, isPledged, isHidden);
+      if (result.status === "error") throw result.error;
+      fleet.value.push(result.data);
+      return result.data;
+    } catch (e) {
+      error.value = String(e);
+      console.error("Failed to add vehicle:", e);
+      return null;
+    }
+  }
+
   return {
     fleet,
     loading,
@@ -77,5 +98,6 @@ export const useHangarStore = defineStore("hangar", () => {
     importFleet,
     updateVehicle,
     deleteVehicle,
+    addVehicle,
   };
 });

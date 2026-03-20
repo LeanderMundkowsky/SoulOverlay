@@ -370,6 +370,17 @@ async hangarDeleteVehicle(id: number) : Promise<Result<null, string>> {
 }
 },
 /**
+ * Manually add a ship to the fleet (without importing from UEX).
+ */
+async hangarAddVehicle(modelName: string, uexVehicleId: string | null, name: string | null, serial: string | null, description: string | null, isPledged: boolean, isHidden: boolean) : Promise<Result<HangarVehicle, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hangar_add_vehicle", { modelName, uexVehicleId, name, serial, description, isPledged, isHidden }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Login with username + password. Returns account info on success.
  */
 async backendLogin(username: string, password: string) : Promise<Result<BackendAuthResult, string>> {
