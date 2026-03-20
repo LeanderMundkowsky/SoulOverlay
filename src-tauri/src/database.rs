@@ -99,6 +99,26 @@ fn run_migrations(conn: &mut Connection) -> Result<(), String> {
                 completed_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         ),
+        // v8: migrate inventory table to backend-as-source schema
+        // Rename old table to inventory_legacy (preserving existing data for one-time migration).
+        // Create new table with backend integer ID, collections_json, unique on (entity_id, location_id).
+        M::up(
+            "ALTER TABLE inventory RENAME TO inventory_legacy;
+            CREATE TABLE IF NOT EXISTS inventory (
+                id               INTEGER PRIMARY KEY,
+                entity_id        TEXT NOT NULL,
+                entity_name      TEXT NOT NULL,
+                entity_kind      TEXT NOT NULL,
+                location_id      TEXT NOT NULL,
+                location_name    TEXT NOT NULL,
+                location_slug    TEXT NOT NULL,
+                quantity         INTEGER NOT NULL DEFAULT 1,
+                collections_json TEXT NOT NULL DEFAULT '[]',
+                added_at         TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_inventory_entity_location ON inventory(entity_id, location_id);",
+        ),
     ]);
 
     migrations.to_latest(conn).map_err(|e| {

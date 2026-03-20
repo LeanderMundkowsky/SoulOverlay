@@ -82,6 +82,8 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         fetch_and_store_api_key(&prefetch_handle).await;
         commands::backend::fetch_account_on_startup(&prefetch_handle).await;
+        commands::inventory::migrate_legacy_inventory(&prefetch_handle).await;
+        commands::inventory::sync_inventory_from_backend(&prefetch_handle).await;
         info!("Starting background cache prefetch...");
         let state = prefetch_handle.state::<AppState>();
         commands::cache::prefetch_all(&state).await;

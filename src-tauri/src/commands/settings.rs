@@ -31,19 +31,22 @@ pub async fn save_settings(
     let old_settings = {
         let mut current = state.current_settings.lock().unwrap();
         let old = current.clone();
-        *current = new_settings.clone();
+        // Preserve the backend token — it's managed by backend commands, not the settings form
+        let mut merged = new_settings.clone();
+        merged.backend_api_token = old.backend_api_token.clone();
+        *current = merged;
         old
     };
 
-    // Persist to disk via AppPaths
-    state.paths.save_settings(&new_settings)?;
+    // Persist to disk — use the in-memory value (with preserved token)
+    let settings_to_save = state.current_settings.lock().unwrap().clone();
+    state.paths.save_settings(&settings_to_save)?;
 
     // Side effects: re-register hotkey if changed
-    if old_settings.hotkey != new_settings.hotkey {
-        let new_handle = hotkey::register_hotkey(&new_settings.hotkey);
+    if old_settings.hotkey != settings_to_save.hotkey {
+        let new_handle = hotkey::register_hotkey(&settings_to_save.hotkey);
         match new_handle {
             Ok(handle) => {
-                // Drop the old handle (stops the old hook thread) and store the new one.
                 *state.hotkey_handle.lock().unwrap() = Some(handle);
             }
             Err(e) => {
@@ -53,8 +56,8 @@ pub async fn save_settings(
     }
 
     // Side effects: restart log watcher if path changed
-    if old_settings.log_path != new_settings.log_path {
-        let new_path = new_settings
+    if old_settings.log_path != settings_to_save.log_path {
+        let new_path = settings_to_save
             .log_path
             .as_ref()
             .map(PathBuf::from)
@@ -68,17 +71,15 @@ pub async fn save_settings(
 
     // Side effects: update cache entry TTLs for any changed values
     {
-        let old_ttls = &old_settings.cache_ttls;
-        let new_ttls = &new_settings.cache_ttls;
         for collection in Collection::all() {
             let old_val = collection.ttl_for(&old_settings);
-            let new_val = collection.ttl_for(&new_settings);
+            let new_val = collection.ttl_for(&settings_to_save);
             if old_val != new_val {
                 info!("Updating cached TTL for '{}': {}s → {}s", collection.storage_key(), old_val, new_val);
                 state.cache.update_collection_ttl(*collection, new_val);
             }
         }
-        if old_ttls != new_ttls {
+        if old_settings.cache_ttls != settings_to_save.cache_ttls {
             let _ = app.emit("cache-updated", ());
         }
     }

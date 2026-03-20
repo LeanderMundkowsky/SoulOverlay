@@ -17,8 +17,8 @@ const props = defineProps<{
   prefillEntity?: { id: string; name: string; kind: string } | null;
   /** Pre-fill location (add mode from inventory group header) */
   prefillLocation?: { id: string; name: string; slug: string } | null;
-  /** Pre-fill collection (add mode from inventory group header) */
-  prefillCollection?: string | null;
+  /** Pre-fill collection (add mode from inventory group header — collection ID) */
+  prefillCollection?: number | null;
   /** Source entry for remove/transfer modes */
   sourceEntry?: InventoryEntry | null;
 }>();
@@ -130,37 +130,36 @@ async function searchLocation(q: string) {
 
 // ── Collections multi-select ──────────────────────────────────────────────
 
-const selectedCollections = ref<string[]>([]);
+const selectedCollectionIds = ref<number[]>([]);
 const newCollectionInput = ref("");
-const newlyAdded = ref<string[]>([]);
-const allCollections = computed(() => {
-  const combined = new Set([...inventoryStore.collections, ...newlyAdded.value]);
-  return [...combined].sort();
-});
+const addingCollection = ref(false);
+const addCollectionError = ref<string | null>(null);
 
-function toggleCollection(c: string) {
-  const idx = selectedCollections.value.indexOf(c);
+function toggleCollection(id: number) {
+  const idx = selectedCollectionIds.value.indexOf(id);
   if (idx >= 0) {
-    selectedCollections.value.splice(idx, 1);
+    selectedCollectionIds.value.splice(idx, 1);
   } else {
-    selectedCollections.value.push(c);
+    selectedCollectionIds.value.push(id);
   }
 }
 
-function addNewCollection() {
+async function addNewCollection() {
   const name = newCollectionInput.value.trim();
-  if (!name) return;
-  if (!allCollections.value.includes(name)) {
-    newlyAdded.value.push(name);
+  if (!name || addingCollection.value) return;
+  addingCollection.value = true;
+  addCollectionError.value = null;
+  try {
+    const coll = await inventoryStore.createCollection(name);
+    if (!selectedCollectionIds.value.includes(coll.id)) {
+      selectedCollectionIds.value.push(coll.id);
+    }
+    newCollectionInput.value = "";
+  } catch (e) {
+    addCollectionError.value = String(e);
+  } finally {
+    addingCollection.value = false;
   }
-  if (!selectedCollections.value.includes(name)) {
-    selectedCollections.value.push(name);
-  }
-  newCollectionInput.value = "";
-}
-
-function serializeCollections(): string {
-  return [...selectedCollections.value].sort().join(",");
 }
 
 // ── Form title ─────────────────────────────────────────────────────────────
@@ -214,7 +213,7 @@ async function handleSubmit() {
           locationName: loc.name,
           locationSlug: loc.slug,
           quantity: quantity.value,
-          collection: serializeCollections(),
+          collectionIds: [...selectedCollectionIds.value],
         });
         break;
       }
@@ -231,7 +230,7 @@ async function handleSubmit() {
           locationName: loc.name,
           locationSlug: loc.slug,
           quantity: quantity.value,
-          collection: serializeCollections(),
+          collectionIds: [...selectedCollectionIds.value],
         });
         break;
       }
@@ -253,7 +252,7 @@ async function handleSubmit() {
           targetLocationId: loc.id,
           targetLocationName: loc.name,
           targetLocationSlug: loc.slug,
-          targetCollection: serializeCollections(),
+          targetCollectionIds: [...selectedCollectionIds.value],
         });
         break;
       }
@@ -272,10 +271,6 @@ async function handleSubmit() {
 const maxQuantity = computed(() => props.sourceEntry?.quantity ?? 999999);
 
 // ── Prefill on mount ───────────────────────────────────────────────────────
-
-function parseCollections(raw: string): string[] {
-  return raw.split(",").map((c) => c.trim()).filter(Boolean);
-}
 
 onMounted(async () => {
   await inventoryStore.loadCollections();
@@ -302,8 +297,8 @@ onMounted(async () => {
     };
   }
 
-  if (props.mode === "add" && props.prefillCollection) {
-    selectedCollections.value = parseCollections(props.prefillCollection);
+  if (props.mode === "add" && props.prefillCollection != null) {
+    selectedCollectionIds.value = [props.prefillCollection];
   }
 
   if (props.mode === "remove" && props.sourceEntry) {
@@ -315,12 +310,12 @@ onMounted(async () => {
     selectedEntity.value = { id: e.entity_id, name: e.entity_name, kind: e.entity_kind, slug: "", uuid: "", source: "uex" };
     selectedLocation.value = { id: e.location_id, name: e.location_name, slug: e.location_slug, kind: "", uuid: "", source: "uex" };
     quantity.value = e.quantity;
-    selectedCollections.value = parseCollections(e.collection);
+    selectedCollectionIds.value = e.collections.map((c) => c.id);
   }
 
   if (props.mode === "transfer" && props.sourceEntry) {
     quantity.value = props.sourceEntry.quantity;
-    selectedCollections.value = parseCollections(props.sourceEntry.collection);
+    selectedCollectionIds.value = props.sourceEntry.collections.map((c) => c.id);
   }
 
   // Load initial locations list for the location dropdown.
@@ -422,7 +417,9 @@ function locationSlugLabel(slug: string): string {
               <div class="text-white text-sm font-medium">{{ sourceEntry.entity_name }}</div>
               <div class="text-white/40 text-xs flex items-center gap-2">
                 <span>{{ sourceEntry.location_name }}</span>
-                <span v-if="sourceEntry.collection" class="text-blue-400/60">• {{ sourceEntry.collection }}</span>
+                <template v-if="sourceEntry.collections.length > 0">
+                  <span v-for="c in sourceEntry.collections" :key="c.id" class="text-blue-400/60">• {{ c.name }}</span>
+                </template>
               </div>
               <div class="text-white/30 text-xs">Current: {{ sourceEntry.quantity }}×</div>
             </div>
@@ -487,29 +484,33 @@ function locationSlugLabel(slug: string): string {
             </div>
             <!-- List -->
             <div class="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-0.5">
-              <div v-if="allCollections.length === 0" class="text-white/20 text-xs px-2 py-1.5">
+              <div v-if="inventoryStore.collections.length === 0" class="text-white/20 text-xs px-2 py-1.5">
                 No collections yet
               </div>
               <button
-                v-for="c in allCollections"
-                :key="c"
-                @click="toggleCollection(c)"
+                v-for="c in inventoryStore.collections"
+                :key="c.id"
+                @click="toggleCollection(c.id)"
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left"
-                :class="selectedCollections.includes(c)
+                :class="selectedCollectionIds.includes(c.id)
                   ? 'bg-blue-500/20 text-blue-300'
                   : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
               >
                 <span
                   class="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors"
-                  :class="selectedCollections.includes(c) ? 'border-blue-400 bg-blue-400/20' : 'border-white/20'"
+                  :class="selectedCollectionIds.includes(c.id) ? 'border-blue-400 bg-blue-400/20' : 'border-white/20'"
                 >
-                  <span v-if="selectedCollections.includes(c)" class="text-blue-400 text-[9px] leading-none font-bold">✓</span>
+                  <span v-if="selectedCollectionIds.includes(c.id)" class="text-blue-400 text-[9px] leading-none font-bold">✓</span>
                 </span>
-                <span class="truncate">{{ c }}</span>
+                <span class="truncate">{{ c.name }}</span>
               </button>
             </div>
             <!-- Add new collection -->
             <div class="px-1.5 pb-2 pt-1.5 border-t border-white/10 shrink-0">
+              <div
+                v-if="addCollectionError"
+                class="text-red-400 text-[10px] px-1 pb-1 truncate"
+              >{{ addCollectionError }}</div>
               <div class="flex items-center gap-1">
                 <input
                   id="inv-new-collection-input"
@@ -521,9 +522,9 @@ function locationSlugLabel(slug: string): string {
                 />
                 <button
                   @click="addNewCollection"
-                  :disabled="!newCollectionInput.trim()"
+                  :disabled="!newCollectionInput.trim() || addingCollection"
                   class="px-2 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/20 disabled:cursor-not-allowed text-white text-xs transition-colors shrink-0"
-                >+</button>
+                >{{ addingCollection ? '…' : '+' }}</button>
               </div>
             </div>
           </div>

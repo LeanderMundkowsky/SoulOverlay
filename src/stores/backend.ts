@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/bindings";
 import type { BackendAccount } from "@/bindings";
+import { useInventoryStore } from "@/stores/inventory";
 
 export const useBackendStore = defineStore("backend", () => {
   const account = ref<BackendAccount | null>(null);
@@ -46,6 +47,10 @@ export const useBackendStore = defineStore("backend", () => {
       }
       account.value = result.data.account;
       tokenPresent.value = true;
+      // Migrate + sync inventory now that we have a token
+      useInventoryStore().syncFromBackend().catch((e) =>
+        console.error("Post-login inventory sync failed:", e)
+      );
       return null;
     } catch (e) {
       const msg = String(e);
@@ -67,6 +72,10 @@ export const useBackendStore = defineStore("backend", () => {
       }
       account.value = result.data.account;
       tokenPresent.value = true;
+      // Migrate + sync inventory now that we have a token
+      useInventoryStore().syncFromBackend().catch((e) =>
+        console.error("Post-register inventory sync failed:", e)
+      );
       return null;
     } catch (e) {
       const msg = String(e);

@@ -424,23 +424,23 @@ async getInventory() : Promise<Result<InventoryEntry[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async addInventoryEntry(entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collection: string) : Promise<Result<null, string>> {
+async addInventoryEntry(entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collectionIds: number[]) : Promise<Result<InventoryEntry, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("add_inventory_entry", { entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collection }) };
+    return { status: "ok", data: await TAURI_INVOKE("add_inventory_entry", { entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collectionIds }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async updateInventoryEntry(id: number, entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collection: string) : Promise<Result<null, string>> {
+async updateInventoryEntry(id: number, entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collectionIds: number[]) : Promise<Result<InventoryEntry, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("update_inventory_entry", { id, entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collection }) };
+    return { status: "ok", data: await TAURI_INVOKE("update_inventory_entry", { id, entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collectionIds }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async updateInventoryQuantity(id: number, quantity: number) : Promise<Result<null, string>> {
+async updateInventoryQuantity(id: number, quantity: number) : Promise<Result<InventoryEntry, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("update_inventory_quantity", { id, quantity }) };
 } catch (e) {
@@ -456,7 +456,7 @@ async removeInventoryEntry(id: number) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async removeInventoryQuantity(id: number, quantity: number) : Promise<Result<null, string>> {
+async removeInventoryQuantity(id: number, quantity: number) : Promise<Result<InventoryEntry | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("remove_inventory_quantity", { id, quantity }) };
 } catch (e) {
@@ -464,15 +464,15 @@ async removeInventoryQuantity(id: number, quantity: number) : Promise<Result<nul
     else return { status: "error", error: e  as any };
 }
 },
-async transferInventory(id: number, quantity: number, targetLocationId: string, targetLocationName: string, targetLocationSlug: string, targetCollection: string) : Promise<Result<null, string>> {
+async transferInventory(id: number, quantity: number, targetLocationId: string, targetLocationName: string, targetLocationSlug: string, targetCollectionIds: number[]) : Promise<Result<TransferResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("transfer_inventory", { id, quantity, targetLocationId, targetLocationName, targetLocationSlug, targetCollection }) };
+    return { status: "ok", data: await TAURI_INVOKE("transfer_inventory", { id, quantity, targetLocationId, targetLocationName, targetLocationSlug, targetCollectionIds }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async getInventoryCollections() : Promise<Result<string[], string>> {
+async getInventoryCollections() : Promise<Result<InventoryCollection[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_inventory_collections") };
 } catch (e) {
@@ -486,6 +486,55 @@ async getInventoryCollections() : Promise<Result<string[], string>> {
 async getStorageLocations(query: string) : Promise<Result<UexResult[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_storage_locations", { query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async inventoryCollectionCreate(name: string) : Promise<Result<InventoryCollection, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inventory_collection_create", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async inventoryCollectionUpdate(id: number, name: string) : Promise<Result<InventoryCollection, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inventory_collection_update", { id, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async inventoryCollectionDelete(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inventory_collection_delete", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Migrate legacy SQLite inventory data to the backend (one-time, idempotent).
+ * The frontend calls this after login so users who weren't logged in on startup
+ * still get their data migrated before the first inventory load.
+ */
+async inventoryMigrateLegacy() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inventory_migrate_legacy") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Sync inventory from backend → SQLite cache and return the fresh entries.
+ * Called by the frontend after login or after migrate_legacy.
+ */
+async inventorySyncFromBackend() : Promise<Result<InventoryEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inventory_sync_from_backend") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -806,7 +855,8 @@ export type GameState = { sc_detected: boolean }
  * A vehicle in the user's hangar/fleet from UEX API.
  */
 export type HangarVehicle = { id: string; id_vehicle: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; date_added: string; url_photo: string | null }
-export type InventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collection: string; added_at: string; updated_at: string }
+export type InventoryCollection = { id: number; name: string }
+export type InventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collections: InventoryCollection[]; added_at: string; updated_at: string }
 /**
  * Configurable in-app keybinds (F-keys and combos that don't go through the Rust hook)
  */
@@ -918,6 +968,7 @@ font_size: number;
  * In-app panel keybinds (not the global Rust hook hotkey)
  */
 keybinds: Keybinds }
+export type TransferResult = { source: InventoryEntry | null; target: InventoryEntry }
 /**
  * A search result from UEX API (or Wiki API for supplemental results).
  */

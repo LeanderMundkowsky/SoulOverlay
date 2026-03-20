@@ -86,7 +86,7 @@ src/                                 # Vue 3 + TypeScript frontend
 │                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls,
 │                                    #   InventoryBar, InventoryModal, UpdateBanner, UpdateModal
 ├── composables/                     # useUex, useCache, useLogWatcher, useOverlayEvents, useHotkeyMatch, useDragDrop
-├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, user.ts, watchlist.ts, inventory.ts, wikelo.ts, update.ts (Pinia)
+├── stores/                          # game.ts, settings.ts, favorites.ts, hangar.ts, details.ts, backend.ts, watchlist.ts, inventory.ts, wikelo.ts, update.ts (Pinia)
 ├── utils/                           # imageProxy.ts, priceFormatters.ts (locationPath, formatPrice, etc.), sorting.ts
 ├── App.vue                          # Root layout, hotkey fallback, ESC handler
 └── main.ts                          # Entry point — loads settings BEFORE app.mount()
@@ -168,32 +168,56 @@ launch via `to_latest()`, which tracks applied versions internally and only exec
 
 ## SoulOverlay Backend Integration
 
-The app fetches a shared UEX API key from the developer's Symfony backend at startup so users
-don't need to register their own UEX application.
+The app integrates with the developer's Symfony 8 REST backend (`SoulOverlayBackend`, at
+`https://overlay.soulreturns.com` in production, `http://localhost:8000` in dev).
+
+**Two separate concerns:**
+
+1. **App token** (`X-Soul-App-Token`) — compile-time static token used to fetch the shared UEX
+   API key from `GET /api/config`. No user login needed. Stored in `state.fetched_api_key`.
+
+2. **User auth** — users log in / register via `POST /api/auth/login` or `POST /api/auth/register`.
+   A bearer token (`api_token`) is returned and persisted in `settings.backend_api_token` (on
+   disk, never sent to the frontend). Account data is stored in `state.backend_account`.
 
 **`src-tauri/src/constants.rs`** — compile-time constants:
 - `BACKEND_URL` — base URL, defaults to `https://overlay.soulreturns.com` (override via env var)
-- `SOUL_APP_TOKEN` — static app token sent as `X-Soul-App-Token` header (override via env var)
-- `BACKEND_CONFIG_ENDPOINT` — `/api/config`
+- `SOUL_APP_TOKEN` — app token for `GET /api/config` (override via env var)
 
-**Flow** (`app_setup.rs → fetch_and_store_api_key`):
-1. `GET {BACKEND_URL}/api/config` with `X-Soul-App-Token: {SOUL_APP_TOKEN}` header
-2. On success: parse `{ "data": { "uex_api_key": "..." } }` → store in `state.fetched_api_key`
-3. On failure: log info, proceed with empty string (public UEX data still works at higher rate limit)
+**Backend API endpoints used:**
+- `GET /api/config` — `X-Soul-App-Token` header → `{ data: { uex_api_key } }` (app-level)
+- `POST /api/auth/login` — `{ username, password }` → `{ data: { api_token } }`
+- `POST /api/auth/register` — `{ username, email, password }` → `{ data: { api_token } }`
+- `GET /api/account` — Bearer auth → `{ data: { id, username, email, uex_secret_key, roles, created_at } }`
+- `PATCH /api/account` — Bearer auth, `application/merge-patch+json` → update `uex_secret_key`
+- `GET /api/status` — public → `{ data: { status: "ok" } }` (polled every 30s for health banner)
 
-**`AppState.fetched_api_key: Mutex<String>`** — runtime-only, never persisted. Empty string
-means "key unavailable". All UEX HTTP calls read this via `state.fetched_api_key.lock()`.
-The `uex_api_key` field no longer exists on `Settings` — users only configure `uex_secret_key`.
+**Startup sequence** (`app_setup.rs`):
+1. `fetch_and_store_api_key` → stores UEX API key in `state.fetched_api_key`
+2. `commands::backend::fetch_account_on_startup` → reads `settings.backend_api_token`, calls
+   `GET /api/account`; on 401 leaves `state.backend_account = None` (session expired hint shown)
 
-**Fleet / user profile** require `uex_secret_key` (personal key, per-user) AND benefit from
-the fetched API key. If the backend is unreachable, fleet/profile become unavailable.
+**`AppState` fields:**
+- `fetched_api_key: Mutex<String>` — shared UEX API key, never persisted
+- `backend_account: Mutex<Option<BackendAccount>>` — authenticated user, session-only
 
-**Debug panel** shows `fetched_api_key_set: bool` — green "fetched" if backend responded, yellow
-"unavailable" otherwise.
+**Token persistence:** `backend_api_token` is saved in `settings.json` via `save_token()` in
+`commands/backend.rs`. **Important:** `save_settings` in `commands/settings.rs` always preserves
+the existing `backend_api_token` (frontend never sends it back).
+
+**UEX Secret Key** moved from local settings to the backend account (`BackendAccount.uex_secret_key`).
+Fleet/hangar requires a logged-in account with a non-empty `uex_secret_key`. If not logged in →
+error returned from `hangar_get_fleet`.
+
+**Frontend store:** `src/stores/backend.ts` (`useBackendStore`) — Pinia store managing account
+state, login/logout, secret key updates, and backend-status event listener.
+
+**`backend-status` event** — emitted from the 30s background timer after each tick. Payload:
+`{ ok: boolean }`. Frontend shows a dismissible yellow banner if `ok === false`.
 
 **Dev workflow**: copy `src-tauri/.cargo/config.toml.example` → `src-tauri/.cargo/config.toml`
 (gitignored) and fill in `BACKEND_URL=http://localhost:8000` + `SOUL_APP_TOKEN=<dev-token>`.
-The backend's `SOUL_APP_TOKEN` env var must match the compiled-in value.
+The Symfony backend's `SOUL_APP_TOKEN` env var must match the compiled-in value.
 
 ## Auto-Update System
 
@@ -268,8 +292,8 @@ typed commands from `src/bindings.ts`.
 3. `database::init()` — SQLite WAL mode + schema migrations
 4. `AppState` construction → `.manage()`
 5. `.setup()` → `app_setup::initialize()` → spawns prefetch thread + 30s timer
-   - Prefetch task first calls `fetch_and_store_api_key()` (GET `/api/config` on the
-     SoulOverlay backend, stores result in `state.fetched_api_key`), then runs `prefetch_all`
+   - Prefetch task: `fetch_and_store_api_key()` (UEX API key) → `fetch_account_on_startup()`
+     (restore session from persisted token) → `prefetch_all` (cache warm-up)
 6. Frontend: `loadSettings()` in `main.ts` completes **before** `app.mount("#app")`
 
 ## Provider System
@@ -391,9 +415,11 @@ and causes a focus-fight loop with fullscreen games (rapid focused/unfocused cyc
 are the **only** definitions. The frontend gets defaults via `commands.getDefaultSettings()`
 at startup. **Do not duplicate default values in TypeScript.**
 
-`Settings` no longer contains `uex_api_key` — the UEX API key is fetched from the backend
-at startup and stored in `AppState.fetched_api_key`. Users only configure `uex_secret_key`
-(required for fleet/profile features).
+`Settings` no longer contains `uex_api_key` or `uex_secret_key`. The UEX API key is fetched
+from the backend at startup and stored in `AppState.fetched_api_key`. The UEX secret key is
+stored on the user's backend account (`BackendAccount.uex_secret_key`) and loaded into
+`AppState.backend_account` after login. `Settings` persists `backend_api_token` (bearer token)
+which is preserved across `save_settings` calls — the frontend never sends it back.
 
 Settings are loaded from Rust in `main.ts` **before** `app.mount()` to guarantee all
 components see valid data. The store uses `ref({} as Settings)` which is safe because
@@ -607,7 +633,7 @@ Palette: white+opacity for text/borders, gray-900 for panels, blue-500/600 actio
 green-400 success, red-400 errors, yellow-400 warnings.
 
 **Pinia — two store archetypes**:
-- **Backend-backed** (`settings.ts`, `favorites.ts`, `watchlist.ts`, `game.ts`, `hangar.ts`, `user.ts`):
+- **Backend-backed** (`settings.ts`, `favorites.ts`, `watchlist.ts`, `game.ts`, `hangar.ts`, `backend.ts`):
   all mutations go through generated commands. No `$patch`, no Options mutations.
   Re-export types from `@/bindings`.
 - **UI-coordination** (`details.ts`): pure in-memory, no IPC. Holds the currently viewed

@@ -60,7 +60,7 @@ impl From<BackendAccountDto> for BackendAccount {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn http_client() -> Result<Client, String> {
+pub(crate) fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -120,7 +120,7 @@ pub async fn check_backend_status() -> bool {
     }
 }
 
-fn extract_error_message(json: &serde_json::Value) -> String {
+pub(crate) fn extract_error_message(json: &serde_json::Value) -> String {
     // Symfony API Platform style: violations array
     if let Some(violations) = json.get("violations").and_then(|v| v.as_array()) {
         let msgs: Vec<String> = violations

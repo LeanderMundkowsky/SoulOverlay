@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useInventoryStore } from "@/stores/inventory";
 import type { InventoryEntry } from "@/stores/inventory";
+import { useBackendStore } from "@/stores/backend";
 import InventoryModal from "@/components/ui/InventoryModal.vue";
 import type { ModalMode } from "@/components/ui/InventoryModal.vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
@@ -14,10 +15,12 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 
 const inventoryStore = useInventoryStore();
+const backendStore = useBackendStore();
 
 // ── Load data ──────────────────────────────────────────────────────────────
 
 onMounted(() => {
+  if (!backendStore.account) return;
   if (inventoryStore.entries.length === 0) {
     inventoryStore.loadInventory();
   }
@@ -63,18 +66,19 @@ const uniqueLocations = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label));
 });
 
-/** Unique collections from current inventory entries (split comma-separated) */
+/** Unique collections from current inventory entries */
 const uniqueCollections = computed(() => {
-  const set = new Set<string>();
+  const seen = new Set<number>();
+  const result: DropdownOption[] = [];
   for (const e of inventoryStore.entries) {
-    for (const c of e.collection.split(",")) {
-      const trimmed = c.trim();
-      if (trimmed) set.add(trimmed);
+    for (const c of e.collections) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        result.push({ id: String(c.id), label: c.name });
+      }
     }
   }
-  return Array.from(set)
-    .sort((a, b) => a.localeCompare(b))
-    .map((c) => ({ id: c, label: c }));
+  return result.sort((a, b) => a.label.localeCompare(b.label));
 });
 
 const filterOptions = computed(() =>
@@ -108,10 +112,8 @@ const filteredEntries = computed(() => {
 
   // Apply sidebar collection filter
   if (sidebarCollection.value !== null) {
-    const target = sidebarCollection.value;
-    result = result.filter((e) =>
-      e.collection.split(",").map((c) => c.trim()).includes(target),
-    );
+    const targetId = sidebarCollection.value;
+    result = result.filter((e) => e.collections.some((c) => c.id === targetId));
   }
 
   // Apply dropdown filter
@@ -119,10 +121,8 @@ const filteredEntries = computed(() => {
     if (groupMode.value === "location") {
       result = result.filter((e) => e.location_id === selectedFilter.value!.id);
     } else {
-      const coll = selectedFilter.value.id;
-      result = result.filter((e) =>
-        e.collection.split(",").map((c) => c.trim()).includes(coll),
-      );
+      const collId = Number(selectedFilter.value.id);
+      result = result.filter((e) => e.collections.some((c) => c.id === collId));
     }
   }
 
@@ -133,7 +133,7 @@ const filteredEntries = computed(() => {
       (e) =>
         e.entity_name.toLowerCase().includes(q) ||
         e.location_name.toLowerCase().includes(q) ||
-        e.collection.toLowerCase().includes(q),
+        e.collections.some((c) => c.name.toLowerCase().includes(q)),
     );
   }
 
@@ -149,13 +149,25 @@ interface Group {
 
 const groupedEntries = computed((): Group[] => {
   const map = new Map<string, InventoryEntry[]>();
+
   for (const entry of filteredEntries.value) {
-    const key =
-      groupMode.value === "location"
-        ? entry.location_id
-        : entry.collection || "__none__";
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(entry);
+    if (groupMode.value === "location") {
+      const key = entry.location_id;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(entry);
+    } else {
+      // Entry appears in each of its collections (or "__none__" if none)
+      if (entry.collections.length === 0) {
+        if (!map.has("__none__")) map.set("__none__", []);
+        map.get("__none__")!.push(entry);
+      } else {
+        for (const coll of entry.collections) {
+          const key = String(coll.id);
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push(entry);
+        }
+      }
+    }
   }
 
   const groups: Group[] = [];
@@ -165,7 +177,7 @@ const groupedEntries = computed((): Group[] => {
         ? entries[0].location_name
         : key === "__none__"
           ? "No Collection"
-          : key;
+          : inventoryStore.collections.find((c) => String(c.id) === key)?.name ?? key;
     const totalQuantity = entries.reduce((sum, e) => sum + e.quantity, 0);
     groups.push({ key, label, totalQuantity, entries });
   }
@@ -186,7 +198,7 @@ const showModal = ref(false);
 const modalMode = ref<ModalMode>("add");
 const modalSourceEntry = ref<InventoryEntry | null>(null);
 const modalPrefillLocation = ref<{ id: string; name: string; slug: string } | null>(null);
-const modalPrefillCollection = ref<string | null>(null);
+const modalPrefillCollection = ref<number | null>(null);
 
 function openAddModal() {
   modalMode.value = "add";
@@ -209,7 +221,7 @@ function openAddModalForGroup(group: Group) {
     modalPrefillCollection.value = null;
   } else {
     modalPrefillLocation.value = null;
-    modalPrefillCollection.value = group.key === "__none__" ? null : group.key;
+    modalPrefillCollection.value = group.key === "__none__" ? null : Number(group.key);
   }
   showModal.value = true;
 }
@@ -238,21 +250,15 @@ function openTransferModal(entry: InventoryEntry) {
   showModal.value = true;
 }
 
-function onModalSaved() {
-  inventoryStore.loadInventory();
-  inventoryStore.loadCollections();
-}
-
 // ── Sidebar collection filter ──────────────────────────────────────────────
 
-const sidebarCollection = ref<string | null>(null);
+const sidebarCollection = ref<number | null>(null);
 
 const collectionEntryCounts = computed(() => {
-  const map = new Map<string, number>();
+  const map = new Map<number, number>();
   for (const e of inventoryStore.entries) {
-    for (const c of e.collection.split(",")) {
-      const trimmed = c.trim();
-      if (trimmed) map.set(trimmed, (map.get(trimmed) ?? 0) + 1);
+    for (const c of e.collections) {
+      map.set(c.id, (map.get(c.id) ?? 0) + 1);
     }
   }
   return map;
@@ -272,6 +278,19 @@ function slugIcon(slug: string): string {
 
 <template>
   <div class="p-6 max-w-5xl mx-auto w-full space-y-4">
+    <!-- Not logged in prompt -->
+    <div
+      v-if="!backendStore.account"
+      class="flex flex-col items-center justify-center py-20 gap-4 text-center"
+    >
+      <div class="text-4xl">📦</div>
+      <h3 class="text-white/70 text-base font-semibold">Inventory requires an account</h3>
+      <p class="text-white/40 text-sm max-w-xs">
+        Log in to sync your inventory across sessions and devices.
+      </p>
+    </div>
+
+    <template v-else>
     <!-- Error -->
     <AlertBanner
       v-if="inventoryStore.error"
@@ -341,7 +360,7 @@ function slugIcon(slug: string): string {
         </button>
         <!-- Each collection -->
         <button
-          v-for="coll in uniqueCollections"
+          v-for="coll in inventoryStore.collections"
           :key="coll.id"
           @click="sidebarCollection = coll.id"
           class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-1"
@@ -349,7 +368,7 @@ function slugIcon(slug: string): string {
             ? 'bg-blue-500/20 text-blue-300'
             : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
         >
-          <span class="truncate">{{ coll.label }}</span>
+          <span class="truncate">{{ coll.name }}</span>
           <span class="text-white/30 text-xs shrink-0">{{ collectionEntryCounts.get(coll.id) ?? 0 }}</span>
         </button>
       </div>
@@ -440,10 +459,10 @@ function slugIcon(slug: string): string {
                     <span class="text-white/60 text-xs font-medium shrink-0">{{ entry.quantity }}×</span>
                     <template v-if="groupMode === 'location'">
                       <span
-                        v-for="c in entry.collection.split(',').map((s) => s.trim()).filter(Boolean)"
-                        :key="c"
+                        v-for="c in entry.collections"
+                        :key="c.id"
                         class="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/70 shrink-0 truncate max-w-[80px]"
-                      >{{ c }}</span>
+                      >{{ c.name }}</span>
                     </template>
                   </div>
                   <div v-if="groupMode === 'collection'" class="text-white/30 text-xs truncate mt-0.5">
@@ -490,7 +509,8 @@ function slugIcon(slug: string): string {
       :prefill-location="modalPrefillLocation"
       :prefill-collection="modalPrefillCollection"
       @close="showModal = false"
-      @saved="onModalSaved"
+      @saved="showModal = false"
     />
+    </template>
   </div>
 </template>

@@ -1,13 +1,13 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { commands } from "@/bindings";
-import type { InventoryEntry } from "@/bindings";
+import type { InventoryEntry, InventoryCollection, TransferResult } from "@/bindings";
 
-export type { InventoryEntry };
+export type { InventoryEntry, InventoryCollection, TransferResult };
 
 export const useInventoryStore = defineStore("inventory", () => {
   const entries = ref<InventoryEntry[]>([]);
-  const collections = ref<string[]>([]);
+  const collections = ref<InventoryCollection[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -44,60 +44,47 @@ export const useInventoryStore = defineStore("inventory", () => {
     locationName: string;
     locationSlug: string;
     quantity: number;
-    collection: string;
+    collectionIds: number[];
   }) {
-    try {
-      const result = await commands.addInventoryEntry(
-        params.entityId,
-        params.entityName,
-        params.entityKind,
-        params.locationId,
-        params.locationName,
-        params.locationSlug,
-        params.quantity,
-        params.collection,
-      );
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-      await loadCollections();
-    } catch (e) {
-      console.error("Failed to add inventory entry:", e);
-      throw e;
-    }
+    const result = await commands.addInventoryEntry(
+      params.entityId,
+      params.entityName,
+      params.entityKind,
+      params.locationId,
+      params.locationName,
+      params.locationSlug,
+      params.quantity,
+      params.collectionIds,
+    );
+    if (result.status === "error") throw result.error;
+    // Upsert into local state (backend merges on same entity+location)
+    const idx = entries.value.findIndex((e) => e.id === result.data.id);
+    if (idx >= 0) entries.value[idx] = result.data;
+    else entries.value.push(result.data);
   }
 
   async function removeEntry(id: number) {
-    try {
-      const result = await commands.removeInventoryEntry(id);
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-      await loadCollections();
-    } catch (e) {
-      console.error("Failed to remove inventory entry:", e);
-      throw e;
-    }
+    const result = await commands.removeInventoryEntry(id);
+    if (result.status === "error") throw result.error;
+    entries.value = entries.value.filter((e) => e.id !== id);
   }
 
   async function removeQuantity(id: number, quantity: number) {
-    try {
-      const result = await commands.removeInventoryQuantity(id, quantity);
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-    } catch (e) {
-      console.error("Failed to remove inventory quantity:", e);
-      throw e;
+    const result = await commands.removeInventoryQuantity(id, quantity);
+    if (result.status === "error") throw result.error;
+    if (result.data === null) {
+      entries.value = entries.value.filter((e) => e.id !== id);
+    } else {
+      const idx = entries.value.findIndex((e) => e.id === id);
+      if (idx >= 0) entries.value[idx] = result.data;
     }
   }
 
   async function updateQuantity(id: number, quantity: number) {
-    try {
-      const result = await commands.updateInventoryQuantity(id, quantity);
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-    } catch (e) {
-      console.error("Failed to update inventory quantity:", e);
-      throw e;
-    }
+    const result = await commands.updateInventoryQuantity(id, quantity);
+    if (result.status === "error") throw result.error;
+    const idx = entries.value.findIndex((e) => e.id === id);
+    if (idx >= 0) entries.value[idx] = result.data;
   }
 
   async function updateEntry(params: {
@@ -109,27 +96,22 @@ export const useInventoryStore = defineStore("inventory", () => {
     locationName: string;
     locationSlug: string;
     quantity: number;
-    collection: string;
+    collectionIds: number[];
   }) {
-    try {
-      const result = await commands.updateInventoryEntry(
-        params.id,
-        params.entityId,
-        params.entityName,
-        params.entityKind,
-        params.locationId,
-        params.locationName,
-        params.locationSlug,
-        params.quantity,
-        params.collection,
-      );
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-      await loadCollections();
-    } catch (e) {
-      console.error("Failed to update inventory entry:", e);
-      throw e;
-    }
+    const result = await commands.updateInventoryEntry(
+      params.id,
+      params.entityId,
+      params.entityName,
+      params.entityKind,
+      params.locationId,
+      params.locationName,
+      params.locationSlug,
+      params.quantity,
+      params.collectionIds,
+    );
+    if (result.status === "error") throw result.error;
+    const idx = entries.value.findIndex((e) => e.id === params.id);
+    if (idx >= 0) entries.value[idx] = result.data;
   }
 
   async function transferEntry(params: {
@@ -138,24 +120,70 @@ export const useInventoryStore = defineStore("inventory", () => {
     targetLocationId: string;
     targetLocationName: string;
     targetLocationSlug: string;
-    targetCollection: string;
-  }) {
-    try {
-      const result = await commands.transferInventory(
-        params.id,
-        params.quantity,
-        params.targetLocationId,
-        params.targetLocationName,
-        params.targetLocationSlug,
-        params.targetCollection,
-      );
-      if (result.status === "error") throw result.error;
-      await loadInventory();
-      await loadCollections();
-    } catch (e) {
-      console.error("Failed to transfer inventory:", e);
-      throw e;
+    targetCollectionIds: number[];
+  }): Promise<TransferResult> {
+    const result = await commands.transferInventory(
+      params.id,
+      params.quantity,
+      params.targetLocationId,
+      params.targetLocationName,
+      params.targetLocationSlug,
+      params.targetCollectionIds,
+    );
+    if (result.status === "error") throw result.error;
+    const { source, target } = result.data;
+    if (source === null) {
+      entries.value = entries.value.filter((e) => e.id !== params.id);
+    } else {
+      const srcIdx = entries.value.findIndex((e) => e.id === params.id);
+      if (srcIdx >= 0) entries.value[srcIdx] = source;
     }
+    const tgtIdx = entries.value.findIndex((e) => e.id === target.id);
+    if (tgtIdx >= 0) entries.value[tgtIdx] = target;
+    else entries.value.push(target);
+    return result.data;
+  }
+
+  // ── Collection CRUD ────────────────────────────────────────────────────────
+
+  async function createCollection(name: string): Promise<InventoryCollection> {
+    const result = await commands.inventoryCollectionCreate(name);
+    if (result.status === "error") throw result.error;
+    collections.value.push(result.data);
+    collections.value.sort((a, b) => a.name.localeCompare(b.name));
+    return result.data;
+  }
+
+  async function updateCollection(id: number, name: string): Promise<InventoryCollection> {
+    const result = await commands.inventoryCollectionUpdate(id, name);
+    if (result.status === "error") throw result.error;
+    const idx = collections.value.findIndex((c) => c.id === id);
+    if (idx >= 0) collections.value[idx] = result.data;
+    return result.data;
+  }
+
+  async function deleteCollection(id: number) {
+    const result = await commands.inventoryCollectionDelete(id);
+    if (result.status === "error") throw result.error;
+    collections.value = collections.value.filter((c) => c.id !== id);
+  }
+
+  /// Pull all entries + collections from the backend into Pinia state.
+  /// Called after login (or register) so the user immediately sees their data
+  /// even if they weren't logged in when the app started.
+  async function syncFromBackend() {
+    // Run one-time legacy migration first (no-op when legacy table is absent)
+    const migResult = await commands.inventoryMigrateLegacy();
+    if (migResult.status === "error") {
+      console.error("Legacy inventory migration failed:", migResult.error);
+    }
+
+    const [syncResult, collResult] = await Promise.all([
+      commands.inventorySyncFromBackend(),
+      commands.getInventoryCollections(),
+    ]);
+    if (syncResult.status === "ok") entries.value = syncResult.data;
+    if (collResult.status === "ok") collections.value = collResult.data;
   }
 
   // Cross-tab navigation: HangarTab sets this before switching to inventory tab
@@ -175,5 +203,9 @@ export const useInventoryStore = defineStore("inventory", () => {
     updateQuantity,
     updateEntry,
     transferEntry,
+    createCollection,
+    updateCollection,
+    deleteCollection,
+    syncFromBackend,
   };
 });
