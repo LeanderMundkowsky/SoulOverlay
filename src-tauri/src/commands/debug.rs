@@ -50,6 +50,8 @@ pub struct DebugInfo {
     pub reset_on_open: bool,
     pub max_search_results: u32,
     pub cache_ttls: std::collections::HashMap<String, u32>,
+    /// Whether a backend account is currently authenticated.
+    pub backend_logged_in: bool,
     // ── Services ──────────────────────────────────────────────────────────────
     pub log_watcher_active: bool,
     pub hotkey_registered: bool,
@@ -138,6 +140,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         reset_on_open: settings.reset_on_open,
         max_search_results: settings.max_search_results,
         cache_ttls: settings.cache_ttls,
+        backend_logged_in: state.backend_account.lock().unwrap().is_some(),
         log_watcher_active,
         hotkey_registered,
         refreshing_collections: refreshing,

@@ -1,307 +1,159 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
-import { useUserStore } from "@/stores/user";
-import { useSettingsStore } from "@/stores/settings";
-import { proxyImageUrl } from "@/utils/imageProxy";
+import { useBackendStore } from "@/stores/backend";
 
-const userStore = useUserStore();
-const settingsStore = useSettingsStore();
+const backendStore = useBackendStore();
 
-const hasSecretKey = ref(false);
-const canFetch = ref(false);
+const secretKeyInput = ref(backendStore.account?.uex_secret_key ?? "");
+const secretKeySaving = ref(false);
+const secretKeyError = ref<string | null>(null);
+const secretKeySaved = ref(false);
 
+// Keep input in sync if account updates elsewhere
+import { watch } from "vue";
 watch(
-  () => settingsStore.settings,
-  (s) => {
-    hasSecretKey.value = s.uex_secret_key.length > 0;
-    canFetch.value = hasSecretKey.value;
-  },
-  { immediate: true, deep: true },
+  () => backendStore.account?.uex_secret_key,
+  (val) => { secretKeyInput.value = val ?? ""; },
 );
 
-watch(canFetch, (ready) => {
-  if (ready && !userStore.profile && !userStore.loading) {
-    userStore.loadProfile();
-  }
-}, { immediate: true });
-
-function refresh() {
-  if (canFetch.value) {
-    userStore.loadProfile();
+async function saveSecretKey() {
+  secretKeySaving.value = true;
+  secretKeyError.value = null;
+  secretKeySaved.value = false;
+  const val = secretKeyInput.value.trim() || null;
+  const err = await backendStore.updateSecretKey(val);
+  secretKeySaving.value = false;
+  if (err) {
+    secretKeyError.value = err;
+  } else {
+    secretKeySaved.value = true;
+    setTimeout(() => { secretKeySaved.value = false; }, 3000);
   }
 }
 
-const SPECIALIZATION_LABELS: Record<string, string> = {
-  datarunner: "Datarunner",
-  escort: "Escort",
-  exploration: "Explorer",
-  engineer: "Engineer",
-  gunner: "Gunner",
-  hauling: "Hauler",
-  medical: "Medic",
-  mercenary: "Mercenary",
-  mining: "Miner",
-  other: "Other",
-  pilot: "Private Pilot",
-  piracy: "Pirate",
-  racer: "Racer",
-  refining: "Refiner",
-  refueling: "Refueler",
-  repairing: "Repair",
-  roleplay: "Roleplay",
-  salvaging: "Salvager",
-  scanning: "Scanner",
-  scientist: "Scientist",
-  towing: "Towing",
-  trading: "Trader",
-  transit: "Transit",
-};
+async function handleLogout() {
+  await backendStore.logout();
+}
 
-const LANGUAGE_LABELS: Record<string, string> = {
-  ar: "Arabic", ca: "Catalan", zh: "Chinese", nl: "Dutch",
-  en: "English", fr: "French", de: "German", it: "Italian",
-  jp: "Japanese", pt: "Portuguese", ru: "Russian", es: "Spanish",
-  xx: "Other",
-};
-
-const ARCHETYPE_LABELS: Record<string, string> = {
-  artist: "Artist", engineer: "Engineer", explorer: "Explorer",
-  lover: "Lover", novice: "Novice", outlaw: "Outlaw",
-  player_one: "Player One", protector: "Protector", strategist: "Strategist",
-  support: "Support", trickster: "Trickster", warlord: "Warlord",
-};
-
-const DAY_LABELS: Record<string, string> = {
-  weekdays: "Weekdays", weekends: "Weekends",
-};
-
-const TIME_LABELS: Record<string, string> = {
-  morning: "Morning", afternoon: "Afternoon", evening: "Evening",
-};
-
-function formatTimestamp(ts: string | null | undefined): string {
+function formatDate(ts: string | undefined): string {
   if (!ts) return "—";
-  const num = Number(ts);
-  if (!isNaN(num) && num > 0) {
-    return new Date(num * 1000).toLocaleDateString(undefined, {
+  try {
+    return new Date(ts).toLocaleDateString(undefined, {
       year: "numeric", month: "short", day: "numeric",
     });
+  } catch {
+    return ts;
   }
-  return ts;
 }
 </script>
 
 <template>
-  <div class="p-6 max-w-3xl mx-auto w-full space-y-4">
-    <!-- Missing keys warnings -->
+  <div class="p-6 max-w-2xl mx-auto w-full space-y-4">
+    <!-- Re-login hint: token present but session expired -->
     <AlertBanner
-      v-if="!hasSecretKey"
+      v-if="backendStore.showReloginHint"
       variant="warning"
-      message="UEX Secret Key not configured. Set it in Settings → UEX Secret Key."
-    />
-    <AlertBanner
-      v-if="!hasSecretKey"
-      variant="warning"
-      message="UEX secret key not configured. Set it in Settings → UEX Secret Key."
-    />
-    <AlertBanner
-      v-if="userStore.error"
-      variant="error"
-      :message="userStore.error"
+      message="Your session has expired. Please log in again."
     />
 
-    <!-- Header -->
-    <div v-if="canFetch" class="flex items-center justify-between">
-      <h2 class="text-white/80 text-sm font-semibold uppercase tracking-wider">
-        My Profile
-      </h2>
-      <button
-        @click="refresh"
-        :disabled="userStore.loading"
-        class="text-xs text-blue-400 hover:text-blue-300 disabled:text-white/20 transition-colors"
-      >
-        <span v-if="userStore.stale" class="text-yellow-400 mr-1">⟳</span>
-        {{ userStore.loading ? "Refreshing..." : "Refresh" }}
-      </button>
+    <!-- Not logged in at all -->
+    <div
+      v-if="!backendStore.isLoggedIn && !backendStore.showReloginHint"
+      class="flex flex-col items-center justify-center py-16 text-white/40 space-y-2"
+    >
+      <svg class="w-12 h-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      <p class="text-sm">Not logged in</p>
+      <p class="text-xs text-white/30">Use the Login button in the top right to sign in.</p>
     </div>
 
-    <!-- Loading -->
-    <div v-if="userStore.loading && !userStore.profile" class="flex justify-center py-12">
-      <LoadingSpinner />
-    </div>
+    <!-- Logged in — account info -->
+    <template v-if="backendStore.isLoggedIn && backendStore.account">
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <h2 class="text-white/80 text-sm font-semibold uppercase tracking-wider">My Account</h2>
+        <button
+          @click="handleLogout"
+          class="text-xs text-red-400/70 hover:text-red-400 transition-colors"
+        >
+          Sign Out
+        </button>
+      </div>
 
-    <!-- Profile content -->
-    <template v-if="userStore.profile">
       <!-- Identity card -->
       <div class="bg-[#1a1d24] border border-white/10 rounded-lg p-5">
-        <div class="flex items-start gap-4">
-          <img
-            v-if="userStore.profile.avatar"
-            :src="proxyImageUrl(userStore.profile.avatar)"
-            :alt="userStore.profile.name"
-            class="w-16 h-16 rounded-full object-cover bg-white/5 shrink-0"
-            @error="($event.target as HTMLImageElement).style.display = 'none'"
-          />
-          <div
-            v-else
-            class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center shrink-0"
-          >
-            <span class="text-white/40 text-xl font-bold">
-              {{ userStore.profile.name.charAt(0).toUpperCase() }}
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+            <span class="text-white/60 text-2xl font-bold select-none">
+              {{ backendStore.account.username.charAt(0).toUpperCase() }}
             </span>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-white text-lg font-semibold">{{ userStore.profile.name }}</span>
+              <span class="text-white text-lg font-semibold">{{ backendStore.account.username }}</span>
+              <!-- Roles -->
               <span
-                v-if="userStore.profile.is_staff"
-                class="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400"
-              >Staff</span>
-              <span
-                v-if="userStore.profile.is_datarunner"
-                class="text-xs px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-400"
-              >Datarunner</span>
-              <span
-                v-if="userStore.profile.is_away_game"
-                class="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400"
-              >Away</span>
+                v-for="role in backendStore.account.roles"
+                :key="role"
+                class="text-xs px-1.5 py-0.5 rounded"
+                :class="role === 'ROLE_ADMIN'
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-white/10 text-white/50'"
+              >
+                {{ role.replace('ROLE_', '') }}
+              </span>
             </div>
-            <div class="text-white/50 text-sm mt-0.5">@{{ userStore.profile.username }}</div>
-            <p
-              v-if="userStore.profile.bio"
-              class="text-white/40 text-sm mt-2 leading-relaxed"
-            >{{ userStore.profile.bio }}</p>
+            <div class="text-white/40 text-sm mt-0.5">{{ backendStore.account.email }}</div>
+            <div class="text-white/30 text-xs mt-1">Member since {{ formatDate(backendStore.account.created_at) }}</div>
           </div>
         </div>
       </div>
 
-      <!-- Contact & Links -->
-      <div
-        v-if="userStore.profile.email || userStore.profile.website_url || userStore.profile.discord_username || userStore.profile.twitch_username"
-        class="bg-[#1a1d24] border border-white/10 rounded-lg p-5 space-y-2"
-      >
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Contact & Links</h3>
-        <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <template v-if="userStore.profile.email">
-            <span class="text-white/40">Email</span>
-            <span class="text-white/80 truncate">{{ userStore.profile.email }}</span>
-          </template>
-          <template v-if="userStore.profile.website_url">
-            <span class="text-white/40">Website</span>
-            <span class="text-blue-400/80 truncate">{{ userStore.profile.website_url }}</span>
-          </template>
-          <template v-if="userStore.profile.discord_username">
-            <span class="text-white/40">Discord</span>
-            <span class="text-white/80">{{ userStore.profile.discord_username }}</span>
-          </template>
-          <template v-if="userStore.profile.twitch_username">
-            <span class="text-white/40">Twitch</span>
-            <span class="text-purple-400/80">{{ userStore.profile.twitch_username }}</span>
-          </template>
-          <template v-if="userStore.profile.timezone">
-            <span class="text-white/40">Timezone</span>
-            <span class="text-white/80">{{ userStore.profile.timezone }}</span>
-          </template>
-          <template v-if="userStore.profile.language">
-            <span class="text-white/40">Language</span>
-            <span class="text-white/80">{{ userStore.profile.language }}</span>
-          </template>
+      <!-- UEX Secret Key -->
+      <div class="bg-[#1a1d24] border border-white/10 rounded-lg p-5 space-y-3">
+        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider">UEX Secret Key</h3>
+        <p class="text-white/30 text-xs leading-relaxed">
+          Required for Hangar access. Found in your
+          <a href="https://uexcorp.space/account" class="text-blue-400/60 hover:text-blue-400">UEX account settings</a>.
+        </p>
+        <div class="flex gap-2">
+          <input
+            v-model="secretKeyInput"
+            type="password"
+            placeholder="Enter your UEX Corp secret key"
+            class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
+          />
+          <button
+            @click="saveSecretKey"
+            :disabled="secretKeySaving"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
+            :class="secretKeySaved
+              ? 'bg-green-600/80 text-white'
+              : 'bg-blue-600 hover:bg-blue-500 text-white'"
+          >
+            {{ secretKeySaving ? "Saving…" : secretKeySaved ? "Saved!" : "Save" }}
+          </button>
         </div>
-      </div>
-
-      <!-- Availability -->
-      <div
-        v-if="userStore.profile.day_availability.length > 0 || userStore.profile.time_availability.length > 0"
-        class="bg-[#1a1d24] border border-white/10 rounded-lg p-5"
-      >
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Availability</h3>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="d in userStore.profile.day_availability"
-            :key="'day-' + d"
-            class="text-xs px-2 py-1 rounded bg-blue-500/15 text-blue-400"
-          >{{ DAY_LABELS[d] ?? d }}</span>
-          <span
-            v-for="t in userStore.profile.time_availability"
-            :key="'time-' + t"
-            class="text-xs px-2 py-1 rounded bg-sky-500/15 text-sky-400"
-          >{{ TIME_LABELS[t] ?? t }}</span>
+        <div v-if="secretKeyError" class="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {{ secretKeyError }}
         </div>
-      </div>
-
-      <!-- Specializations -->
-      <div
-        v-if="userStore.profile.specializations.length > 0"
-        class="bg-[#1a1d24] border border-white/10 rounded-lg p-5"
-      >
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Specializations</h3>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="s in userStore.profile.specializations"
-            :key="'spec-' + s"
-            class="text-xs px-2 py-1 rounded bg-teal-500/15 text-teal-400"
-          >{{ SPECIALIZATION_LABELS[s] ?? s }}</span>
+        <!-- Current state indicator -->
+        <div v-if="backendStore.account.uex_secret_key" class="flex items-center gap-1.5 text-xs text-green-400/70">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Secret key is configured
         </div>
-      </div>
-
-      <!-- Languages -->
-      <div
-        v-if="userStore.profile.languages.length > 0"
-        class="bg-[#1a1d24] border border-white/10 rounded-lg p-5"
-      >
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Languages</h3>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="l in userStore.profile.languages"
-            :key="'lang-' + l"
-            class="text-xs px-2 py-1 rounded bg-indigo-500/15 text-indigo-400"
-          >{{ LANGUAGE_LABELS[l] ?? l }}</span>
-        </div>
-      </div>
-
-      <!-- Archetypes -->
-      <div
-        v-if="userStore.profile.archetypes.length > 0"
-        class="bg-[#1a1d24] border border-white/10 rounded-lg p-5"
-      >
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Archetypes</h3>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="a in userStore.profile.archetypes"
-            :key="'arch-' + a"
-            class="text-xs px-2 py-1 rounded bg-amber-500/15 text-amber-400"
-          >{{ ARCHETYPE_LABELS[a] ?? a }}</span>
-        </div>
-      </div>
-
-      <!-- Verification & Dates -->
-      <div class="bg-[#1a1d24] border border-white/10 rounded-lg p-5">
-        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Status & Dates</h3>
-        <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <span class="text-white/40">RSI Verified</span>
-          <span :class="userStore.profile.date_rsi_verified ? 'text-green-400' : 'text-white/30'">
-            {{ userStore.profile.date_rsi_verified ? formatTimestamp(userStore.profile.date_rsi_verified) : 'Not verified' }}
-          </span>
-          <span class="text-white/40">Twitch Verified</span>
-          <span :class="userStore.profile.date_twitch_verified ? 'text-green-400' : 'text-white/30'">
-            {{ userStore.profile.date_twitch_verified ? formatTimestamp(userStore.profile.date_twitch_verified) : 'Not verified' }}
-          </span>
-          <span class="text-white/40">Member Since</span>
-          <span class="text-white/80">{{ formatTimestamp(userStore.profile.date_added) }}</span>
-          <span class="text-white/40">Last Updated</span>
-          <span class="text-white/80">{{ formatTimestamp(userStore.profile.date_modified) }}</span>
-        </div>
+        <div v-else class="text-xs text-yellow-400/60">No secret key set — Hangar will be unavailable.</div>
       </div>
     </template>
 
-    <!-- Empty state -->
-    <div
-      v-if="canFetch && !userStore.loading && !userStore.profile && !userStore.error"
-      class="text-center text-white/30 py-12 text-sm"
-    >
-      No profile data available.
+    <!-- Loading fallback -->
+    <div v-if="backendStore.loading" class="flex justify-center py-12">
+      <LoadingSpinner />
     </div>
   </div>
 </template>

@@ -61,6 +61,7 @@ pub fn run() {
         refreshing_collections: Mutex::new(std::collections::HashSet::new()),
         activity: std::sync::Arc::new(Mutex::new(activity::ActivityLog::new())),
         fetched_api_key: Mutex::new(String::new()),
+        backend_account: Mutex::new(None),
     };
 
     // Build the tauri-specta invoke handler + export TS bindings in dev mode.
@@ -164,7 +165,11 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::favorites::remove_favorite,
             commands::favorites::is_favorite,
             commands::hangar::hangar_get_fleet,
-            commands::user::user_get_profile,
+            commands::backend::backend_login,
+            commands::backend::backend_register,
+            commands::backend::backend_get_account,
+            commands::backend::backend_update_secret_key,
+            commands::backend::backend_logout,
             commands::watchlist::get_watchlist,
             commands::watchlist::add_watch_entry,
             commands::watchlist::remove_watch_entry,

@@ -119,7 +119,11 @@ pub(crate) async fn refresh_collection_by_name(
         }
     };
 
-    if provider.requires_secret() && settings.uex_secret_key.is_empty() {
+    if provider.requires_secret() && state.backend_account.lock().unwrap().as_ref()
+        .and_then(|a| a.uex_secret_key.as_deref())
+        .map(|s| s.is_empty())
+        .unwrap_or(true)
+    {
         return CacheRefreshResult {
             ok: false,
             collection: name.to_string(),
@@ -131,17 +135,16 @@ pub(crate) async fn refresh_collection_by_name(
     }
 
     let api_key = state.fetched_api_key.lock().unwrap().clone();
-    let secret = if settings.uex_secret_key.is_empty() {
-        None
-    } else {
-        Some(settings.uex_secret_key.as_str())
-    };
+    let secret_key_owned: Option<String> = state.backend_account.lock().unwrap()
+        .as_ref()
+        .and_then(|a| a.uex_secret_key.clone())
+        .filter(|s| !s.is_empty());
 
     let ctx = RefreshContext {
         client: &state.uex,
         cache: &state.cache,
         api_key: &api_key,
-        secret_key: secret,
+        secret_key: secret_key_owned.as_deref(),
         settings,
     };
 

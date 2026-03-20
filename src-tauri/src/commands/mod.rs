@@ -1,4 +1,5 @@
 pub mod api;
+pub mod backend;
 pub mod cache;
 pub mod debug;
 pub mod contested_zones;
@@ -9,7 +10,6 @@ pub mod overlay;
 pub mod settings;
 pub mod uex;
 pub mod updates;
-pub mod user;
 pub mod watchlist;
 pub mod wiki;
 pub mod wikelo;

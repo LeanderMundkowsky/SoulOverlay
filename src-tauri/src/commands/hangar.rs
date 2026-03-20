@@ -23,20 +23,23 @@ async fn enrich_with_photos(
 }
 
 /// Fetch the authenticated user's fleet from UEX.
-/// Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
+/// Requires a logged-in backend account with a UEX secret key.
 #[tauri::command]
 #[specta::specta]
 pub async fn hangar_get_fleet(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<HangarVehicle>>, String> {
     let api_key = state.fetched_api_key.lock().unwrap().clone();
-    let (secret_key, settings) = {
-        let s = state.current_settings.lock().unwrap();
-        (s.uex_secret_key.clone(), s.clone())
-    };
+    let secret_key = state.backend_account.lock().unwrap()
+        .as_ref()
+        .and_then(|a| a.uex_secret_key.clone())
+        .unwrap_or_default();
+    let settings = state.current_settings.lock().unwrap().clone();
 
     if secret_key.is_empty() {
-        return Ok(ApiResponse::err("UEX secret key not configured. Set it in Settings."));
+        return Ok(ApiResponse::err(
+            "Log in and set your UEX Secret Key in your Profile to access your hangar."
+        ));
     }
 
     let cache_key = Collection::Fleet.storage_key();

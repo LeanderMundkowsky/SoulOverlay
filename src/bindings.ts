@@ -327,7 +327,7 @@ async isFavorite(id: string, kind: string) : Promise<Result<boolean, string>> {
 },
 /**
  * Fetch the authenticated user's fleet from UEX.
- * Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
+ * Requires a logged-in backend account with a UEX secret key.
  */
 async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
     try {
@@ -338,12 +338,55 @@ async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
 }
 },
 /**
- * Fetch the authenticated user's profile from UEX.
- * Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
+ * Login with username + password. Returns account info on success.
  */
-async userGetProfile() : Promise<Result<ApiResponse<UexUserProfile>, string>> {
+async backendLogin(username: string, password: string) : Promise<Result<BackendAuthResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("user_get_profile") };
+    return { status: "ok", data: await TAURI_INVOKE("backend_login", { username, password }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Register a new account. Returns account info on success.
+ */
+async backendRegister(username: string, email: string, password: string) : Promise<Result<BackendAuthResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backend_register", { username, email, password }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Returns the current account status (logged-in, session-expired, or never-logged-in).
+ */
+async backendGetAccount() : Promise<Result<BackendAccountStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backend_get_account") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update the UEX secret key stored on the backend account.
+ */
+async backendUpdateSecretKey(uexSecretKey: string | null) : Promise<Result<BackendAccount, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backend_update_secret_key", { uexSecretKey }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Log out: clears the stored token and in-memory account.
+ */
+async backendLogout() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backend_logout") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -622,6 +665,14 @@ stale: boolean;
  * Total number of matches before any limit was applied (None when not applicable).
  */
 total: number | null }
+export type BackendAccount = { id: number; username: string; email: string; uex_secret_key: string | null; roles: string[]; created_at: string }
+/**
+ * Returned by `backend_get_account`.
+ * Lets the frontend distinguish: never-logged-in (token_present=false),
+ * session-expired (token_present=true, account=None), or logged-in (account=Some).
+ */
+export type BackendAccountStatus = { account: BackendAccount | null; token_present: boolean }
+export type BackendAuthResult = { account: BackendAccount }
 /**
  * Response from cache refresh operations.
  */
@@ -689,7 +740,11 @@ export type DebugInfo = { sc_detected: boolean; hotkey: string; log_path: string
 /**
  * Whether the UEX API key was successfully fetched from the SoulOverlay backend.
  */
-fetched_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
+fetched_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; 
+/**
+ * Whether a backend account is currently authenticated.
+ */
+backend_logged_in: boolean; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
 /**
  * ISO8601 timestamp of the last background check tick.
  */
@@ -823,9 +878,9 @@ export type Settings = {
  */
 hotkey: string; 
 /**
- * UEX Corp secret key (for user-specific endpoints like fleet)
+ * SoulOverlay backend API token (persisted for session continuity)
  */
-uex_secret_key: string; 
+backend_api_token: string; 
 /**
  * Optional custom log file path (None = use default)
  */
@@ -875,10 +930,6 @@ uuid: string;
  * Data source: `"uex"` (default) or `"wiki"` for Wiki-only items.
  */
 source: string }
-/**
- * Authenticated user profile from the UEX API `GET /user` endpoint.
- */
-export type UexUserProfile = { id: number; name: string; username: string; email: string | null; avatar: string | null; bio: string | null; website_url: string | null; timezone: string | null; language: string | null; discord_username: string | null; twitch_username: string | null; day_availability: string[]; time_availability: string[]; specializations: string[]; languages: string[]; archetypes: string[]; is_datarunner: boolean; is_datarunner_banned: boolean; is_staff: boolean; is_away_game: boolean; date_added: string | null; date_modified: string | null; date_rsi_verified: string | null; date_twitch_verified: string | null }
 /**
  * Information about an available update, sent to the frontend via Tauri events.
  */

@@ -23,8 +23,7 @@ defineProps<{
   activeTab: string;
   showFavorites: boolean;
   showWatchlist: boolean;
-  isAuthenticated: boolean;
-  userAvatarUrl: string | null;
+  isLoggedIn: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +33,7 @@ const emit = defineEmits<{
   (e: "toggle-debug"): void;
   (e: "toggle-favorites"): void;
   (e: "toggle-watchlist"): void;
+  (e: "open-auth-modal"): void;
 }>();
 
 const tabs: Tab[] = [
@@ -147,34 +147,34 @@ function handleTab(tab: Tab) {
       </div>
     </div>
 
-    <!-- User profile icon -->
-    <div
-      class="flex items-center pr-5 flex-shrink-0 cursor-pointer"
-      :class="isAuthenticated ? 'opacity-100' : 'opacity-30 cursor-not-allowed'"
-      :title="isAuthenticated ? 'View profile' : 'Set API key & secret key in Settings to view profile'"
-      @click="isAuthenticated && emit('update:activeTab', 'profile')"
-    >
-      <div
-        class="relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center transition-all"
-        :class="[
-          activeTab === 'profile' ? 'ring-2 ring-blue-500' : '',
-          isAuthenticated ? 'hover:ring-2 hover:ring-white/30' : '',
-        ]"
+    <!-- User profile / Login button (far right) -->
+    <div class="flex items-center pr-5 flex-shrink-0">
+      <!-- Login button when not authenticated -->
+      <button
+        v-if="!isLoggedIn"
+        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wider text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-lg transition-colors"
+        title="Sign in to your SoulOverlay account"
+        @click="emit('open-auth-modal')"
       >
-        <img
-          v-if="isAuthenticated && userAvatarUrl"
-          :src="userAvatarUrl"
-          alt="Profile"
-          class="w-full h-full object-cover"
-          @error="($event.target as HTMLImageElement).style.display = 'none'"
-        />
-        <IconUser
-          v-else
-          class="w-4 h-4"
-          :class="isAuthenticated
-            ? (activeTab === 'profile' ? 'text-white' : 'text-white/50 hover:text-white/80')
-            : 'text-white/30'"
-        />
+        <IconUser class="w-3.5 h-3.5 flex-shrink-0" />
+        LOGIN
+      </button>
+      <!-- User icon when authenticated -->
+      <div
+        v-else
+        class="cursor-pointer"
+        title="View profile"
+        @click="emit('update:activeTab', 'profile')"
+      >
+        <div
+          class="relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center transition-all"
+          :class="activeTab === 'profile' ? 'ring-2 ring-blue-500' : 'hover:ring-2 hover:ring-white/30'"
+        >
+          <IconUser
+            class="w-4 h-4"
+            :class="activeTab === 'profile' ? 'text-white' : 'text-white/50 hover:text-white/80'"
+          />
+        </div>
       </div>
     </div>
   </div>

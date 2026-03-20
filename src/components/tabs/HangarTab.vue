@@ -1,35 +1,26 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { computed, watch } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import { useHangarStore } from "@/stores/hangar";
-import { useSettingsStore } from "@/stores/settings";
 import { useDetailsStore } from "@/stores/details";
 import { useInventoryStore } from "@/stores/inventory";
+import { useBackendStore } from "@/stores/backend";
 import { proxyImageUrl } from "@/utils/imageProxy";
 
 const hangarStore = useHangarStore();
-const settingsStore = useSettingsStore();
 const detailsStore = useDetailsStore();
 const inventoryStore = useInventoryStore();
+const backendStore = useBackendStore();
 
 const emit = defineEmits<{
   (e: "switchToInventory", locationId: string, locationName: string): void;
 }>();
 
-const hasSecretKey = ref(false);
-const canFetch = ref(false);
-
-// Reactively track key availability — settings load async after mount
-watch(
-  () => settingsStore.settings,
-  (s) => {
-    hasSecretKey.value = s.uex_secret_key.length > 0;
-    canFetch.value = hasSecretKey.value;
-  },
-  { immediate: true, deep: true },
+const canFetch = computed(() =>
+  backendStore.isLoggedIn && (backendStore.account?.uex_secret_key?.length ?? 0) > 0
 );
 
 // Auto-load fleet once both keys become available (immediate because settings load pre-mount)
@@ -78,14 +69,14 @@ function viewShipInventory(shipId: string, modelName: string) {
   <div class="p-6 max-w-5xl mx-auto w-full space-y-4">
     <!-- Missing keys warnings -->
     <AlertBanner
-      v-if="!hasSecretKey"
+      v-if="!backendStore.isLoggedIn"
       variant="warning"
-      message="UEX Secret Key not configured. Set it in Settings → UEX Secret Key. Required for hangar access."
+      message="Log in to your SoulOverlay account to enable Hangar access."
     />
     <AlertBanner
-      v-if="!hasSecretKey"
+      v-else-if="!canFetch"
       variant="warning"
-      message="UEX secret key not configured. Set it in Settings → UEX Secret Key. Required for hangar access."
+      message="Set your UEX Secret Key in your Profile to enable Hangar access."
     />
 
     <!-- API error -->

@@ -5,6 +5,7 @@ use std::sync::{
 };
 
 use crate::cache_store::CacheStore;
+use crate::commands::backend::BackendAccount;
 use crate::config::AppPaths;
 use crate::hotkey;
 use crate::log_watcher;
@@ -34,6 +35,8 @@ pub struct AppState {
     /// UEX API key fetched from the SoulOverlay backend at startup.
     /// Empty string if the backend was unreachable.
     pub fetched_api_key: Mutex<String>,
+    /// Authenticated backend account (None if not logged in or session expired).
+    pub backend_account: Mutex<Option<BackendAccount>>,
 }
 
 impl AppState {

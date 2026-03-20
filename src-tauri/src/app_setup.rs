@@ -81,6 +81,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let prefetch_handle = handle.clone();
     tauri::async_runtime::spawn(async move {
         fetch_and_store_api_key(&prefetch_handle).await;
+        commands::backend::fetch_account_on_startup(&prefetch_handle).await;
         info!("Starting background cache prefetch...");
         let state = prefetch_handle.state::<AppState>();
         commands::cache::prefetch_all(&state).await;
@@ -122,6 +123,10 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
             if refreshed_any {
                 let _ = timer_handle.emit("cache-updated", ());
             }
+
+            // Check backend reachability and emit status event
+            let backend_ok = commands::backend::check_backend_status().await;
+            let _ = timer_handle.emit("backend-status", serde_json::json!({ "ok": backend_ok }));
         }
     });
 

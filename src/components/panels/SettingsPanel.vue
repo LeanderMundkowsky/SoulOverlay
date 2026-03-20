@@ -98,24 +98,6 @@ function resetDefaults() {
         </button>
       </div>
 
-      <!-- UEX Secret Key -->
-      <div>
-        <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
-          UEX Secret Key
-        </label>
-        <input
-          v-model="form.uex_secret_key"
-          type="password"
-          placeholder="Enter your UEX Corp secret key"
-          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
-        />
-        <p class="text-white/30 text-xs mt-1">
-          Required for Hangar. Found in your
-          <a href="https://uexcorp.space/account" class="text-blue-400/60 hover:text-blue-400">account settings</a>
-          on uexcorp.space
-        </p>
-      </div>
-
       <!-- Log Path -->
       <SettingsField
         label="Game Log Path (optional)"

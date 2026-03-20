@@ -56,8 +56,8 @@ impl Default for LayoutWidths {
 pub struct Settings {
     /// Global hotkey string (e.g., "Alt+Shift+S")
     pub hotkey: String,
-    /// UEX Corp secret key (for user-specific endpoints like fleet)
-    pub uex_secret_key: String,
+    /// SoulOverlay backend API token (persisted for session continuity)
+    pub backend_api_token: String,
     /// Optional custom log file path (None = use default)
     pub log_path: Option<String>,
     /// Overlay opacity (0.0 - 1.0)
@@ -83,7 +83,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             hotkey: "F6".to_string(),
-            uex_secret_key: String::new(),
+            backend_api_token: String::new(),
             log_path: None,
             overlay_opacity: 0.6,
             esc_closes_overlay: true,

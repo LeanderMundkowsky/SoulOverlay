@@ -23,7 +23,7 @@ import { useGameStore } from "./stores/game";
 import { useSettingsStore } from "./stores/settings";
 import { useFavoritesStore } from "./stores/favorites";
 import { useDetailsStore } from "./stores/details";
-import { useUserStore } from "./stores/user";
+import { useBackendStore } from "./stores/backend";
 import { useWatchlistStore } from "./stores/watchlist";
 import { useInventoryStore } from "./stores/inventory";
 import { useLogWatcher } from "./composables/useLogWatcher";
@@ -32,12 +32,13 @@ import { matchesHotkey } from "./composables/useHotkeyMatch";
 import { useDragDrop } from "./composables/useDragDrop";
 import UpdateBanner from "./components/ui/UpdateBanner.vue";
 import UpdateModal from "./components/ui/UpdateModal.vue";
+import AuthModal from "./components/ui/AuthModal.vue";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
 const favoritesStore = useFavoritesStore();
 const detailsStore = useDetailsStore();
-const userStore = useUserStore();
+const backendStore = useBackendStore();
 const watchlistStore = useWatchlistStore();
 const inventoryStore = useInventoryStore();
 const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY, ghostLabel } = useDragDrop();
@@ -46,19 +47,13 @@ const showSettings = ref(false);
 const showDebug = ref(false);
 const showKeybinds = ref(false);
 const showUpdateModal = ref(false);
+const showAuthModal = ref(false);
 const showFavorites = ref(true);
 const showWatchlist = ref(false);
 const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
 
-const isAuthenticated = computed(() =>
-  settingsStore.settings.uex_secret_key.length > 0
-);
-const userAvatarUrl = computed(() => {
-  const avatar = userStore.profile?.avatar;
-  if (!avatar) return null;
-  return avatar.replace(/^https?:\/\//, "http://uex-img.localhost/");
-});
+const isLoggedIn = computed(() => backendStore.isLoggedIn);
 
 // Panel widths — loaded from settings, updated on drag
 const leftPanelPx = ref(280);
@@ -130,6 +125,7 @@ onMounted(async () => {
   document.documentElement.style.fontSize = settingsStore.settings.font_size + "px";
   await favoritesStore.loadFavorites();
   await watchlistStore.loadWatchlist();
+  await backendStore.initialize();
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
   document.addEventListener("click", handleExternalLinks);
@@ -313,17 +309,33 @@ watch(isDragActive, (active) => {
     <div class="relative w-full h-full flex flex-col">
       <UpdateBanner @open-update-modal="showUpdateModal = true" />
 
+      <!-- Backend unreachable banner -->
+      <div
+        v-if="backendStore.showStatusBanner"
+        class="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-300 text-xs"
+      >
+        <span>⚠ SoulOverlay backend is unreachable. Some features may be unavailable.</span>
+        <button
+          class="text-yellow-300/50 hover:text-yellow-300 transition-colors shrink-0"
+          @click="backendStore.dismissStatusBanner()"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
       <TabBar :active-tab="activeTab"
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         :show-watchlist="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
-        :is-authenticated="isAuthenticated"
-        :user-avatar-url="userAvatarUrl"
+        :is-logged-in="isLoggedIn"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
         @toggle-debug="onToggleDebug"
         @toggle-favorites="onToggleFavorites"
-        @toggle-watchlist="onToggleWatchlist" />
+        @toggle-watchlist="onToggleWatchlist"
+        @open-auth-modal="showAuthModal = true" />
 
       <!-- Main content + side panels -->
       <div class="flex-1 flex overflow-hidden">
@@ -407,6 +419,9 @@ watch(isDragActive, (active) => {
 
     <!-- Update modal -->
     <UpdateModal v-if="showUpdateModal" @close="showUpdateModal = false" />
+
+    <!-- Auth modal -->
+    <AuthModal v-if="showAuthModal" @close="showAuthModal = false" />
   </div>
 </template>
 
