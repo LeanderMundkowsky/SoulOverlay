@@ -98,23 +98,6 @@ function resetDefaults() {
         </button>
       </div>
 
-      <!-- UEX API Key -->
-      <div>
-        <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">
-          UEX API Key
-        </label>
-        <input
-          v-model="form.uex_api_key"
-          type="password"
-          placeholder="Enter your UEX Corp API key"
-          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors"
-        />
-        <p class="text-white/30 text-xs mt-1">
-          Get your API key from
-          <a href="https://uexcorp.space" class="text-blue-400/60 hover:text-blue-400">uexcorp.space</a>
-        </p>
-      </div>
-
       <!-- UEX Secret Key -->
       <div>
         <label class="block text-white/60 text-xs font-medium uppercase tracking-wider mb-1.5">

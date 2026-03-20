@@ -24,7 +24,6 @@ even in exclusive-foreground games.
 
 - Windows 10/11 x64
 - Star Citizen in **Borderless Windowed** mode (for SC overlay use)
-- A [UEX Corp](https://uexcorp.space) API key for price lookups (free to obtain)
 
 ---
 
@@ -32,7 +31,6 @@ even in exclusive-foreground games.
 
 Download the latest release from the [Releases](../../releases) page:
 
-- **`SoulOverlay_x.x.x_x64_portable.exe`** — single standalone executable, no install needed
 - **`SoulOverlay_x.x.x_x64-setup.exe`** — NSIS installer
 
 > **Note:** Windows Smart App Control or SmartScreen may block unsigned executables.
@@ -43,9 +41,7 @@ Download the latest release from the [Releases](../../releases) page:
 
 ## Developer Setup
 
-### Option A — Native Windows (recommended, simplest)
-
-The easiest path: clone the repo on Windows and build natively. No cross-compilation needed.
+Clone the repo on Windows and build natively.
 
 **1. Install prerequisites**
 
@@ -71,7 +67,29 @@ cd SoulOverlay
 npm install
 ```
 
-**3. Dev server**
+**3. Dev environment variables**
+
+Two compile-time env vars must be set before running `npm run tauri dev` or building:
+
+| Variable | Description | Dev default |
+|---|---|---|
+| `BACKEND_URL` | SoulOverlay backend base URL | `http://localhost:8000` |
+| `SOUL_APP_TOKEN` | Static auth token (must match backend) | any dev token |
+
+Copy the example config and fill it in:
+
+```powershell
+Copy-Item src-tauri\.cargo\config.toml.example src-tauri\.cargo\config.toml
+# Edit the file — set BACKEND_URL and SOUL_APP_TOKEN to match your local backend
+```
+
+Or set them inline:
+
+```powershell
+$env:BACKEND_URL="http://localhost:8000"; $env:SOUL_APP_TOKEN="dev-token"
+```
+
+**4. Dev server**
 
 ```powershell
 npm run tauri dev
@@ -79,67 +97,13 @@ npm run tauri dev
 
 This compiles the Rust backend and starts a Vite dev server with hot-reload for the frontend.
 
-**4. Production build**
+**5. Production build**
 
 ```powershell
 npm run tauri build
 ```
 
-Output:
-- `src-tauri\target\release\bundle\portable\SoulOverlay_*_x64_portable.exe`
-- `src-tauri\target\release\bundle\nsis\SoulOverlay_*_x64-setup.exe`
-
----
-
-### Option B — WSL2 (Arch Linux) with cross-compilation
-
-Develop in WSL2, cross-compile to Windows MSVC using `cargo-xwin`.
-
-**1. System dependencies (run once)**
-
-```bash
-# Tauri Linux build tooling + GTK/WebKit (needed for `cargo check` and `tauri dev`)
-sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl \
-  appmenu-gtk-module libayatana-appindicator librsvg xdotool
-
-# Rust Windows MSVC target
-rustup target add x86_64-pc-windows-msvc
-
-# cargo-xwin (downloads MSVC SDK automatically on first use, ~2 GB cached in ~/.xwin)
-cargo install cargo-xwin
-
-# Node dependencies
-npm install
-```
-
-**2. Dev server** (requires WSLg or an X11 server for the window)
-
-```bash
-npm run tauri dev
-```
-
-**3. Cross-compile to Windows .exe**
-
-```bash
-# Recommended: Tauri CLI handles frontend build + Rust compile in one step
-npm run tauri build -- --target x86_64-pc-windows-msvc
-
-# Or: build frontend first, then cross-compile Rust separately
-npm run build
-cargo xwin build --release --target x86_64-pc-windows-msvc
-```
-
-> **Important:** Running `cargo xwin build` alone does **not** rebuild the Vue frontend.
-> Always run `npm run build` first (or use `npm run tauri build`) to ensure the latest
-> frontend is embedded in the binary.
-
-**4. Run on Windows from WSL2**
-
-```bash
-# Copy the portable exe to your Windows desktop, then launch it
-cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/portable/*.exe /mnt/c/Users/$USER/Desktop/
-pwsh.exe -Command "Start-Process 'C:\Users\$env:USERNAME\Desktop\SoulOverlay_0.1.0_x64_portable.exe'"
-```
+Output: `src-tauri\target\release\bundle\nsis\SoulOverlay_*_x64-setup.exe`
 
 ---
 
@@ -151,8 +115,9 @@ pwsh.exe -Command "Start-Process 'C:\Users\$env:USERNAME\Desktop\SoulOverlay_0.1
 | Production build | `npm run tauri build` |
 | Frontend type-check | `npx vue-tsc --noEmit` |
 | Rust type-check (fast) | `cargo check --all-targets --workspace` (from `src-tauri/`) |
-| Cross-compile (WSL2) | `npm run tauri build -- --target x86_64-pc-windows-msvc` |
 | Flush cache (dev utility) | `npm run flush-cache` |
+| Bump version (all files) | `npm run bump patch` / `minor` / `major` / `1.2.3` |
+| Verify versions match | `npm run check-version` |
 
 ---
 
@@ -210,8 +175,28 @@ and creates a **draft** release with the installer and `latest.json` update mani
 **Publish release**. Once published, the auto-updater endpoint goes live and existing installs
 will see the update on next launch.
 
-> **Required secrets:** `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-> must be configured in the repository's GitHub Actions secrets.
+> **Required GitHub secrets and variables:**
+> - `TAURI_SIGNING_PRIVATE_KEY` — Ed25519 private key for installer signing (secret)
+> - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — passphrase for the signing key (secret)
+> - `SOUL_APP_TOKEN` — static app token baked into the binary (secret)
+> - `BACKEND_URL` — SoulOverlay backend base URL, e.g. `https://overlay.soulreturns.com` (variable)
+
+---
+
+## Backend Integration
+
+SoulOverlay fetches a shared UEX Corp API key from the developer-controlled backend at startup.
+This means users don't need to register their own UEX application — price lookups work out of
+the box. Only the personal **UEX Secret Key** (for fleet and profile features) requires
+per-user configuration.
+
+The backend is a Symfony REST API at `https://overlay.soulreturns.com`. On startup, the app
+calls `GET /api/config` with an `X-Soul-App-Token` header (baked into the binary at compile
+time). The response provides the shared UEX API key, which is stored in memory and used for
+all price lookups. If the backend is unreachable, public UEX data still works (UEX allows
+unauthenticated requests at a lower rate limit).
+
+**Debug panel** shows `Fetched` (green) or `Unavailable` (yellow) for the API key status.
 
 ---
 
@@ -222,7 +207,6 @@ On first launch, open settings from the gear icon or the system tray → **Setti
 | Setting | Description |
 |---|---|
 | **Toggle Hotkey** | Global hotkey to show/hide the overlay (default: `F6`) |
-| **UEX API Key** | Your UEX Corp API key — required for price lookups |
 | **UEX Secret Key** | Optional — enables fleet and user profile features |
 | **Game Log Path** | Path to `game.log` — leave empty to use the default RSI location |
 | **Overlay Opacity** | Background transparency (does not affect UI text/buttons) |
@@ -262,21 +246,28 @@ SoulOverlay/
     ├── src/
     │   ├── lib.rs                  # Module declarations, tauri_specta builder, collect_commands!
     │   ├── main.rs                 # Entry point — calls lib::run()
-    │   ├── state.rs                # AppState (all Mutex-wrapped fields)
-    │   ├── app_setup.rs            # .setup() hook, prefetch, background refresh timer
+    │   ├── constants.rs            # Compile-time BACKEND_URL, SOUL_APP_TOKEN (injected by build.rs)
+    │   ├── state.rs                # AppState (all Mutex-wrapped fields, including fetched_api_key)
+    │   ├── app_setup.rs            # .setup() hook, API key fetch, prefetch, background refresh timer
     │   ├── settings.rs             # Settings struct (single source of truth for defaults)
     │   ├── config.rs               # AppPaths: centralized %APPDATA% path resolution
     │   ├── database.rs             # SQLite WAL mode, schema migrations
     │   ├── cache_store.rs          # Dual-layer cache: in-memory HashMap + SQLite (MessagePack)
+    │   ├── activity.rs             # ActivityLog: tracks last user action timestamps
+    │   ├── logging.rs              # fern dual-logger (stderr + file)
+    │   ├── platform.rs             # HWND ↔ isize helpers
     │   ├── window.rs               # Win32 overlay: show/hide, focus management, multi-monitor
-    │   ├── game_tracker.rs         # SC window polling, geometry tracking
+    │   ├── process_tracker.rs      # SC process polling (ToolHelp32), emits sc-window-found/lost
     │   ├── log_watcher.rs          # game.log tail + regex parse
     │   ├── image_proxy.rs          # Async image proxy for UEX photo URLs
     │   ├── tray.rs                 # System tray icon + menu
-    │   ├── hotkey/                  # WH_KEYBOARD_LL global keyboard hook
+    │   ├── hotkey/                 # WH_KEYBOARD_LL global keyboard hook
     │   ├── uex/                    # UEX Corp API client + shared IPC types
+    │   ├── wiki/                   # Star Citizen Wiki API client + types
     │   ├── providers/              # Trait-based data providers (fetch + cache per entity type)
     │   └── commands/               # All #[tauri::command] functions (IPC surface)
+    ├── build.rs                    # Injects BACKEND_URL + SOUL_APP_TOKEN at compile time
+    ├── .cargo/config.toml.example  # Dev env var template (copy → config.toml, gitignored)
     ├── capabilities/default.json
     └── tauri.conf.json
 ```

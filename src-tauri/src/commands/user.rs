@@ -7,20 +7,18 @@ use crate::state::AppState;
 use crate::uex::types::UexUserProfile;
 
 /// Fetch the authenticated user's profile from UEX.
-/// Requires both `uex_api_key` and `uex_secret_key` to be configured.
+/// Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
 #[tauri::command]
 #[specta::specta]
 pub async fn user_get_profile(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<UexUserProfile>, String> {
-    let (api_key, secret_key, settings) = {
+    let api_key = state.fetched_api_key.lock().unwrap().clone();
+    let (secret_key, settings) = {
         let s = state.current_settings.lock().unwrap();
-        (s.uex_api_key.clone(), s.uex_secret_key.clone(), s.clone())
+        (s.uex_secret_key.clone(), s.clone())
     };
 
-    if api_key.is_empty() {
-        return Ok(ApiResponse::err("UEX API key not configured. Set it in Settings."));
-    }
     if secret_key.is_empty() {
         return Ok(ApiResponse::err("UEX secret key not configured. Set it in Settings."));
     }

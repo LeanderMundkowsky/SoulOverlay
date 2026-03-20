@@ -1,0 +1,14 @@
+# Development environment overrides for Cargo builds.
+#
+# To use:
+#   1. Copy this file to src-tauri/.cargo/config.toml
+#   2. Fill in SOUL_APP_TOKEN with the value from your local .env
+#   3. The actual config.toml is gitignored — never commit it
+#
+# These values override what's compiled into the binary at build time.
+# In CI/production, set BACKEND_URL and SOUL_APP_TOKEN as environment variables
+# or GitHub Actions secrets before running `npm run tauri build`.
+
+[env]
+BACKEND_URL = { value = "http://localhost:8000" }
+SOUL_APP_TOKEN = { value = "your-dev-token-here" }

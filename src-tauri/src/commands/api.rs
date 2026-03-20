@@ -62,9 +62,9 @@ impl<T: Serialize> ApiResponse<T> {
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 
-/// Pull the UEX API key from current settings.
+/// Pull the UEX API key from the fetched backend key.
 fn api_key(state: &AppState) -> String {
-    state.current_settings.lock().unwrap().uex_api_key.clone()
+    state.fetched_api_key.lock().unwrap().clone()
 }
 
 /// Search a single collection from cache. Returns (results, is_stale).

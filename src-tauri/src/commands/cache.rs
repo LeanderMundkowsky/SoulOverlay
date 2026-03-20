@@ -36,7 +36,7 @@ pub async fn cache_refresh(
     state: State<'_, AppState>,
 ) -> Result<CacheRefreshResult, String> {
     let settings = state.current_settings.lock().unwrap().clone();
-    let result = refresh_collection_by_name(&collection, &settings.uex_api_key, &settings, &state, "manual").await;
+    let result = refresh_collection_by_name(&collection, &settings, &state, "manual").await;
     Ok(result)
 }
 
@@ -58,7 +58,7 @@ pub async fn cache_refresh_expired(
     }
     let futures: Vec<_> = expired
         .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .map(|key| refresh_collection_by_name(key, &settings, &state, "manual"))
         .collect();
     Ok(futures::future::join_all(futures).await)
 }
@@ -80,7 +80,7 @@ pub async fn cache_refresh_all(
     info!("Refreshing {} catalog collections in parallel: {}", phase1_keys.len(), phase1_keys.join(", "));
     let phase1_futures: Vec<_> = phase1_keys
         .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .map(|key| refresh_collection_by_name(key, &settings, &state, "manual"))
         .collect();
     let mut results = futures::future::join_all(phase1_futures).await;
 
@@ -92,7 +92,7 @@ pub async fn cache_refresh_all(
     info!("Refreshing {} remaining collections in parallel: {}", phase2_keys.len(), phase2_keys.join(", "));
     let phase2_futures: Vec<_> = phase2_keys
         .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, &state, "manual"))
+        .map(|key| refresh_collection_by_name(key, &settings, &state, "manual"))
         .collect();
     results.extend(futures::future::join_all(phase2_futures).await);
     Ok(results)
@@ -101,7 +101,6 @@ pub async fn cache_refresh_all(
 /// Internal helper: refresh a collection by its storage key name.
 pub(crate) async fn refresh_collection_by_name(
     name: &str,
-    api_key: &str,
     settings: &Settings,
     state: &AppState,
     triggered_by: &str,
@@ -131,6 +130,7 @@ pub(crate) async fn refresh_collection_by_name(
         };
     }
 
+    let api_key = state.fetched_api_key.lock().unwrap().clone();
     let secret = if settings.uex_secret_key.is_empty() {
         None
     } else {
@@ -140,7 +140,7 @@ pub(crate) async fn refresh_collection_by_name(
     let ctx = RefreshContext {
         client: &state.uex,
         cache: &state.cache,
-        api_key,
+        api_key: &api_key,
         secret_key: secret,
         settings,
     };
@@ -205,7 +205,7 @@ pub async fn prefetch_all(state: &AppState) {
     }
     let phase1_futures: Vec<_> = phase1_keys
         .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
+        .map(|key| refresh_collection_by_name(key, &settings, state, "startup"))
         .collect();
     for result in futures::future::join_all(phase1_futures).await {
         if !result.ok {
@@ -228,7 +228,7 @@ pub async fn prefetch_all(state: &AppState) {
         );
         if needs_hierarchy && !state.cache.is_expired("locations") {
             info!("Terminal hierarchy missing — forcing locations refresh");
-            let r = refresh_collection_by_name("locations", &settings.uex_api_key, &settings, state, "startup").await;
+            let r = refresh_collection_by_name("locations", &settings, state, "startup").await;
             if !r.ok {
                 if let Some(e) = &r.error {
                     error!("Terminal hierarchy refresh failed: {}", e);
@@ -259,7 +259,7 @@ pub async fn prefetch_all(state: &AppState) {
             );
             if needs_index && !state.cache.is_expired(name) {
                 info!("Terminal index missing for '{}' — forcing refresh", name);
-                let r = refresh_collection_by_name(name, &settings.uex_api_key, &settings, state, "startup").await;
+                let r = refresh_collection_by_name(name, &settings, state, "startup").await;
                 if !r.ok {
                     if let Some(e) = &r.error {
                         error!("Terminal index refresh for '{}' failed: {}", name, e);
@@ -288,7 +288,7 @@ pub async fn prefetch_all(state: &AppState) {
     }
     let phase2_futures: Vec<_> = phase2_keys
         .iter()
-        .map(|key| refresh_collection_by_name(key, &settings.uex_api_key, &settings, state, "startup"))
+        .map(|key| refresh_collection_by_name(key, &settings, state, "startup"))
         .collect();
     for result in futures::future::join_all(phase2_futures).await {
         if !result.ok {
@@ -323,7 +323,7 @@ pub(crate) async fn guarded_refresh(state: &AppState, collection: &Collection) -
         return false;
     }
     let settings = state.current_settings.lock().unwrap().clone();
-    let result = refresh_collection_by_name(&key, &settings.uex_api_key, &settings, state, "timer").await;
+    let result = refresh_collection_by_name(&key, &settings, state, "timer").await;
     release_refresh(state, &key);
     if !result.ok {
         if let Some(e) = &result.error {

@@ -77,8 +77,10 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn background prefetch of cached collections.
     // Uses a separate tokio task so it doesn't block the UI startup.
+    // First fetches the UEX API key from the SoulOverlay backend, then prefetches caches.
     let prefetch_handle = handle.clone();
     tauri::async_runtime::spawn(async move {
+        fetch_and_store_api_key(&prefetch_handle).await;
         info!("Starting background cache prefetch...");
         let state = prefetch_handle.state::<AppState>();
         commands::cache::prefetch_all(&state).await;
@@ -153,7 +155,50 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Show a brief "Press {hotkey} to toggle SoulOverlay" hint at the top of the screen.
+/// Fetch the UEX API key from the SoulOverlay backend and store it in AppState.
+/// Silently proceeds with an empty key if the backend is unreachable or returns an error.
+async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
+    use crate::constants::{BACKEND_CONFIG_ENDPOINT, BACKEND_URL, SOUL_APP_TOKEN};
+    use tauri::Manager;
+
+    let url = format!("{}{}", BACKEND_URL, BACKEND_CONFIG_ENDPOINT);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_default();
+
+    match client
+        .get(&url)
+        .header("X-Soul-App-Token", SOUL_APP_TOKEN)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if let Some(key) = json["data"]["uex_api_key"].as_str() {
+                        if !key.is_empty() {
+                            let state = handle.state::<AppState>();
+                            *state.fetched_api_key.lock().unwrap() = key.to_string();
+                            info!("UEX API key fetched from backend successfully");
+                            return;
+                        }
+                    }
+                    error!("Backend config response missing uex_api_key");
+                }
+                Err(e) => error!("Failed to parse backend config response: {}", e),
+            }
+        }
+        Ok(resp) => {
+            error!("Backend returned {} for config endpoint", resp.status());
+        }
+        Err(e) => {
+            info!("Backend unreachable, proceeding without UEX API key: {}", e);
+        }
+    }
+}
+
+
 /// Auto-closes after ~7.5s (the CSS animation completes its fade-out at 7s).
 fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
     use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};

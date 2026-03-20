@@ -48,6 +48,19 @@ No ESLint, Prettier, Vitest, or `#[cfg(test)]` suites exist. Quality is enforced
 `vue-tsc` (`strict: true`, `noUnusedLocals`, `noUnusedParameters`) and `cargo check`.
 Fix all type errors. Never use `any` or `@ts-ignore`. Verify manually by running the app.
 
+**Dev build environment** — two compile-time env vars control backend integration:
+
+```powershell
+# Copy the example and fill in your local values (this file is gitignored)
+Copy-Item src-tauri\.cargo\config.toml.example src-tauri\.cargo\config.toml
+# Edit config.toml: set BACKEND_URL=http://localhost:8000 and SOUL_APP_TOKEN=<dev-token>
+```
+
+Or set directly in your terminal session before building:
+```powershell
+$env:BACKEND_URL="http://localhost:8000"; $env:SOUL_APP_TOKEN="dev-token"; npm run tauri dev
+```
+
 ## Logging
 
 Logs: `%APPDATA%\SoulOverlay\soul-overlay.log` (overwritten each launch) + stderr.
@@ -80,6 +93,7 @@ src/                                 # Vue 3 + TypeScript frontend
 src-tauri/src/                       # Rust backend
 ├── lib.rs                           # Module declarations + tauri_specta::Builder + collect_commands!
 ├── main.rs                          # Entry point — calls lib::run()
+├── constants.rs                     # Compile-time BACKEND_URL, SOUL_APP_TOKEN, BACKEND_CONFIG_ENDPOINT
 ├── config.rs                        # AppPaths: centralized path resolution + settings I/O
 ├── state.rs                         # AppState struct (all Mutex-wrapped fields + AppPaths + UexClient)
 ├── app_setup.rs                     # .setup() initialization sequence + background prefetch + 30s timer
@@ -152,6 +166,35 @@ launch via `to_latest()`, which tracks applied versions internally and only exec
   rename new. Wrap in a single migration to keep it atomic.
 - User data (favorites, watchlist, inventory) must **never** be dropped. Migrations are additive.
 
+## SoulOverlay Backend Integration
+
+The app fetches a shared UEX API key from the developer's Symfony backend at startup so users
+don't need to register their own UEX application.
+
+**`src-tauri/src/constants.rs`** — compile-time constants:
+- `BACKEND_URL` — base URL, defaults to `https://overlay.soulreturns.com` (override via env var)
+- `SOUL_APP_TOKEN` — static app token sent as `X-Soul-App-Token` header (override via env var)
+- `BACKEND_CONFIG_ENDPOINT` — `/api/config`
+
+**Flow** (`app_setup.rs → fetch_and_store_api_key`):
+1. `GET {BACKEND_URL}/api/config` with `X-Soul-App-Token: {SOUL_APP_TOKEN}` header
+2. On success: parse `{ "data": { "uex_api_key": "..." } }` → store in `state.fetched_api_key`
+3. On failure: log info, proceed with empty string (public UEX data still works at higher rate limit)
+
+**`AppState.fetched_api_key: Mutex<String>`** — runtime-only, never persisted. Empty string
+means "key unavailable". All UEX HTTP calls read this via `state.fetched_api_key.lock()`.
+The `uex_api_key` field no longer exists on `Settings` — users only configure `uex_secret_key`.
+
+**Fleet / user profile** require `uex_secret_key` (personal key, per-user) AND benefit from
+the fetched API key. If the backend is unreachable, fleet/profile become unavailable.
+
+**Debug panel** shows `fetched_api_key_set: bool` — green "fetched" if backend responded, yellow
+"unavailable" otherwise.
+
+**Dev workflow**: copy `src-tauri/.cargo/config.toml.example` → `src-tauri/.cargo/config.toml`
+(gitignored) and fill in `BACKEND_URL=http://localhost:8000` + `SOUL_APP_TOKEN=<dev-token>`.
+The backend's `SOUL_APP_TOKEN` env var must match the compiled-in value.
+
 ## Auto-Update System
 
 The app uses `tauri-plugin-updater` with Ed25519 signing and GitHub Releases as the update
@@ -182,11 +225,18 @@ Two GitHub Actions workflows in `.github/workflows/`:
 **`release.yml`** — triggers on `v*` tag push. Builds the NSIS installer via
 `tauri-apps/tauri-action@v0`, signs with Ed25519, generates `latest.json` update manifest,
 and creates a **draft** GitHub Release. Required secrets: `TAURI_SIGNING_PRIVATE_KEY`,
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `SOUL_APP_TOKEN`. Required variable: `BACKEND_URL`.
+Pass them to the build step:
+```yaml
+env:
+  BACKEND_URL: ${{ vars.BACKEND_URL }}
+  SOUL_APP_TOKEN: ${{ secrets.SOUL_APP_TOKEN }}
+```
 
 **`cache.yml`** — triggers on pushes to `main` when `Cargo.toml`, `Cargo.lock`, or
 `package-lock.json` change. Builds the frontend then runs `cargo build --release` to fully
-warm the Rust compilation cache on `main`. Both workflows use `shared-key: "release"` and
+warm the Rust compilation cache on `main`. Needs the same `BACKEND_URL` variable and
+`SOUL_APP_TOKEN` secret as `release.yml`.Both workflows use `shared-key: "release"` and
 `add-rust-environment-hash-key: false` in `swatinem/rust-cache` so the tag-triggered release
 build can restore from main's cache regardless of Rust version changes. (GitHub scopes caches
 by ref; tag caches are not shared between tags, only the default branch cache is universally
@@ -218,6 +268,8 @@ typed commands from `src/bindings.ts`.
 3. `database::init()` — SQLite WAL mode + schema migrations
 4. `AppState` construction → `.manage()`
 5. `.setup()` → `app_setup::initialize()` → spawns prefetch thread + 30s timer
+   - Prefetch task first calls `fetch_and_store_api_key()` (GET `/api/config` on the
+     SoulOverlay backend, stores result in `state.fetched_api_key`), then runs `prefetch_all`
 6. Frontend: `loadSettings()` in `main.ts` completes **before** `app.mount("#app")`
 
 ## Provider System
@@ -261,7 +313,10 @@ source of truth** — no TypeScript interfaces are defined manually for IPC type
 
 **Key files:**
 - `src/bindings.ts` — auto-generated, DO NOT edit manually. Exports `commands` object
-  and all IPC types (`Settings`, `ApiResponse`, `UexResult`, `PriceEntry`, `Collection`, etc.)
+  and all IPC types (`Settings`, `ApiResponse`, `UexResult`, `PriceEntry`, `Collection`, etc.).
+  **Exception**: if Rust IPC types change and `npm run tauri dev` cannot be run to regenerate,
+  apply the minimal manual edit necessary to unblock `vue-tsc`, then note it in your PR — the
+  file will be overwritten correctly on the next debug-mode run.
 - `src-tauri/src/lib.rs` — `create_specta_builder()` with `collect_commands![]`
 
 **Adding a new Tauri command:**
@@ -335,6 +390,10 @@ and causes a focus-fight loop with fullscreen games (rapid focused/unfocused cyc
 `settings.rs` defines `Settings`, `Keybinds`, `LayoutWidths` with `impl Default` — these
 are the **only** definitions. The frontend gets defaults via `commands.getDefaultSettings()`
 at startup. **Do not duplicate default values in TypeScript.**
+
+`Settings` no longer contains `uex_api_key` — the UEX API key is fetched from the backend
+at startup and stored in `AppState.fetched_api_key`. Users only configure `uex_secret_key`
+(required for fleet/profile features).
 
 Settings are loaded from Rust in `main.ts` **before** `app.mount()` to guarantee all
 components see valid data. The store uses `ref({} as Settings)` which is safe because

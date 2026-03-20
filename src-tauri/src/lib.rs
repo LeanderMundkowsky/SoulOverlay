@@ -3,6 +3,7 @@ mod app_setup;
 mod cache_store;
 mod commands;
 pub mod config;
+pub mod constants;
 mod database;
 mod hotkey;
 mod image_proxy;
@@ -59,6 +60,7 @@ pub fn run() {
         hotkey_handle: Mutex::new(None),
         refreshing_collections: Mutex::new(std::collections::HashSet::new()),
         activity: std::sync::Arc::new(Mutex::new(activity::ActivityLog::new())),
+        fetched_api_key: Mutex::new(String::new()),
     };
 
     // Build the tauri-specta invoke handler + export TS bindings in dev mode.

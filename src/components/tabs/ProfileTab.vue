@@ -9,16 +9,14 @@ import { proxyImageUrl } from "@/utils/imageProxy";
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
 
-const hasApiKey = ref(false);
 const hasSecretKey = ref(false);
 const canFetch = ref(false);
 
 watch(
   () => settingsStore.settings,
   (s) => {
-    hasApiKey.value = s.uex_api_key.length > 0;
     hasSecretKey.value = s.uex_secret_key.length > 0;
-    canFetch.value = hasApiKey.value && hasSecretKey.value;
+    canFetch.value = hasSecretKey.value;
   },
   { immediate: true, deep: true },
 );
@@ -99,9 +97,9 @@ function formatTimestamp(ts: string | null | undefined): string {
   <div class="p-6 max-w-3xl mx-auto w-full space-y-4">
     <!-- Missing keys warnings -->
     <AlertBanner
-      v-if="!hasApiKey"
+      v-if="!hasSecretKey"
       variant="warning"
-      message="UEX API key not configured. Set it in Settings → UEX API Key."
+      message="UEX Secret Key not configured. Set it in Settings → UEX Secret Key."
     />
     <AlertBanner
       v-if="!hasSecretKey"

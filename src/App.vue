@@ -52,7 +52,6 @@ const scDetected = ref(false);
 const searchTabRef = ref<InstanceType<typeof SearchTab> | null>(null);
 
 const isAuthenticated = computed(() =>
-  settingsStore.settings.uex_api_key.length > 0 &&
   settingsStore.settings.uex_secret_key.length > 0
 );
 const userAvatarUrl = computed(() => {

@@ -31,6 +31,9 @@ pub struct AppState {
     pub refreshing_collections: Mutex<HashSet<String>>,
     /// Activity log: fetch events + last user action + bg timer tracking.
     pub activity: Arc<Mutex<ActivityLog>>,
+    /// UEX API key fetched from the SoulOverlay backend at startup.
+    /// Empty string if the backend was unreachable.
+    pub fetched_api_key: Mutex<String>,
 }
 
 impl AppState {

@@ -13,6 +13,9 @@ src-tauri/target/
 .env.*
 !.env.example
 
+# Cargo local dev config (contains BACKEND_URL + SOUL_APP_TOKEN, never commit)
+src-tauri/.cargo/config.toml
+
 # OS files
 .DS_Store
 Thumbs.db

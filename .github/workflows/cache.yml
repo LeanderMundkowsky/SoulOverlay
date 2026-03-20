@@ -44,3 +44,6 @@ jobs:
       - name: Build Rust (warm cache)
         run: cargo build --release
         working-directory: src-tauri
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          SOUL_APP_TOKEN: ${{ secrets.SOUL_APP_TOKEN }}

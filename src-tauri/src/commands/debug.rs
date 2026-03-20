@@ -44,7 +44,8 @@ pub struct DebugInfo {
     pub hotkey: String,
     pub log_path: Option<String>,
     pub overlay_opacity: f32,
-    pub uex_api_key_set: bool,
+    /// Whether the UEX API key was successfully fetched from the SoulOverlay backend.
+    pub fetched_api_key_set: bool,
     pub esc_closes_overlay: bool,
     pub reset_on_open: bool,
     pub max_search_results: u32,
@@ -132,7 +133,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         hotkey: settings.hotkey,
         log_path: settings.log_path,
         overlay_opacity: settings.overlay_opacity,
-        uex_api_key_set: !settings.uex_api_key.is_empty(),
+        fetched_api_key_set: !state.fetched_api_key.lock().unwrap().is_empty(),
         esc_closes_overlay: settings.esc_closes_overlay,
         reset_on_open: settings.reset_on_open,
         max_search_results: settings.max_search_results,

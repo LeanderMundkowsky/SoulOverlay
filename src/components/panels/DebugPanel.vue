@@ -206,7 +206,7 @@ function fmtMs(ms: number): string {
           </div>
           <div class="flex justify-between gap-1">
             <span class="text-white/40">API key</span>
-            <span :class="info.uex_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.uex_api_key_set ? "set" : "unset" }}</span>
+            <span :class="info.fetched_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.fetched_api_key_set ? "fetched" : "unavailable" }}</span>
           </div>
           <div class="flex justify-between gap-1">
             <span class="text-white/40">ESC close</span>

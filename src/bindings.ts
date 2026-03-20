@@ -327,7 +327,7 @@ async isFavorite(id: string, kind: string) : Promise<Result<boolean, string>> {
 },
 /**
  * Fetch the authenticated user's fleet from UEX.
- * Requires both `uex_api_key` and `uex_secret_key` to be configured.
+ * Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
  */
 async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
     try {
@@ -339,7 +339,7 @@ async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
 },
 /**
  * Fetch the authenticated user's profile from UEX.
- * Requires both `uex_api_key` and `uex_secret_key` to be configured.
+ * Requires `uex_secret_key` to be configured. The UEX API key is fetched from the backend at startup.
  */
 async userGetProfile() : Promise<Result<ApiResponse<UexUserProfile>, string>> {
     try {
@@ -685,7 +685,11 @@ export type CzShip = { name: string; ship_type: string; image_url: string; wiki_
 /**
  * Comprehensive runtime snapshot returned to the debug panel.
  */
-export type DebugInfo = { sc_detected: boolean; hotkey: string; log_path: string | null; overlay_opacity: number; uex_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
+export type DebugInfo = { sc_detected: boolean; hotkey: string; log_path: string | null; overlay_opacity: number; 
+/**
+ * Whether the UEX API key was successfully fetched from the SoulOverlay backend.
+ */
+fetched_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolean; max_search_results: number; cache_ttls: Partial<{ [key in string]: number }>; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
 /**
  * ISO8601 timestamp of the last background check tick.
  */
@@ -818,10 +822,6 @@ export type Settings = {
  * Global hotkey string (e.g., "Alt+Shift+S")
  */
 hotkey: string; 
-/**
- * UEX Corp API key
- */
-uex_api_key: string; 
 /**
  * UEX Corp secret key (for user-specific endpoints like fleet)
  */

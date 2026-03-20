@@ -56,8 +56,6 @@ impl Default for LayoutWidths {
 pub struct Settings {
     /// Global hotkey string (e.g., "Alt+Shift+S")
     pub hotkey: String,
-    /// UEX Corp API key
-    pub uex_api_key: String,
     /// UEX Corp secret key (for user-specific endpoints like fleet)
     pub uex_secret_key: String,
     /// Optional custom log file path (None = use default)
@@ -85,7 +83,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             hotkey: "F6".to_string(),
-            uex_api_key: String::new(),
             uex_secret_key: String::new(),
             log_path: None,
             overlay_opacity: 0.6,
