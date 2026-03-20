@@ -26,7 +26,7 @@ async function submit() {
 
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="emit('close')">
-    <div class="bg-[#1a1a2e] border border-white/10 rounded-xl w-full max-w-md mx-4 p-6 space-y-4">
+    <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-full max-w-md mx-4 p-6 space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-white font-semibold text-sm uppercase tracking-wider">Create Organization</h2>
         <button @click="emit('close')" class="text-white/40 hover:text-white/80 transition-colors">
@@ -44,7 +44,7 @@ async function submit() {
             type="text"
             maxlength="100"
             placeholder="Iron Wing"
-            class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
+            class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
             @keydown.enter="submit"
           />
         </div>
@@ -55,7 +55,7 @@ async function submit() {
             rows="3"
             maxlength="1000"
             placeholder="Tell people what your org is about..."
-            class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50 resize-none"
+            class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50 resize-none"
           />
         </div>
 
@@ -70,7 +70,7 @@ async function submit() {
         <button
           @click="submit"
           :disabled="!name.trim() || saving"
-          class="px-4 py-2 text-xs bg-teal-500/20 border border-teal-500/40 text-teal-300 rounded-lg hover:bg-teal-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="px-4 py-2 text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
         >
           {{ saving ? "Creating…" : "Create" }}
         </button>

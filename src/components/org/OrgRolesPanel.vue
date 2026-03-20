@@ -86,7 +86,7 @@ async function deleteRole(roleId: number) {
       <div
         v-for="role in orgStore.orgRoles"
         :key="role.id"
-        class="bg-white/5 border rounded-lg p-3 space-y-2"
+        class="bg-[#1a1d24] border rounded-lg p-3 space-y-2"
         :class="role.is_leader ? 'border-yellow-500/30' : 'border-white/10'"
       >
         <div class="flex items-center justify-between">
@@ -116,7 +116,7 @@ async function deleteRole(roleId: number) {
             <span
               v-if="role.is_leader || role.permissions[p.key as keyof typeof role.permissions]"
               class="text-xs px-2 py-0.5 rounded-full"
-              :class="role.is_leader ? 'bg-yellow-500/10 text-yellow-400/70' : 'bg-teal-500/10 text-teal-400/70'"
+              :class="role.is_leader ? 'bg-[#2a2210] text-yellow-400/70' : 'bg-[#0d1a18] text-teal-400/70'"
             >{{ p.label }}</span>
           </template>
           <span
@@ -129,7 +129,7 @@ async function deleteRole(roleId: number) {
 
     <!-- Role edit/create dialog -->
     <div v-if="roleDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="roleDialog = null">
-      <div class="bg-[#1a1a2e] border border-white/10 rounded-xl w-full max-w-md mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-full max-w-md mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 class="text-white font-semibold text-sm uppercase tracking-wider">
           {{ roleDialog.mode === "create" ? "New Role" : "Edit Role" }}
         </h3>
@@ -142,7 +142,7 @@ async function deleteRole(roleId: number) {
               type="text"
               maxlength="80"
               placeholder="Commander"
-              class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
+              class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
             />
           </div>
 
@@ -154,7 +154,7 @@ async function deleteRole(roleId: number) {
                   type="checkbox"
                   :checked="roleDialog.permissions[p.key]"
                   @change="roleDialog!.permissions[p.key] = ($event.target as HTMLInputElement).checked"
-                  class="mt-0.5 rounded border-white/20 bg-white/5 text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                  class="mt-0.5 rounded border-white/20 bg-[#111318] text-teal-500 focus:ring-teal-500/30 cursor-pointer"
                 />
                 <div>
                   <div class="text-xs text-white group-hover:text-white/80">{{ p.label }}</div>
@@ -169,7 +169,7 @@ async function deleteRole(roleId: number) {
             <input
               v-model.number="roleDialog.sortOrder"
               type="number"
-              class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
+              class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
             />
           </div>
 
@@ -181,7 +181,7 @@ async function deleteRole(roleId: number) {
           <button
             @click="saveRole"
             :disabled="!roleDialog.name.trim() || saving"
-            class="px-4 py-2 text-xs bg-teal-500/20 border border-teal-500/40 text-teal-300 rounded-lg hover:bg-teal-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            class="px-4 py-2 text-xs bg-teal-600 hover:bg-teal-500 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >{{ saving ? "Saving…" : "Save" }}</button>
         </div>
       </div>

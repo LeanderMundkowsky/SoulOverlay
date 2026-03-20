@@ -38,23 +38,23 @@ async function reject(appId: number) {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="text-xs text-white/50 uppercase tracking-wider">Applications</h3>
     </div>
 
     <AlertBanner v-if="actionError" variant="error" :message="actionError" />
 
-    <div v-if="!canView" class="text-xs text-white/30 py-4">You don't have permission to view applications.</div>
+    <div v-if="!canView" class="text-xs text-white/30 py-2">You don't have permission to view applications.</div>
     <template v-else>
       <LoadingSpinner v-if="orgStore.loadingApplications" class="py-8" />
       <AlertBanner v-else-if="orgStore.applicationsError" variant="error" :message="orgStore.applicationsError" />
-      <div v-else-if="!orgStore.orgApplications.length" class="text-xs text-white/30 py-4">No pending applications.</div>
+      <div v-else-if="!orgStore.orgApplications.length" class="text-xs text-white/30 py-2">No pending applications.</div>
       <div v-else class="space-y-2">
         <div
           v-for="app in orgStore.orgApplications"
           :key="app.id"
-          class="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2"
+          class="bg-[#111318] border border-white/10 rounded-lg p-3 space-y-2"
         >
           <div class="flex items-center justify-between">
             <div>
@@ -64,7 +64,7 @@ async function reject(appId: number) {
             <div v-if="canManage" class="flex items-center gap-2">
               <button
                 @click="toggleAccept(app.id)"
-                class="text-xs px-2 py-1 bg-teal-500/10 border border-teal-500/30 text-teal-400 rounded hover:bg-teal-500/20 transition-colors"
+                class="text-xs px-2 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded transition-colors"
               >Accept</button>
               <button
                 @click="reject(app.id)"
@@ -77,14 +77,14 @@ async function reject(appId: number) {
           <div v-if="acceptingId === app.id" class="flex items-center gap-2 pt-1">
             <select
               v-model="acceptRoleId[app.id]"
-              class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+              class="flex-1 bg-[#111318] border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
             >
-              <option :value="null" class="bg-[#1a1a2e]">Assign role later</option>
-              <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1a2e]">{{ r.name }}</option>
+              <option :value="null" class="bg-[#1a1d24]">Assign role later</option>
+              <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
             </select>
             <button
               @click="accept(app.id)"
-              class="text-xs px-3 py-1.5 bg-teal-500/20 border border-teal-500/40 text-teal-300 rounded hover:bg-teal-500/30 transition-colors"
+              class="text-xs px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded transition-colors"
             >Confirm</button>
           </div>
         </div>

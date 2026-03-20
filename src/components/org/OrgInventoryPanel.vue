@@ -235,7 +235,7 @@ function slugIcon(slug: string): string {
       v-model="searchQuery"
       type="text"
       placeholder="Search items, locations, collections..."
-      class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
+      class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
     />
 
     <LoadingSpinner v-if="orgStore.loadingInventory && entries.length === 0" class="py-12" />
@@ -291,7 +291,7 @@ function slugIcon(slug: string): string {
               v-model="newCollName"
               placeholder="New..."
               @keydown.enter="createCollection"
-              class="flex-1 min-w-0 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/20 focus:outline-none"
+              class="flex-1 min-w-0 bg-[#111318] border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/20 focus:outline-none"
             />
             <button @click="createCollection" :disabled="!newCollName.trim()" class="text-xs px-1.5 py-1 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-30 text-white">+</button>
           </div>

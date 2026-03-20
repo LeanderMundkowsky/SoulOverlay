@@ -91,7 +91,7 @@ const transferTargetName = computed(() =>
     <!-- Transfer Leadership confirm overlay -->
     <div
       v-if="showTransferConfirm"
-      class="bg-yellow-500/10 border border-yellow-500/40 rounded-lg p-4 space-y-3"
+      class="bg-[#2a2210] border border-yellow-500/40 rounded-lg p-4 space-y-3"
     >
       <h4 class="text-sm text-yellow-300 font-medium">Transfer Leadership to {{ transferTargetName }}?</h4>
       <p class="text-xs text-white/50">You will lose the leader role. This cannot be undone without the new leader's cooperation.</p>
@@ -99,10 +99,10 @@ const transferTargetName = computed(() =>
         <label class="block text-xs text-white/40 mb-1">Assign yourself a role after transfer <span class="text-white/20">(optional)</span></label>
         <select
           v-model="transferNewRoleId"
-          class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none w-full"
+          class="bg-[#111318] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none w-full"
         >
-          <option :value="null" class="bg-[#1a1a2e]">Default (first non-leader role)</option>
-          <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1a2e]">{{ r.name }}</option>
+          <option :value="null" class="bg-[#1a1d24]">Default (first non-leader role)</option>
+          <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
         </select>
       </div>
       <AlertBanner v-if="transferError" variant="error" :message="transferError" />
@@ -110,7 +110,7 @@ const transferTargetName = computed(() =>
         <button
           @click="confirmTransfer"
           :disabled="transferring"
-          class="text-xs px-4 py-2 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="text-xs px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >{{ transferring ? "Transferring…" : "Confirm Transfer" }}</button>
         <button
           @click="showTransferConfirm = false"
@@ -121,28 +121,28 @@ const transferTargetName = computed(() =>
     </div>
 
     <!-- Invite form -->
-    <div v-if="canInvite" class="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
+    <div v-if="canInvite" class="bg-[#1a1d24] border border-white/10 rounded-lg p-4 space-y-3">
       <h4 class="text-xs text-white/50 uppercase tracking-wider">Invite Player</h4>
       <div class="flex gap-2">
         <input
           v-model="inviteUsername"
           type="text"
           placeholder="Username"
-          class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
+          class="flex-1 bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
           @keydown.enter="sendInvite"
         />
         <select
           v-if="orgStore.orgRoles.length"
           v-model="inviteRoleId"
-          class="bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white focus:outline-none"
+          class="bg-[#111318] border border-white/10 rounded-lg px-2 py-2 text-sm text-white focus:outline-none"
         >
-          <option :value="null" class="bg-[#1a1a2e]">No role</option>
-          <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1a2e]">{{ r.name }}</option>
+          <option :value="null" class="bg-[#1a1d24]">No role</option>
+          <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
         </select>
         <button
           @click="sendInvite"
           :disabled="!inviteUsername.trim() || sending"
-          class="px-3 py-2 text-xs bg-teal-500/20 border border-teal-500/40 text-teal-300 rounded-lg hover:bg-teal-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-2 text-xs bg-teal-600 hover:bg-teal-500 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >{{ sending ? "…" : "Invite" }}</button>
       </div>
       <p v-if="inviteError" class="text-xs text-red-400">{{ inviteError }}</p>
@@ -150,23 +150,23 @@ const transferTargetName = computed(() =>
     </div>
 
     <!-- Pending sent invitations -->
-    <div class="space-y-2">
+    <div class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-2">
       <div class="flex items-center justify-between">
         <h4 class="text-xs text-white/50 uppercase tracking-wider">Pending Invitations</h4>
       </div>
       <AlertBanner v-if="cancelError" variant="error" :message="cancelError" />
       <LoadingSpinner v-if="orgStore.loadingOrgInvitations" class="py-4" />
       <AlertBanner v-else-if="orgStore.orgInvitationsError" variant="error" :message="orgStore.orgInvitationsError" />
-      <div v-else-if="!orgStore.orgInvitations.length" class="text-xs text-white/30 py-2">No pending invitations.</div>
+      <div v-else-if="!orgStore.orgInvitations.length" class="text-xs text-white/30 py-1">No pending invitations.</div>
       <div v-else class="space-y-1.5">
         <div
           v-for="inv in orgStore.orgInvitations"
           :key="inv.id"
-          class="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2"
+          class="flex items-center justify-between bg-[#111318] border border-white/10 rounded-lg px-3 py-2"
         >
           <div>
             <span class="text-sm text-white">{{ inv.invited_user.username }}</span>
-            </div>
+          </div>
           <button
             v-if="canInvite"
             @click="cancelInvite(inv.id)"
@@ -177,14 +177,14 @@ const transferTargetName = computed(() =>
     </div>
 
     <!-- Members list -->
-    <div v-if="detail" class="space-y-2">
+    <div v-if="detail" class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-2">
       <h4 class="text-xs text-white/50 uppercase tracking-wider">Members ({{ detail.member_count }})</h4>
       <AlertBanner v-if="changeRoleError" variant="error" :message="changeRoleError" />
       <div class="space-y-1.5">
         <div
           v-for="member in detail.members"
           :key="member.user_id"
-          class="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2"
+          class="flex items-center justify-between bg-[#111318] border border-white/10 rounded-lg px-3 py-2"
         >
           <div class="flex items-center gap-2">
             <span v-if="member.role.is_leader" class="text-yellow-400 text-xs">👑</span>
@@ -204,9 +204,9 @@ const transferTargetName = computed(() =>
               <select
                 :value="member.role.id"
                 @change="changeRole(member.user_id, Number(($event.target as HTMLSelectElement).value))"
-                class="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                class="bg-[#111318] border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none"
               >
-                <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1a2e]">{{ r.name }}</option>
+                <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
               </select>
               <button @click="kickMember(member.user_id)" class="text-xs text-white/30 hover:text-red-400 transition-colors">Kick</button>
             </template>
