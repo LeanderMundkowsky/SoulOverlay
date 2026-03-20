@@ -3,8 +3,10 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useInventoryStore } from "@/stores/inventory";
 import type { InventoryEntry } from "@/stores/inventory";
 import { useBackendStore } from "@/stores/backend";
+import { useOrgStore } from "@/stores/org";
 import InventoryModal from "@/components/ui/InventoryModal.vue";
 import type { ModalMode } from "@/components/ui/InventoryModal.vue";
+import OrgInventoryPanel from "@/components/org/OrgInventoryPanel.vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
 import IconClose from "@/components/icons/IconClose.vue";
 import IconCommodity from "@/components/icons/IconCommodity.vue";
@@ -16,6 +18,10 @@ import AlertBanner from "@/components/ui/AlertBanner.vue";
 
 const inventoryStore = useInventoryStore();
 const backendStore = useBackendStore();
+const orgStore = useOrgStore();
+
+// Scope: null = personal inventory, number = org ID
+const inventoryScope = ref<number | null>(null);
 
 // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -291,6 +297,26 @@ function slugIcon(slug: string): string {
     </div>
 
     <template v-else>
+    <!-- Scope selector (personal / orgs) -->
+    <div v-if="orgStore.myOrgs.length > 0" class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5 self-start">
+      <button
+        @click="inventoryScope = null"
+        class="text-xs px-3 py-1.5 rounded transition-colors"
+        :class="inventoryScope === null ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'"
+      >Personal</button>
+      <button
+        v-for="org in orgStore.myOrgs"
+        :key="org.id"
+        @click="inventoryScope = org.id"
+        class="text-xs px-3 py-1.5 rounded transition-colors"
+        :class="inventoryScope === org.id ? 'bg-teal-500/20 text-teal-300' : 'text-white/40 hover:text-white/70'"
+      >{{ org.name }}</button>
+    </div>
+
+    <!-- Org inventory panel when org scope selected -->
+    <OrgInventoryPanel v-if="inventoryScope !== null" :org-id="inventoryScope" />
+
+    <template v-else>
     <!-- Error -->
     <AlertBanner
       v-if="inventoryStore.error"
@@ -511,6 +537,7 @@ function slugIcon(slug: string): string {
       @close="showModal = false"
       @saved="showModal = false"
     />
+    </template>
     </template>
   </div>
 </template>

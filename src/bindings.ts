@@ -731,6 +731,262 @@ async wikeloToggleCompletion(missionId: string) : Promise<Result<boolean, string
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async orgListMyOrgs() : Promise<Result<OrgSummary[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_my_orgs") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCreate(name: string, description: string | null) : Promise<Result<OrgSummary, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_create", { name, description }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgGet(id: number) : Promise<Result<OrgDetail, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_get", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgUpdate(id: number, name: string | null, description: string | null) : Promise<Result<OrgSummary, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_update", { id, name, description }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgDelete(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_delete", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgListRoles(orgId: number) : Promise<Result<OrgRole[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_roles", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCreateRole(orgId: number, name: string, permissions: OrgPermissions, sortOrder: number) : Promise<Result<OrgRole, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_create_role", { orgId, name, permissions, sortOrder }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgUpdateRole(orgId: number, roleId: number, name: string | null, permissions: OrgPermissions | null, sortOrder: number | null) : Promise<Result<OrgRole, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_update_role", { orgId, roleId, name, permissions, sortOrder }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgDeleteRole(orgId: number, roleId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_delete_role", { orgId, roleId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgUpdateMember(orgId: number, userId: number, roleId: number) : Promise<Result<OrgMemberInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_update_member", { orgId, userId, roleId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgRemoveMember(orgId: number, userId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_remove_member", { orgId, userId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgTransferLeadership(orgId: number, targetUserId: number, newRoleId: number | null) : Promise<Result<OrgLeadershipTransfer, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_transfer_leadership", { orgId, targetUserId, newRoleId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgListInvitations(orgId: number) : Promise<Result<OrgInvitation[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_invitations", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCreateInvitation(orgId: number, username: string, roleId: number | null) : Promise<Result<OrgInvitation, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_create_invitation", { orgId, username, roleId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCancelInvitation(orgId: number, invId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_cancel_invitation", { orgId, invId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async userListInvitations() : Promise<Result<UserInvitation[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("user_list_invitations") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async userAcceptInvitation(id: number) : Promise<Result<OrgSummary, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("user_accept_invitation", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async userDeclineInvitation(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("user_decline_invitation", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgListApplications(orgId: number) : Promise<Result<OrgApplication[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_applications", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCreateApplication(orgId: number, message: string | null) : Promise<Result<OrgApplication, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_create_application", { orgId, message }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgAcceptApplication(orgId: number, appId: number, roleId: number | null) : Promise<Result<OrgApplication, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_accept_application", { orgId, appId, roleId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgRejectApplication(orgId: number, appId: number) : Promise<Result<OrgApplication, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_reject_application", { orgId, appId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgListInventory(orgId: number) : Promise<Result<OrgInventoryEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_inventory", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgAddInventoryEntry(orgId: number, entityId: string, entityName: string, entityKind: string, locationId: string, locationName: string, locationSlug: string, quantity: number, collectionIds: number[]) : Promise<Result<OrgInventoryEntry, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_add_inventory_entry", { orgId, entityId, entityName, entityKind, locationId, locationName, locationSlug, quantity, collectionIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgUpdateInventoryEntry(orgId: number, entryId: number, entityName: string | null, entityKind: string | null, locationName: string | null, locationSlug: string | null, quantity: number | null, collectionIds: number[] | null) : Promise<Result<OrgInventoryEntry, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_update_inventory_entry", { orgId, entryId, entityName, entityKind, locationName, locationSlug, quantity, collectionIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgDeleteInventoryEntry(orgId: number, entryId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_delete_inventory_entry", { orgId, entryId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgRemoveInventoryQuantity(orgId: number, entryId: number, quantity: number) : Promise<Result<OrgInventoryEntry | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_remove_inventory_quantity", { orgId, entryId, quantity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgTransferInventory(orgId: number, entryId: number, quantity: number, targetLocationId: string, targetLocationName: string, targetLocationSlug: string) : Promise<Result<OrgTransferResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_transfer_inventory", { orgId, entryId, quantity, targetLocationId, targetLocationName, targetLocationSlug }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgListCollections(orgId: number) : Promise<Result<OrgInventoryCollection[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_list_collections", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgCreateCollection(orgId: number, name: string) : Promise<Result<OrgInventoryCollection, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_create_collection", { orgId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgUpdateCollection(orgId: number, collId: number, name: string) : Promise<Result<OrgInventoryCollection, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_update_collection", { orgId, collId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgDeleteCollection(orgId: number, collId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_delete_collection", { orgId, collId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -957,6 +1213,22 @@ search_solo_pct: number }
  * A terminal entry with hierarchy context for the location terminals view.
  */
 export type LocationTerminal = { id: string; name: string; nickname: string; system_name: string; planet_name: string; orbit_name: string }
+export type OrgApplication = { id: number; org_id: number; applicant: OrgUserRef | null; message: string | null; status: string; created_at: string }
+export type OrgDetail = { id: number; name: string; slug: string; description: string | null; members: OrgMemberInfo[]; roles: OrgRole[]; member_count: number; created_at: string }
+export type OrgInventoryCollection = { id: number; name: string; created_by: OrgUserRef }
+export type OrgInventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collections: OrgInventoryCollection[]; created_by: OrgUserRef; added_at: string; updated_at: string }
+export type OrgInvitation = { id: number; org_id: number; org_name: string; invited_user: OrgUserRef; invited_by: OrgUserRef; status: string; created_at: string }
+export type OrgLeadershipTransfer = { new_leader: OrgLeadershipTransferMember; previous_leader: OrgLeadershipTransferMember }
+export type OrgLeadershipTransferMember = { user_id: number; username: string; role: OrgRoleRef }
+export type OrgMemberInfo = { user_id: number; username: string; role: OrgRoleRef }
+export type OrgPermissions = { manage_org: boolean; manage_members: boolean; manage_roles: boolean; invite_members: boolean; view_applications: boolean; manage_applications: boolean; manage_inventory: boolean; manage_collections: boolean }
+export type OrgRef = { id: number; name: string; slug: string }
+export type OrgRole = { id: number; name: string; is_leader: boolean; permissions: OrgPermissions; sort_order: number; member_count: number }
+export type OrgRoleRef = { id: number; name: string; is_leader: boolean }
+export type OrgRoleWithPerms = { id: number; name: string; is_leader: boolean; permissions: OrgPermissions }
+export type OrgSummary = { id: number; name: string; slug: string; description: string | null; member_count: number; my_role: OrgRoleWithPerms }
+export type OrgTransferResult = { source: OrgInventoryEntry | null; target: OrgInventoryEntry }
+export type OrgUserRef = { id: number; username: string }
 /**
  * A price entry from UEX API.
  * Unified across all price types — entity metadata identifies the source.
@@ -1029,6 +1301,7 @@ source: string }
  * Information about an available update, sent to the frontend via Tauri events.
  */
 export type UpdateInfo = { version: string; date: string | null; body: string | null }
+export type UserInvitation = { id: number; org: OrgRef; invited_by: OrgUserRef; status: string; created_at: string }
 export type WatchEntry = { entity_id: string; entity_name: string; entity_kind: string; entity_slug: string; terminal_id: string; terminal_name: string; price_type: string; added_at: string }
 export type WikeloTrade = { id: string; mission_name: string; reward_names: string[]; category: string; patch: string; reputation: string; required_items: RequiredItem[]; description: string; active: boolean }
 /**

@@ -12,6 +12,7 @@ import HangarTab from "./components/tabs/HangarTab.vue";
 import WikiloTab from "./components/tabs/WikiloTab.vue";
 import CZTab from "./components/tabs/CZTab.vue";
 import ProfileTab from "./components/tabs/ProfileTab.vue";
+import OrgTab from "./components/tabs/OrgTab.vue";
 import PlaceholderTab from "./components/tabs/PlaceholderTab.vue";
 import FavoritesPanel from "./components/overlay/FavoritesPanel.vue";
 import WatchListPanel from "./components/overlay/WatchListPanel.vue";
@@ -26,6 +27,7 @@ import { useDetailsStore } from "./stores/details";
 import { useBackendStore } from "./stores/backend";
 import { useWatchlistStore } from "./stores/watchlist";
 import { useInventoryStore } from "./stores/inventory";
+import { useOrgStore } from "./stores/org";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
@@ -41,6 +43,7 @@ const detailsStore = useDetailsStore();
 const backendStore = useBackendStore();
 const watchlistStore = useWatchlistStore();
 const inventoryStore = useInventoryStore();
+const orgStore = useOrgStore();
 const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY, ghostLabel } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
@@ -126,6 +129,10 @@ onMounted(async () => {
   await favoritesStore.loadFavorites();
   await watchlistStore.loadWatchlist();
   await backendStore.initialize();
+  if (backendStore.isLoggedIn) {
+    orgStore.loadMyOrgs();
+    orgStore.loadUserInvitations();
+  }
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
   document.addEventListener("click", handleExternalLinks);
@@ -329,6 +336,7 @@ watch(isDragActive, (active) => {
         :show-favorites="showFavorites && (activeTab === 'search' || activeTab === 'details')"
         :show-watchlist="showWatchlist && (activeTab === 'search' || activeTab === 'details')"
         :is-logged-in="isLoggedIn"
+        :pending-org-invitations="orgStore.pendingInvitationCount"
         @update:active-tab="(t) => { activeTab = t; }"
         @close="onTabClose"
         @toggle-settings="onToggleSettings"
@@ -374,8 +382,9 @@ watch(isDragActive, (active) => {
           <WikiloTab v-show="activeTab === 'wikelo'" />
           <CZTab v-show="activeTab === 'cz'" :active="activeTab === 'cz'" />
           <ProfileTab v-show="activeTab === 'profile'" />
+          <OrgTab v-show="activeTab === 'org'" />
           <PlaceholderTab
-            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'wikelo' && activeTab !== 'cz' && activeTab !== 'profile'" />
+            v-show="activeTab !== 'search' && activeTab !== 'details' && activeTab !== 'inventory' && activeTab !== 'hangar' && activeTab !== 'wikelo' && activeTab !== 'cz' && activeTab !== 'profile' && activeTab !== 'org'" />
         </div>
 
         <!-- Keybinds side panel (left of settings) -->

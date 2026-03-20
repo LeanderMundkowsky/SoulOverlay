@@ -24,6 +24,7 @@ defineProps<{
   showFavorites: boolean;
   showWatchlist: boolean;
   isLoggedIn: boolean;
+  pendingOrgInvitations: number;
 }>();
 
 const emit = defineEmits<{
@@ -43,6 +44,7 @@ const tabs: Tab[] = [
   { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
   { id: "wikelo",    label: "WIKELO",    shortcut: null,  disabled: false, action: "switch" },
   { id: "cz",        label: "CZ",        shortcut: null,  disabled: false, action: "switch" },
+  { id: "org",       label: "ORG",       shortcut: null,  disabled: false, action: "switch" },
   { id: "settings",  label: "SETTINGS",  shortcut: "F12", disabled: false, action: "toggle-settings" },
   { id: "close",     label: "CLOSE",     shortcut: null,  disabled: false, action: "close" },
 ];
@@ -124,8 +126,18 @@ function handleTab(tab: Tab) {
           <IconShield    v-else-if="tab.id === 'cz'"        class="w-4 h-4 flex-shrink-0" />
           <IconDollarSign v-else-if="tab.id === 'wikelo'"   class="w-4 h-4 flex-shrink-0" />
           <IconSun       v-else-if="tab.id === 'settings'"  class="w-4 h-4 flex-shrink-0" />
+          <!-- ORG tab: people icon placeholder -->
+          <svg v-else-if="tab.id === 'org'" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
 
           <span class="text-xs font-semibold tracking-widest">{{ tab.label }}</span>
+
+          <!-- Invitation badge for ORG tab -->
+          <span
+            v-if="tab.id === 'org' && pendingOrgInvitations > 0"
+            class="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-teal-500 text-white text-[9px] font-bold flex items-center justify-center leading-none"
+          >{{ pendingOrgInvitations }}</span>
 
           <span
             v-if="tab.shortcut"

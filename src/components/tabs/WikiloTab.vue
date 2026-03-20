@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useWikeloStore } from "@/stores/wikelo";
 import { useInventoryStore } from "@/stores/inventory";
+import { useOrgStore } from "@/stores/org";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import IconSearch from "@/components/icons/IconSearch.vue";
@@ -11,6 +12,10 @@ import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
 
 const wikeloStore = useWikeloStore();
 const inventoryStore = useInventoryStore();
+const orgStore = useOrgStore();
+
+// Inventory scope: null = personal, orgId = that org
+const inventoryScope = ref<number | null>(null);
 
 // -- Data loading ----------------------------------------------------------
 
@@ -80,7 +85,10 @@ const completedInView = computed(
 function ownedQuantity(itemName: string): number {
   const key = itemName.toLowerCase();
   let total = 0;
-  for (const entry of inventoryStore.entries) {
+  const entries = inventoryScope.value === null
+    ? inventoryStore.entries
+    : orgStore.getInventory(inventoryScope.value);
+  for (const entry of entries) {
     if (entry.entity_name.toLowerCase() === key) {
       total += entry.quantity;
     }
@@ -124,12 +132,29 @@ function reputationColor(rep: string): string {
             </span>
           </p>
         </div>
-        <button
-          class="text-xs text-white/40 hover:text-white/70 transition-colors"
-          @click.stop="wikeloStore.loadTrades()"
-        >
-          Refresh
-        </button>
+        <div class="flex items-center gap-2">
+          <!-- Inventory scope selector -->
+          <div v-if="orgStore.myOrgs.length > 0" class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5">
+            <button
+              @click="inventoryScope = null"
+              class="text-xs px-2 py-1 rounded transition-colors"
+              :class="inventoryScope === null ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'"
+            >Personal</button>
+            <button
+              v-for="org in orgStore.myOrgs"
+              :key="org.id"
+              @click="inventoryScope = org.id; orgStore.loadInventory(org.id)"
+              class="text-xs px-2 py-1 rounded transition-colors"
+              :class="inventoryScope === org.id ? 'bg-teal-500/20 text-teal-300' : 'text-white/40 hover:text-white/70'"
+            >{{ org.name }}</button>
+          </div>
+          <button
+            class="text-xs text-white/40 hover:text-white/70 transition-colors"
+            @click.stop="wikeloStore.loadTrades()"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <!-- Filters -->

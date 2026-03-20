@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { commands } from "@/bindings";
-import type { UexResult, InventoryEntry } from "@/bindings";
+import type { UexResult, InventoryEntry, OrgInventoryEntry } from "@/bindings";
 import { useInventoryStore } from "@/stores/inventory";
+import { useOrgStore } from "@/stores/org";
 import IconClose from "@/components/icons/IconClose.vue";
 import SearchableDropdown from "@/components/ui/SearchableDropdown.vue";
 import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
@@ -13,6 +14,8 @@ export type ModalMode = "add" | "remove" | "transfer" | "edit";
 
 const props = defineProps<{
   mode: ModalMode;
+  /** When set, all operations target org inventory for this orgId */
+  orgId?: number;
   /** Pre-fill entity (add mode from search row) */
   prefillEntity?: { id: string; name: string; kind: string } | null;
   /** Pre-fill location (add mode from inventory group header) */
@@ -20,7 +23,7 @@ const props = defineProps<{
   /** Pre-fill collection (add mode from inventory group header — collection ID) */
   prefillCollection?: number | null;
   /** Source entry for remove/transfer modes */
-  sourceEntry?: InventoryEntry | null;
+  sourceEntry?: InventoryEntry | OrgInventoryEntry | null;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +32,7 @@ const emit = defineEmits<{
 }>();
 
 const inventoryStore = useInventoryStore();
+const orgStore = useOrgStore();
 
 // ── Shared state ───────────────────────────────────────────────────────────
 
@@ -135,6 +139,11 @@ const newCollectionInput = ref("");
 const addingCollection = ref(false);
 const addCollectionError = ref<string | null>(null);
 
+const activeCollections = computed(() => {
+  if (props.orgId != null) return orgStore.getCollections(props.orgId);
+  return inventoryStore.collections;
+});
+
 function toggleCollection(id: number) {
   const idx = selectedCollectionIds.value.indexOf(id);
   if (idx >= 0) {
@@ -150,9 +159,18 @@ async function addNewCollection() {
   addingCollection.value = true;
   addCollectionError.value = null;
   try {
-    const coll = await inventoryStore.createCollection(name);
-    if (!selectedCollectionIds.value.includes(coll.id)) {
-      selectedCollectionIds.value.push(coll.id);
+    if (props.orgId != null) {
+      const err = await orgStore.createCollection(props.orgId, name);
+      if (err) { addCollectionError.value = err; return; }
+      const newColl = orgStore.getCollections(props.orgId).find((c) => c.name === name);
+      if (newColl && !selectedCollectionIds.value.includes(newColl.id)) {
+        selectedCollectionIds.value.push(newColl.id);
+      }
+    } else {
+      const coll = await inventoryStore.createCollection(name);
+      if (!selectedCollectionIds.value.includes(coll.id)) {
+        selectedCollectionIds.value.push(coll.id);
+      }
     }
     newCollectionInput.value = "";
   } catch (e) {
@@ -201,60 +219,100 @@ async function handleSubmit() {
   errorMsg.value = null;
 
   try {
-    switch (props.mode) {
-      case "add": {
-        const entity = selectedEntity.value!;
-        const loc = selectedLocation.value!;
-        await inventoryStore.addEntry({
-          entityId: entity.id,
-          entityName: entity.name,
-          entityKind: entity.kind,
-          locationId: loc.id,
-          locationName: loc.name,
-          locationSlug: loc.slug,
-          quantity: quantity.value,
-          collectionIds: [...selectedCollectionIds.value],
-        });
-        break;
-      }
-      case "edit": {
-        const entry = props.sourceEntry!;
-        const entity = selectedEntity.value!;
-        const loc = selectedLocation.value!;
-        await inventoryStore.updateEntry({
-          id: entry.id,
-          entityId: entity.id,
-          entityName: entity.name,
-          entityKind: entity.kind,
-          locationId: loc.id,
-          locationName: loc.name,
-          locationSlug: loc.slug,
-          quantity: quantity.value,
-          collectionIds: [...selectedCollectionIds.value],
-        });
-        break;
-      }
-      case "remove": {
-        const entry = props.sourceEntry!;
-        if (quantity.value >= entry.quantity) {
-          await inventoryStore.removeEntry(entry.id);
-        } else {
-          await inventoryStore.removeQuantity(entry.id, quantity.value);
+    if (props.orgId != null) {
+      // ── Org inventory path ──────────────────────────────────────────────
+      const orgId = props.orgId;
+      let err: string | null = null;
+      switch (props.mode) {
+        case "add": {
+          const entity = selectedEntity.value!;
+          const loc = selectedLocation.value!;
+          err = await orgStore.addInventoryEntry(orgId, entity.id, entity.name, entity.kind, loc.id, loc.name, loc.slug, quantity.value, [...selectedCollectionIds.value]);
+          break;
         }
-        break;
+        case "edit": {
+          const entry = props.sourceEntry!;
+          const entity = selectedEntity.value!;
+          const loc = selectedLocation.value!;
+          const res = await commands.orgUpdateInventoryEntry(orgId, entry.id, entity.name, entity.kind, loc.name, loc.slug, quantity.value, [...selectedCollectionIds.value]);
+          if (res.status === "error") err = res.error;
+          else orgStore.upsertInventoryEntry(orgId, res.data);
+          break;
+        }
+        case "remove": {
+          const entry = props.sourceEntry!;
+          if (quantity.value >= entry.quantity) {
+            err = await orgStore.deleteInventoryEntry(orgId, entry.id);
+          } else {
+            err = await orgStore.removeInventoryQuantity(orgId, entry.id, quantity.value);
+          }
+          break;
+        }
+        case "transfer": {
+          const entry = props.sourceEntry!;
+          const loc = selectedLocation.value!;
+          err = await orgStore.transferInventory(orgId, entry.id, quantity.value, loc.id, loc.name, loc.slug);
+          break;
+        }
       }
-      case "transfer": {
-        const entry = props.sourceEntry!;
-        const loc = selectedLocation.value!;
-        await inventoryStore.transferEntry({
-          id: entry.id,
-          quantity: quantity.value,
-          targetLocationId: loc.id,
-          targetLocationName: loc.name,
-          targetLocationSlug: loc.slug,
-          targetCollectionIds: [...selectedCollectionIds.value],
-        });
-        break;
+      if (err) { errorMsg.value = err; return; }
+    } else {
+      // ── Personal inventory path ─────────────────────────────────────────
+      switch (props.mode) {
+        case "add": {
+          const entity = selectedEntity.value!;
+          const loc = selectedLocation.value!;
+          await inventoryStore.addEntry({
+            entityId: entity.id,
+            entityName: entity.name,
+            entityKind: entity.kind,
+            locationId: loc.id,
+            locationName: loc.name,
+            locationSlug: loc.slug,
+            quantity: quantity.value,
+            collectionIds: [...selectedCollectionIds.value],
+          });
+          break;
+        }
+        case "edit": {
+          const entry = props.sourceEntry!;
+          const entity = selectedEntity.value!;
+          const loc = selectedLocation.value!;
+          await inventoryStore.updateEntry({
+            id: entry.id,
+            entityId: entity.id,
+            entityName: entity.name,
+            entityKind: entity.kind,
+            locationId: loc.id,
+            locationName: loc.name,
+            locationSlug: loc.slug,
+            quantity: quantity.value,
+            collectionIds: [...selectedCollectionIds.value],
+          });
+          break;
+        }
+        case "remove": {
+          const entry = props.sourceEntry!;
+          if (quantity.value >= entry.quantity) {
+            await inventoryStore.removeEntry(entry.id);
+          } else {
+            await inventoryStore.removeQuantity(entry.id, quantity.value);
+          }
+          break;
+        }
+        case "transfer": {
+          const entry = props.sourceEntry!;
+          const loc = selectedLocation.value!;
+          await inventoryStore.transferEntry({
+            id: entry.id,
+            quantity: quantity.value,
+            targetLocationId: loc.id,
+            targetLocationName: loc.name,
+            targetLocationSlug: loc.slug,
+            targetCollectionIds: [...selectedCollectionIds.value],
+          });
+          break;
+        }
       }
     }
     emit("saved");
@@ -273,7 +331,9 @@ const maxQuantity = computed(() => props.sourceEntry?.quantity ?? 999999);
 // ── Prefill on mount ───────────────────────────────────────────────────────
 
 onMounted(async () => {
-  await inventoryStore.loadCollections();
+  if (props.orgId == null) {
+    await inventoryStore.loadCollections();
+  }
 
   if (props.mode === "add" && props.prefillEntity) {
     selectedEntity.value = {
@@ -484,11 +544,11 @@ function locationSlugLabel(slug: string): string {
             </div>
             <!-- List -->
             <div class="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-0.5">
-              <div v-if="inventoryStore.collections.length === 0" class="text-white/20 text-xs px-2 py-1.5">
+              <div v-if="activeCollections.length === 0" class="text-white/20 text-xs px-2 py-1.5">
                 No collections yet
               </div>
               <button
-                v-for="c in inventoryStore.collections"
+                v-for="c in activeCollections"
                 :key="c.id"
                 @click="toggleCollection(c.id)"
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors text-left"
