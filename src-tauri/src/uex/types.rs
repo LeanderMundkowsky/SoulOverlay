@@ -170,22 +170,6 @@ pub struct UexUserProfile {
     pub date_twitch_verified: Option<String>,
 }
 
-/// A vehicle in the user's hangar/fleet from UEX API.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct HangarVehicle {
-    pub id: String,
-    pub id_vehicle: String,
-    pub name: String,
-    pub model_name: String,
-    pub serial: Option<String>,
-    pub description: Option<String>,
-    pub organization_name: Option<String>,
-    pub is_hidden: bool,
-    pub is_pledged: bool,
-    pub date_added: String,
-    pub url_photo: Option<String>,
-}
-
 // ── Serde helpers ──────────────────────────────────────────────────────────
 
 /// Deserialize a field that may be a JSON number or a JSON string into a `String`.

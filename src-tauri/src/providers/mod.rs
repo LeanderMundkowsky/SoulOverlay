@@ -1,7 +1,6 @@
 pub mod commodities;
 pub mod contested_zones;
 pub mod entity_info;
-pub mod fleet;
 pub mod fuel;
 pub mod items;
 pub mod locations;
@@ -110,7 +109,6 @@ pub fn all_providers() -> Vec<AnyProvider> {
         // Entity info (no dependencies — does its own API calls)
         AnyProvider::PerEntity(Box::new(entity_info::provider::EntityInfoProvider)),
         // Auth-required
-        AnyProvider::Blob(Box::new(fleet::provider::FleetProvider)),
         AnyProvider::Blob(Box::new(user::provider::UserProfileProvider)),
         // Wiki specs (lazy, no-op refresh)
         AnyProvider::PerEntity(Box::new(wiki_specs::provider::WikiSpecsProvider)),

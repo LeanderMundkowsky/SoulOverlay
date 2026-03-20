@@ -183,7 +183,7 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
         Ok(resp) if resp.status().is_success() => {
             match resp.json::<serde_json::Value>().await {
                 Ok(json) => {
-                    if let Some(key) = json["data"]["uex_api_key"].as_str() {
+                    if let Some(key) = json["data"]["uexApiKey"].as_str() {
                         if !key.is_empty() {
                             let state = handle.state::<AppState>();
                             *state.fetched_api_key.lock().unwrap() = key.to_string();
@@ -191,7 +191,7 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
                             return;
                         }
                     }
-                    error!("Backend config response missing uex_api_key");
+                    error!("Backend config response missing uexApiKey");
                 }
                 Err(e) => error!("Failed to parse backend config response: {}", e),
             }

@@ -7,7 +7,7 @@ use crate::cache_store::{CacheResult, Collection};
 use crate::commands::backend::{extract_error_message, http_client};
 use crate::constants::BACKEND_URL;
 use crate::state::AppState;
-use crate::uex::types::{HangarVehicle, UexResult};
+use crate::uex::types::UexResult;
 
 /// Allowed location slugs for inventory storage.
 const STORAGE_SLUGS: &[&str] = &["space_station", "city", "outpost", "poi"];
@@ -50,6 +50,7 @@ struct BackendCollection {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BackendEntry {
     id: u32,
     entity_id: String,
@@ -395,14 +396,14 @@ pub async fn migrate_legacy_inventory(handle: &tauri::AppHandle) {
             .post(&inv_url)
             .header("Authorization", format!("Bearer {}", token))
             .json(&serde_json::json!({
-                "entity_id": entry.entity_id,
-                "entity_name": entry.entity_name,
-                "entity_kind": entry.entity_kind,
-                "location_id": entry.location_id,
-                "location_name": entry.location_name,
-                "location_slug": entry.location_slug,
+                "entityId": entry.entity_id,
+                "entityName": entry.entity_name,
+                "entityKind": entry.entity_kind,
+                "locationId": entry.location_id,
+                "locationName": entry.location_name,
+                "locationSlug": entry.location_slug,
                 "quantity": entry.quantity,
-                "collection_ids": collection_ids,
+                "collectionIds": collection_ids,
             }))
             .send()
             .await
@@ -522,14 +523,14 @@ pub async fn add_inventory_entry(
         .post(&url)
         .header("Authorization", format!("Bearer {}", token))
         .json(&serde_json::json!({
-            "entity_id": entity_id,
-            "entity_name": entity_name,
-            "entity_kind": entity_kind,
-            "location_id": location_id,
-            "location_name": location_name,
-            "location_slug": location_slug,
+            "entityId": entity_id,
+            "entityName": entity_name,
+            "entityKind": entity_kind,
+            "locationId": location_id,
+            "locationName": location_name,
+            "locationSlug": location_slug,
             "quantity": quantity,
-            "collection_ids": collection_ids,
+            "collectionIds": collection_ids,
         }))
         .send()
         .await
@@ -570,14 +571,14 @@ pub async fn update_inventory_entry(
         .patch(&url)
         .header("Authorization", format!("Bearer {}", token))
         .json(&serde_json::json!({
-            "entity_id": entity_id,
-            "entity_name": entity_name,
-            "entity_kind": entity_kind,
-            "location_id": location_id,
-            "location_name": location_name,
-            "location_slug": location_slug,
+            "entityId": entity_id,
+            "entityName": entity_name,
+            "entityKind": entity_kind,
+            "locationId": location_id,
+            "locationName": location_name,
+            "locationSlug": location_slug,
             "quantity": quantity,
-            "collection_ids": collection_ids,
+            "collectionIds": collection_ids,
         }))
         .send()
         .await
@@ -713,10 +714,10 @@ pub async fn transfer_inventory(
         .header("Authorization", format!("Bearer {}", token))
         .json(&serde_json::json!({
             "quantity": quantity,
-            "target_location_id": target_location_id,
-            "target_location_name": target_location_name,
-            "target_location_slug": target_location_slug,
-            "target_collection_ids": target_collection_ids,
+            "targetLocationId": target_location_id,
+            "targetLocationName": target_location_name,
+            "targetLocationSlug": target_location_slug,
+            "targetCollectionIds": target_collection_ids,
         }))
         .send()
         .await
@@ -832,24 +833,7 @@ pub async fn inventory_collection_delete(
 
 // ── Storage location search ────────────────────────────────────────────────
 
-/// Convert a fleet vehicle into a UexResult for the location picker.
-fn fleet_to_location(v: &HangarVehicle) -> UexResult {
-    let display_name = if v.name.is_empty() || v.name == v.model_name {
-        format!("[Ship] {}", v.model_name)
-    } else {
-        format!("[Ship] {} ({})", v.name, v.model_name)
-    };
-
-    UexResult {
-        id: format!("fleet_{}", v.id),
-        name: display_name,
-        kind: "location".to_string(),
-        slug: "fleet_vehicle".to_string(),
-        ..Default::default()
-    }
-}
-
-/// Search storage-capable locations + fleet vehicles for the inventory location picker.
+/// Search storage-capable locations for the inventory location picker.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_storage_locations(
@@ -869,20 +853,6 @@ pub async fn get_storage_locations(
                         || loc.name.to_lowercase().contains(&query_lower))
                 {
                     results.push(loc.clone());
-                }
-            }
-        }
-        CacheResult::Missing => {}
-    }
-
-    // Search fleet vehicles (gracefully skip if unavailable)
-    let fleet_key = Collection::Fleet.storage_key();
-    match state.cache.get::<Vec<HangarVehicle>>(&fleet_key) {
-        CacheResult::Fresh(data) | CacheResult::Stale(data) => {
-            for vehicle in &data {
-                let loc = fleet_to_location(vehicle);
-                if query_lower.is_empty() || loc.name.to_lowercase().contains(&query_lower) {
-                    results.push(loc);
                 }
             }
         }

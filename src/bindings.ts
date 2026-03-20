@@ -326,12 +326,44 @@ async isFavorite(id: string, kind: string) : Promise<Result<boolean, string>> {
 }
 },
 /**
- * Fetch the authenticated user's fleet from UEX.
- * Requires a logged-in backend account with a UEX secret key.
+ * Fetch the authenticated user's fleet from the backend.
  */
-async hangarGetFleet() : Promise<Result<ApiResponse<HangarVehicle[]>, string>> {
+async hangarGetFleet() : Promise<Result<HangarVehicle[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("hangar_get_fleet") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Import fleet from UEX Corp via the backend.
+ */
+async hangarImportFleet() : Promise<Result<FleetImportResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hangar_import_fleet") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update a fleet vehicle's name and/or description.
+ */
+async hangarUpdateVehicle(id: number, name: string | null, description: string | null) : Promise<Result<HangarVehicle, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hangar_update_vehicle", { id, name, description }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete a fleet vehicle.
+ */
+async hangarDeleteVehicle(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hangar_delete_vehicle", { id }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -481,7 +513,7 @@ async getInventoryCollections() : Promise<Result<InventoryCollection[], string>>
 }
 },
 /**
- * Search storage-capable locations + fleet vehicles for the inventory location picker.
+ * Search storage-capable locations for the inventory location picker.
  */
 async getStorageLocations(query: string) : Promise<Result<UexResult[], string>> {
     try {
@@ -847,14 +879,15 @@ duration_ms: number;
  * What triggered this fetch: "startup", "timer", or "manual".
  */
 triggered_by: string; ok: boolean; error: string | null }
+export type FleetImportResult = { fleet: HangarVehicle[]; imported: number; created: number; updated: number; removed: number }
 /**
  * Initial game connection state returned to the frontend on mount.
  */
 export type GameState = { sc_detected: boolean }
 /**
- * A vehicle in the user's hangar/fleet from UEX API.
+ * A vehicle in the user's fleet managed by the backend.
  */
-export type HangarVehicle = { id: string; id_vehicle: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; date_added: string; url_photo: string | null }
+export type HangarVehicle = { id: number; uex_id: string; uex_vehicle_id: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; url_photo: string | null; date_added: string | null; created_at: string; updated_at: string }
 export type InventoryCollection = { id: number; name: string }
 export type InventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collections: InventoryCollection[]; added_at: string; updated_at: string }
 /**

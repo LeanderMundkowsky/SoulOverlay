@@ -36,6 +36,7 @@ pub struct BackendAuthResult {
 // ── Private DTO types (not in IPC) ────────────────────────────────────────────
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BackendAccountDto {
     id: u32,
     username: String,
@@ -151,6 +152,12 @@ pub(crate) fn extract_error_message(json: &serde_json::Value) -> String {
             return msg.to_string();
         }
     }
+    // Generic error field (used by our backend for simple error responses)
+    if let Some(err) = json.get("error").and_then(|e| e.as_str()) {
+        if !err.is_empty() {
+            return err.to_string();
+        }
+    }
     "Unknown error".to_string()
 }
 
@@ -192,9 +199,9 @@ pub async fn backend_login(
         return Err(extract_error_message(&json));
     }
 
-    let token = json["data"]["api_token"]
+    let token = json["data"]["apiToken"]
         .as_str()
-        .ok_or("Invalid response: missing api_token")?
+        .ok_or("Invalid response: missing apiToken")?
         .to_string();
 
     let account = fetch_account_with_token(&token)
@@ -237,9 +244,9 @@ pub async fn backend_register(
         return Err(extract_error_message(&json));
     }
 
-    let token = json["data"]["api_token"]
+    let token = json["data"]["apiToken"]
         .as_str()
-        .ok_or("Invalid response: missing api_token")?
+        .ok_or("Invalid response: missing apiToken")?
         .to_string();
 
     let account = fetch_account_with_token(&token)
@@ -283,7 +290,7 @@ pub async fn backend_update_secret_key(
         .patch(&url)
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/merge-patch+json")
-        .json(&serde_json::json!({ "uex_secret_key": uex_secret_key }))
+        .json(&serde_json::json!({ "uexSecretKey": uex_secret_key }))
         .send()
         .await
         .map_err(|e| format!("Network error: {}", e))?;
