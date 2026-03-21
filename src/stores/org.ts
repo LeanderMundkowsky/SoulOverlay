@@ -76,6 +76,19 @@ export const useOrgStore = defineStore("org", () => {
     return role.permissions[permission];
   }
 
+  /** sort_order of my current role, looked up from full roles list. Leaders get -Infinity. */
+  const myRoleSortOrder = computed((): number => {
+    const myRole = currentOrgMyRole.value;
+    if (!myRole) return 0;
+    if (myRole.is_leader) return -Infinity;
+    return orgRoles.value.find((r) => r.id === myRole.id)?.sort_order ?? Infinity;
+  });
+
+  /** Roles the current user may assign to others (sort_order strictly > their own, non-leader). */
+  const assignableRoles = computed(() =>
+    orgRoles.value.filter((r) => !r.is_leader && r.sort_order > myRoleSortOrder.value)
+  );
+
   // ── My orgs ──────────────────────────────────────────────────────────────
   async function loadMyOrgs(): Promise<void> {
     loadingOrgs.value = true;
@@ -506,7 +519,7 @@ export const useOrgStore = defineStore("org", () => {
     userInvitations, loadingUserInvitations, userInvitationsError,
     loadingInventory, inventoryError,
     // Computed
-    pendingInvitationCount, currentOrgMyRole,
+    pendingInvitationCount, currentOrgMyRole, myRoleSortOrder, assignableRoles,
     // Helpers
     can, getInventory, getCollections,
     // Actions

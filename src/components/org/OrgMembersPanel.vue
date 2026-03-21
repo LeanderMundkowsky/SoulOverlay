@@ -38,7 +38,7 @@ async function sendInvite() {
   const err = await orgStore.createInvitation(props.orgId, inviteUsername.value.trim(), inviteRoleId.value);
   sending.value = false;
   if (err) inviteError.value = err;
-  else { inviteSent.value = true; inviteUsername.value = ""; inviteRoleId.value = null; setTimeout(() => inviteSent.value = false, 3000); }
+  else { inviteSent.value = true; inviteUsername.value = ""; inviteRoleId.value = orgStore.assignableRoles[0]?.id ?? null; setTimeout(() => inviteSent.value = false, 3000); }
 }
 
 async function cancelInvite(invitationId: number) {
@@ -81,6 +81,23 @@ async function confirmTransfer() {
 
 const myUserId = computed(() => backendStore.account?.id);
 const detail = computed(() => orgStore.currentOrgDetail);
+
+function roleSortOrder(roleId: number): number {
+  return orgStore.orgRoles.find((r) => r.id === roleId)?.sort_order ?? Infinity;
+}
+
+function canManageMember(memberRoleId: number): boolean {
+  if (amLeader.value) return true;
+  return roleSortOrder(memberRoleId) > orgStore.myRoleSortOrder;
+}
+
+// Default invite role to the first assignable role when roles load
+watch(() => orgStore.assignableRoles, (roles) => {
+  if (inviteRoleId.value === null && roles.length > 0) {
+    inviteRoleId.value = roles[0].id;
+  }
+}, { immediate: true });
+
 const transferTargetName = computed(() =>
   detail.value?.members.find((m) => m.user_id === transferTargetId.value)?.username ?? ""
 );
@@ -132,12 +149,11 @@ const transferTargetName = computed(() =>
           @keydown.enter="sendInvite"
         />
         <select
-          v-if="orgStore.orgRoles.length"
+          v-if="orgStore.assignableRoles.length"
           v-model="inviteRoleId"
           class="bg-[#111318] border border-white/10 rounded-lg px-2 py-2 text-sm text-white focus:outline-none"
         >
-          <option :value="null" class="bg-[#1a1d24]">No role</option>
-          <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
+          <option v-for="r in orgStore.assignableRoles" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
         </select>
         <button
           @click="sendInvite"
@@ -200,13 +216,13 @@ const transferTargetName = computed(() =>
               title="Transfer leadership"
             >👑 Transfer</button>
             <!-- Role change -->
-            <template v-if="canManageMembers && !member.role.is_leader">
+            <template v-if="canManageMembers && !member.role.is_leader && canManageMember(member.role.id) && orgStore.assignableRoles.length">
               <select
                 :value="member.role.id"
                 @change="changeRole(member.user_id, Number(($event.target as HTMLSelectElement).value))"
                 class="bg-[#111318] border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none"
               >
-                <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
+                <option v-for="r in orgStore.assignableRoles" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
               </select>
               <button @click="kickMember(member.user_id)" class="text-xs text-white/30 hover:text-red-400 transition-colors">Kick</button>
             </template>

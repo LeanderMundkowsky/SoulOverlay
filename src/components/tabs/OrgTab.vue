@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onMounted, onUnmounted } from "vue";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useOrgStore } from "@/stores/org";
 import type { OrgLookup } from "@/stores/org";
 import { useBackendStore } from "@/stores/backend";
@@ -54,6 +55,23 @@ watch(() => backendStore.isLoggedIn, (loggedIn) => {
   }
 }, { immediate: true });
 
+// Refresh org data on every 30s backend-status tick
+let unlistenStatus: UnlistenFn | null = null;
+onMounted(async () => {
+  unlistenStatus = await listen<{ ok: boolean }>("backend-status", (event) => {
+    if (!event.payload.ok || !backendStore.isLoggedIn) return;
+    orgStore.loadMyOrgs();
+    orgStore.loadUserInvitations();
+    if (orgStore.currentOrgId !== null) {
+      orgStore.loadOrgDetail(orgStore.currentOrgId);
+    }
+  });
+});
+onUnmounted(() => {
+  unlistenStatus?.();
+  unlistenStatus = null;
+});
+
 function selectOrg(id: number) {
   orgStore.selectOrg(id);
   selectedOrgId.value = id;
@@ -90,6 +108,18 @@ async function applyToOrg() {
     resolvedOrg.value = null;
     setTimeout(() => applySent.value = false, 3000);
   }
+}
+
+const refreshing = ref(false);
+async function refresh() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  await Promise.all([
+    orgStore.loadMyOrgs(),
+    orgStore.loadUserInvitations(),
+    ...(orgStore.currentOrgId !== null ? [orgStore.loadOrgDetail(orgStore.currentOrgId)] : []),
+  ]);
+  refreshing.value = false;
 }
 </script>
 
@@ -131,14 +161,28 @@ async function applyToOrg() {
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-xs text-white/50 uppercase tracking-wider font-semibold">My Organizations</h3>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
+              <button
+                @click="refresh"
+                :disabled="refreshing"
+                class="p-1.5 bg-[#1a1d24] border border-white/10 hover:border-white/20 text-white/40 hover:text-white/70 disabled:opacity-40 rounded-lg transition-colors"
+                title="Refresh"
+              >
+                <svg
+                  class="w-3.5 h-3.5"
+                  :class="{ 'animate-spin': refreshing }"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
               <button
                 @click="showApplyForm = !showApplyForm"
-                class="text-xs text-white/40 hover:text-white/70 transition-colors"
+                class="text-xs px-3 py-1.5 bg-[#1a1d24] border border-white/10 hover:border-white/20 text-white/60 hover:text-white/90 rounded-lg transition-colors"
               >Apply / Join</button>
               <button
                 @click="showCreateModal = true"
-                class="text-xs px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors"
+                class="text-xs px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors"
               >+ Create Org</button>
             </div>
           </div>

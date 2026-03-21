@@ -74,6 +74,17 @@ async function confirmDelete() {
 
 // Leave org
 const myMembership = computed(() => orgStore.currentOrgMyRole);
+
+const refreshing = ref(false);
+async function refresh() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  await Promise.all([
+    orgStore.loadOrgDetail(props.orgId),
+    orgStore.loadRoles(props.orgId),
+  ]);
+  refreshing.value = false;
+}
 </script>
 
 <template>
@@ -91,16 +102,35 @@ const myMembership = computed(() => orgStore.currentOrgMyRole);
 
       <div v-else-if="detail" class="flex-1 min-w-0">
         <template v-if="!editing">
-          <div class="flex items-center gap-3">
-            <h2 class="text-white font-semibold text-lg">{{ detail.name }}</h2>
-            <span v-if="myMembership?.is_leader" class="text-yellow-400 text-xs">👑 Leader</span>
-            <span v-else-if="myMembership" class="text-xs text-white/40">{{ myMembership.name }}</span>
-          </div>
-          <p v-if="detail.description" class="text-sm text-white/40 mt-1">{{ detail.description }}</p>
-          <div class="flex items-center gap-4 mt-2 text-xs text-white/30">
-            <span>{{ detail.member_count }} members</span>
-            <button v-if="canManageOrg" @click="startEdit" class="text-teal-400/60 hover:text-teal-400 transition-colors">Edit org</button>
-            <button v-if="canManageOrg" @click="deleteConfirm = true" class="text-red-400/60 hover:text-red-400 transition-colors">Delete org</button>
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-3">
+                <h2 class="text-white font-semibold text-lg">{{ detail.name }}</h2>
+                <span v-if="myMembership?.is_leader" class="text-yellow-400 text-xs">👑 Leader</span>
+                <span v-else-if="myMembership" class="text-xs text-white/40">{{ myMembership.name }}</span>
+              </div>
+              <p v-if="detail.description" class="text-sm text-white/40 mt-1">{{ detail.description }}</p>
+              <div class="flex items-center gap-4 mt-2 text-xs text-white/30">
+                <span>{{ detail.member_count }} members</span>
+                <button v-if="canManageOrg" @click="startEdit" class="text-teal-400/60 hover:text-teal-400 transition-colors">Edit org</button>
+                <button v-if="canManageOrg" @click="deleteConfirm = true" class="text-red-400/60 hover:text-red-400 transition-colors">Delete org</button>
+              </div>
+            </div>
+            <button
+              @click="refresh"
+              :disabled="refreshing"
+              class="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-[#111318] border border-white/10 hover:border-white/20 text-white/60 hover:text-white/90 disabled:opacity-40 rounded-lg transition-colors flex-shrink-0"
+              title="Refresh"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                :class="{ 'animate-spin': refreshing }"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
           </div>
         </template>
 

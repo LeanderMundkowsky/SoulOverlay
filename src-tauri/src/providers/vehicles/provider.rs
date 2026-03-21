@@ -89,6 +89,7 @@ pub async fn search_vehicles(
     Ok(dtos.iter().map(UexResult::from).filter(|r| r.name.to_lowercase().contains(&query_lower)).collect())
 }
 
+#[allow(dead_code)]
 pub async fn fetch_vehicle_photo_map(
     client: &UexClient,
     api_key: &str,

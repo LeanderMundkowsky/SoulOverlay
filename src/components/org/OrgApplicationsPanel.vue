@@ -9,7 +9,7 @@ const orgStore = useOrgStore();
 
 const actionError = ref<string | null>(null);
 const acceptingId = ref<number | null>(null);
-const acceptRoleId = ref<Record<number, number | null>>({});
+const acceptRoleId = ref<Record<number, number>>({});
 
 const canView = computed(() => orgStore.can("view_applications") || orgStore.can("manage_applications"));
 const canManage = computed(() => orgStore.can("manage_applications"));
@@ -19,7 +19,15 @@ watch(() => props.orgId, () => {
 }, { immediate: true });
 
 function toggleAccept(appId: number) {
-  acceptingId.value = acceptingId.value === appId ? null : appId;
+  if (acceptingId.value === appId) {
+    acceptingId.value = null;
+  } else {
+    acceptingId.value = appId;
+    // Default to first assignable role when opening accept row
+    if (acceptRoleId.value[appId] === undefined && orgStore.assignableRoles.length > 0) {
+      acceptRoleId.value[appId] = orgStore.assignableRoles[0].id;
+    }
+  }
 }
 
 async function accept(appId: number) {
@@ -79,8 +87,7 @@ async function reject(appId: number) {
               v-model="acceptRoleId[app.id]"
               class="flex-1 bg-[#111318] border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
             >
-              <option :value="null" class="bg-[#1a1d24]">Assign role later</option>
-              <option v-for="r in orgStore.orgRoles.filter(r => !r.is_leader)" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
+              <option v-for="r in orgStore.assignableRoles" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
             </select>
             <button
               @click="accept(app.id)"

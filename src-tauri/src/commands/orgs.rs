@@ -36,6 +36,21 @@ impl Default for OrgPermissions {
     }
 }
 
+impl OrgPermissions {
+    fn to_camel_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "manageOrg": self.manage_org,
+            "manageMembers": self.manage_members,
+            "manageRoles": self.manage_roles,
+            "inviteMembers": self.invite_members,
+            "viewApplications": self.view_applications,
+            "manageApplications": self.manage_applications,
+            "manageInventory": self.manage_inventory,
+            "manageCollections": self.manage_collections,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct OrgUserRef {
     pub id: u32,
@@ -164,7 +179,7 @@ pub struct OrgTransferResult {
 
 // ── Private DTOs (backend JSON shapes, not exported) ──────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct BkOrgPermissions {
     #[serde(default)] manage_org: bool,
@@ -262,8 +277,11 @@ struct BkOrgRole {
     name: String,
     #[serde(default)]
     is_leader: bool,
+    #[serde(default)]
     permissions: BkOrgPermissions,
+    #[serde(default)]
     sort_order: i32,
+    #[serde(default)]
     member_count: u32,
 }
 
@@ -682,7 +700,7 @@ pub async fn org_create_role(
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/roles");
     let json = api_post(&url, &token, serde_json::json!({
         "name": name,
-        "permissions": permissions,
+        "permissions": permissions.to_camel_json(),
         "sortOrder": sort_order,
     })).await?;
     let dto: BkOrgRole = parse_data(&json, "create role")?;
@@ -704,7 +722,7 @@ pub async fn org_update_role(
     let mut body = serde_json::Map::new();
     if let Some(n) = name { body.insert("name".into(), serde_json::Value::String(n)); }
     if let Some(p) = permissions {
-        body.insert("permissions".into(), serde_json::to_value(p).unwrap_or_default());
+        body.insert("permissions".into(), p.to_camel_json());
     }
     if let Some(s) = sort_order { body.insert("sortOrder".into(), serde_json::Value::Number(s.into())); }
     let json = api_patch(&url, &token, serde_json::Value::Object(body)).await?;

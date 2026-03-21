@@ -69,6 +69,7 @@ impl UexClient {
 
     /// Send a GET request with both Bearer token and secret-key header.
     /// Checks the UEX `status` field for auth errors before parsing data.
+    #[allow(dead_code)]
     pub(crate) async fn get_with_secret<T: DeserializeOwned>(
         &self,
         path: &str,

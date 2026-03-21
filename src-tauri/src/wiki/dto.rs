@@ -33,6 +33,7 @@ pub struct WikiApiResponse<T> {
 pub struct WikiSearchResponse<T> {
     pub data: Vec<T>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub meta: WikiPaginationMeta,
 }
 
@@ -396,8 +397,10 @@ pub struct WikiVehicleDto {
     pub msrp: Option<f64>,
     pub pledge_url: Option<String>,
     #[serde(default, deserialize_with = "deserialize_localized_string")]
+    #[allow(dead_code)]
     pub career: Option<String>,
     #[serde(default, deserialize_with = "deserialize_localized_string")]
+    #[allow(dead_code)]
     pub role: Option<String>,
     pub web_url: Option<String>,
     pub version: Option<String>,
@@ -407,5 +410,6 @@ pub struct WikiVehicleDto {
     pub vehicle_type: Option<String>,
     /// Localized array of objects, e.g. `[{"en_EN": "Light Freight"}]`
     #[serde(default)]
+    #[allow(dead_code)]
     pub foci: Vec<serde_json::Value>,
 }
