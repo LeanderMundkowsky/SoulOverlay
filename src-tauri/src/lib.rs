@@ -222,6 +222,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::orgs::user_list_invitations,
             commands::orgs::user_accept_invitation,
             commands::orgs::user_decline_invitation,
+            commands::orgs::org_lookup_by_slug,
             commands::orgs::org_list_applications,
             commands::orgs::org_create_application,
             commands::orgs::org_accept_application,

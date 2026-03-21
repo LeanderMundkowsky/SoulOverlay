@@ -16,6 +16,17 @@ type SubTab = "members" | "roles" | "inventory" | "applications";
 const activeTab = ref<SubTab>("members");
 
 const canManageOrg = computed(() => orgStore.can("manage_org"));
+const canSeeApplications = computed(() => orgStore.can("view_applications") || orgStore.can("manage_applications"));
+
+const visibleTabs = computed<SubTab[]>(() => {
+  const tabs: SubTab[] = ["members", "roles", "inventory"];
+  if (canSeeApplications.value) tabs.push("applications");
+  return tabs;
+});
+
+watch(canSeeApplications, (can) => {
+  if (!can && activeTab.value === "applications") activeTab.value = "members";
+});
 
 watch(() => props.orgId, (id) => {
   orgStore.loadOrgDetail(id);
@@ -120,7 +131,7 @@ const myMembership = computed(() => orgStore.currentOrgMyRole);
     <!-- Sub-tab bar -->
     <div v-if="detail" class="bg-[#1a1d24] border border-white/10 rounded-xl flex gap-1 px-2 py-2">
       <button
-        v-for="tab in (['members', 'roles', 'inventory', 'applications'] as SubTab[])"
+        v-for="tab in visibleTabs"
         :key="tab"
         @click="activeTab = tab"
         class="px-3 py-1.5 text-xs rounded-lg transition-colors capitalize"

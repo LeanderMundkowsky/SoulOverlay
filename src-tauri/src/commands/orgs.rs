@@ -359,7 +359,9 @@ impl From<BkOrgDetail> for OrgDetail {
 #[serde(rename_all = "camelCase")]
 struct BkOrgInvitation {
     id: u32,
+    #[serde(default)]
     org_id: u32,
+    #[serde(default)]
     org_name: String,
     invited_user: BkOrgUserRef,
     invited_by: BkOrgUserRef,
@@ -407,6 +409,7 @@ impl From<BkUserInvitation> for UserInvitation {
 #[serde(rename_all = "camelCase")]
 struct BkOrgApplication {
     id: u32,
+    #[serde(default)]
     org_id: u32,
     applicant: Option<BkOrgUserRef>,
     message: Option<String>,
@@ -721,6 +724,46 @@ pub async fn org_delete_role(
     api_delete(&url, &token).await
 }
 
+// ── Org slug lookup ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct OrgLookup {
+    pub id: u32,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    pub member_count: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BkOrgLookup {
+    id: u32,
+    name: String,
+    slug: String,
+    description: Option<String>,
+    member_count: u32,
+}
+
+impl From<BkOrgLookup> for OrgLookup {
+    fn from(b: BkOrgLookup) -> Self {
+        Self { id: b.id, name: b.name, slug: b.slug, description: b.description, member_count: b.member_count }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn org_lookup_by_slug(
+    slug: String,
+    state: State<'_, AppState>,
+) -> Result<OrgLookup, String> {
+    let token = get_token(&state)?;
+    let url = format!("{BACKEND_URL}/api/orgs/lookup/{slug}");
+    let json = api_get(&url, &token).await?;
+    let dto: BkOrgLookup = parse_data(&json, "org lookup")?;
+    Ok(dto.into())
+}
+
 // ── Leadership Transfer result type ────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -842,7 +885,8 @@ pub async fn org_create_invitation(
         "username": username,
         "roleId": role_id,
     })).await?;
-    let dto: BkOrgInvitation = parse_data(&json, "create invitation")?;
+    let mut dto: BkOrgInvitation = parse_data(&json, "create invitation")?;
+    if dto.org_id == 0 { dto.org_id = org_id; }
     Ok(dto.into())
 }
 
@@ -877,12 +921,11 @@ pub async fn user_list_invitations(
 pub async fn user_accept_invitation(
     id: u32,
     state: State<'_, AppState>,
-) -> Result<OrgSummary, String> {
+) -> Result<(), String> {
     let token = get_token(&state)?;
     let url = format!("{BACKEND_URL}/api/invitations/{id}/accept");
-    let json = api_post(&url, &token, serde_json::json!({})).await?;
-    let dto: BkOrgSummary = parse_data(&json, "accept invitation")?;
-    Ok(dto.into())
+    api_post(&url, &token, serde_json::json!({})).await?;
+    Ok(())
 }
 
 #[tauri::command]

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, watch, computed } from "vue";
 import { useOrgStore } from "@/stores/org";
+import type { OrgLookup } from "@/stores/org";
 import { useBackendStore } from "@/stores/backend";
 import OrgDetailView from "@/components/org/OrgDetailView.vue";
 import OrgCreateModal from "@/components/org/OrgCreateModal.vue";
@@ -14,19 +15,44 @@ const showCreateModal = ref(false);
 const selectedOrgId = ref<number | null>(null);
 
 // Apply/join
-const applyOrgId = ref<string>("");
+const applyHandle = ref("");
 const applyMessage = ref("");
 const applying = ref(false);
 const applyError = ref<string | null>(null);
 const applySent = ref(false);
 const showApplyForm = ref(false);
+const resolvedOrg = ref<OrgLookup | null>(null);
+const resolving = ref(false);
 
-onMounted(() => {
-  if (backendStore.isLoggedIn) {
+const cleanHandle = computed(() => applyHandle.value.trim().replace(/^@/, ""));
+
+async function resolveHandle() {
+  if (!cleanHandle.value) return;
+  resolving.value = true;
+  applyError.value = null;
+  resolvedOrg.value = null;
+  const result = await orgStore.lookupOrgBySlug(cleanHandle.value);
+  resolving.value = false;
+  if (typeof result === "string") {
+    applyError.value = result === "404" || result.toLowerCase().includes("not found")
+      ? `No organization found with handle @${cleanHandle.value}`
+      : result;
+  } else {
+    resolvedOrg.value = result;
+  }
+}
+
+watch(() => backendStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
     orgStore.loadMyOrgs();
     orgStore.loadUserInvitations();
+  } else {
+    orgStore.reset();
+    selectedOrgId.value = null;
+    showApplyForm.value = false;
+    showCreateModal.value = false;
   }
-});
+}, { immediate: true });
 
 function selectOrg(id: number) {
   orgStore.selectOrg(id);
@@ -50,15 +76,20 @@ async function declineInvite(id: number) {
 }
 
 async function applyToOrg() {
-  const orgId = Number(applyOrgId.value.trim());
-  if (!orgId || isNaN(orgId)) { applyError.value = "Please enter a valid org ID"; return; }
+  if (!resolvedOrg.value) return;
   applying.value = true;
   applyError.value = null;
   applySent.value = false;
-  const err = await orgStore.createApplication(orgId, applyMessage.value.trim() || null);
+  const err = await orgStore.createApplication(resolvedOrg.value.id, applyMessage.value.trim() || null);
   applying.value = false;
   if (err) applyError.value = err;
-  else { applySent.value = true; applyOrgId.value = ""; applyMessage.value = ""; setTimeout(() => applySent.value = false, 3000); }
+  else {
+    applySent.value = true;
+    applyHandle.value = "";
+    applyMessage.value = "";
+    resolvedOrg.value = null;
+    setTimeout(() => applySent.value = false, 3000);
+  }
 }
 </script>
 
@@ -115,19 +146,49 @@ async function applyToOrg() {
           <!-- Apply form -->
           <div v-if="showApplyForm" class="bg-[#1a1d24] border border-white/10 rounded-lg p-4 space-y-3">
             <h4 class="text-xs text-white/50 uppercase tracking-wider">Apply to Organization</h4>
-            <div>
-              <label class="block text-xs text-white/40 mb-1">Org ID</label>
-              <input v-model="applyOrgId" type="number" placeholder="12345" class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50" />
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="block text-xs text-white/40 mb-1">Org Handle</label>
+                <input
+                  v-model="applyHandle"
+                  type="text"
+                  placeholder="@test-org"
+                  @keydown.enter="resolveHandle"
+                  @input="resolvedOrg = null; applyError = null"
+                  class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50"
+                />
+              </div>
+              <div class="flex items-end">
+                <button
+                  @click="resolveHandle"
+                  :disabled="!cleanHandle || resolving"
+                  class="text-xs px-3 py-2 bg-[#111318] border border-white/10 hover:border-teal-500/50 text-white/60 hover:text-white rounded-lg disabled:opacity-40 transition-colors"
+                >{{ resolving ? "…" : "Look up" }}</button>
+              </div>
             </div>
-            <div>
+
+            <!-- Resolved org preview -->
+            <div v-if="resolvedOrg" class="bg-[#111318] border border-teal-500/20 rounded-lg px-3 py-2 space-y-0.5">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-white font-medium">{{ resolvedOrg.name }}</span>
+                <span class="text-xs text-white/30">@{{ resolvedOrg.slug }}</span>
+                <span class="text-xs text-white/20">· {{ resolvedOrg.member_count }} member{{ resolvedOrg.member_count !== 1 ? "s" : "" }}</span>
+              </div>
+              <p v-if="resolvedOrg.description" class="text-xs text-white/40 truncate">{{ resolvedOrg.description }}</p>
+            </div>
+
+            <div v-if="resolvedOrg">
               <label class="block text-xs text-white/40 mb-1">Message <span class="text-white/20">(optional)</span></label>
               <textarea v-model="applyMessage" rows="2" placeholder="Why do you want to join?" class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/50 resize-none" />
             </div>
             <AlertBanner v-if="applyError" variant="error" :message="applyError" />
             <p v-if="applySent" class="text-xs text-teal-400">Application sent!</p>
-            <button @click="applyToOrg" :disabled="!applyOrgId.trim() || applying" class="text-xs px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              {{ applying ? "Sending…" : "Send Application" }}
-            </button>
+            <button
+              v-if="resolvedOrg"
+              @click="applyToOrg"
+              :disabled="applying"
+              class="text-xs px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >{{ applying ? "Sending…" : "Send Application" }}</button>
           </div>
 
           <LoadingSpinner v-if="orgStore.loadingOrgs" class="py-8" />

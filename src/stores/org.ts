@@ -13,11 +13,12 @@ import type {
   OrgInventoryEntry,
   OrgInventoryCollection,
   OrgLeadershipTransfer,
+  OrgLookup,
 } from "@/bindings";
 
 export type { OrgSummary, OrgDetail, OrgRole, OrgPermissions, OrgMemberInfo,
   OrgInvitation, UserInvitation, OrgApplication, OrgInventoryEntry, OrgInventoryCollection,
-  OrgLeadershipTransfer };
+  OrgLeadershipTransfer, OrgLookup };
 
 export const useOrgStore = defineStore("org", () => {
   // ── My orgs ──────────────────────────────────────────────────────────────
@@ -300,7 +301,7 @@ export const useOrgStore = defineStore("org", () => {
     const res = await commands.userAcceptInvitation(id);
     if (res.status === "ok") {
       userInvitations.value = userInvitations.value.filter((i) => i.id !== id);
-      myOrgs.value.push(res.data);
+      await loadMyOrgs();
       return null;
     }
     return res.error;
@@ -328,6 +329,12 @@ export const useOrgStore = defineStore("org", () => {
     loadingApplications.value = false;
   }
 
+  async function lookupOrgBySlug(slug: string): Promise<OrgLookup | string> {
+    const res = await commands.orgLookupBySlug(slug);
+    if (res.status === "ok") return res.data;
+    return res.error;
+  }
+
   async function createApplication(orgId: number, message: string | null): Promise<string | null> {
     const res = await commands.orgCreateApplication(orgId, message);
     if (res.status === "ok") return null;
@@ -338,7 +345,8 @@ export const useOrgStore = defineStore("org", () => {
     const res = await commands.orgAcceptApplication(orgId, appId, roleId);
     if (res.status === "ok") {
       orgApplications.value = orgApplications.value.filter((a) => a.id !== appId);
-      if (currentOrgDetail.value) currentOrgDetail.value.member_count++;
+      // Refresh org detail so the members list reflects the newly added member
+      await loadOrgDetail(orgId);
       return null;
     }
     return res.error;
@@ -508,7 +516,7 @@ export const useOrgStore = defineStore("org", () => {
     updateMember, removeMember, transferLeadership,
     loadOrgInvitations, createInvitation, cancelInvitation,
     loadUserInvitations, acceptInvitation, declineInvitation,
-    loadApplications, createApplication, acceptApplication, rejectApplication,
+    loadApplications, lookupOrgBySlug, createApplication, acceptApplication, rejectApplication,
     loadInventory, setInventoryEntries, upsertInventoryEntry, removeInventoryEntry,
     addInventoryEntry, deleteInventoryEntry, removeInventoryQuantity, transferInventory,
     createCollection, updateCollection, deleteCollection,

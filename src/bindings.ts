@@ -860,7 +860,7 @@ async userListInvitations() : Promise<Result<UserInvitation[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async userAcceptInvitation(id: number) : Promise<Result<OrgSummary, string>> {
+async userAcceptInvitation(id: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("user_accept_invitation", { id }) };
 } catch (e) {
@@ -871,6 +871,14 @@ async userAcceptInvitation(id: number) : Promise<Result<OrgSummary, string>> {
 async userDeclineInvitation(id: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("user_decline_invitation", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async orgLookupBySlug(slug: string) : Promise<Result<OrgLookup, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("org_lookup_by_slug", { slug }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1220,6 +1228,7 @@ export type OrgInventoryEntry = { id: number; entity_id: string; entity_name: st
 export type OrgInvitation = { id: number; org_id: number; org_name: string; invited_user: OrgUserRef; invited_by: OrgUserRef; status: string; created_at: string }
 export type OrgLeadershipTransfer = { new_leader: OrgLeadershipTransferMember; previous_leader: OrgLeadershipTransferMember }
 export type OrgLeadershipTransferMember = { user_id: number; username: string; role: OrgRoleRef }
+export type OrgLookup = { id: number; name: string; slug: string; description: string | null; member_count: number }
 export type OrgMemberInfo = { user_id: number; username: string; role: OrgRoleRef }
 export type OrgPermissions = { manage_org: boolean; manage_members: boolean; manage_roles: boolean; invite_members: boolean; view_applications: boolean; manage_applications: boolean; manage_inventory: boolean; manage_collections: boolean }
 export type OrgRef = { id: number; name: string; slug: string }

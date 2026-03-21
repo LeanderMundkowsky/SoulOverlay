@@ -150,7 +150,7 @@ const transferTargetName = computed(() =>
     </div>
 
     <!-- Pending sent invitations -->
-    <div class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-2">
+    <div v-if="canInvite" class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-2">
       <div class="flex items-center justify-between">
         <h4 class="text-xs text-white/50 uppercase tracking-wider">Pending Invitations</h4>
       </div>
