@@ -11,7 +11,7 @@ on:
       - "package-lock.json"
 
 jobs:
-  warm-cache:
+  warm-cache-windows:
     runs-on: windows-latest
 
     steps:
@@ -34,6 +34,55 @@ jobs:
           shared-key: "release"
           add-rust-environment-hash-key: false
           cache-on-failure: true
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Rust (warm cache)
+        run: cargo build --release
+        working-directory: src-tauri
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          SOUL_APP_TOKEN: ${{ secrets.SOUL_APP_TOKEN }}
+
+  warm-cache-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: "release-linux"
+          add-rust-environment-hash-key: false
+          cache-on-failure: true
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libxi-dev \
+            libxtst-dev
 
       - name: Install frontend dependencies
         run: npm ci

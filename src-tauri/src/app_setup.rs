@@ -53,9 +53,9 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     tracker.start();
     *handle.state::<AppState>().process_tracker.lock().unwrap() = Some(tracker);
 
-    // Register global hotkey (LL keyboard hook)
+    // Register global hotkey
     let state = handle.state::<AppState>();
-    match hotkey::register_hotkey(&settings.hotkey) {
+    match hotkey::register_hotkey(&settings.hotkey, &handle) {
         Ok(handle_hook) => {
             *state.hotkey_handle.lock().unwrap() = Some(handle_hook);
         }
@@ -160,7 +160,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // Show a brief startup hint with the hotkey
     spawn_startup_hint(&handle, &settings.hotkey);
 
-    // Restore focus to whatever was active before the app launched.
+    // Restore focus to whatever was active before the app launched (Windows only).
     // Tauri/WebView2 window creation steals focus even for invisible windows.
     window::restore_pre_launch_foreground();
 
@@ -217,9 +217,10 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
 }
 
 
+/// Show a brief startup hint with the configured hotkey.
 /// Auto-closes after ~7.5s (the CSS animation completes its fade-out at 7s).
 fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
-    use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
     let logical_w = 320.0_f64;
     let logical_h = 44.0_f64;
@@ -253,12 +254,13 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
 
     match result {
         Ok(w) => {
+            #[cfg(windows)]
             if let Ok(raw) = w.hwnd() {
                 use windows::Win32::Foundation::HWND;
                 use windows::Win32::UI::WindowsAndMessaging::{
-                    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
-                    HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW,
-                    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+                    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+                    SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+                    WS_EX_TOOLWINDOW,
                 };
 
                 let hwnd = HWND(raw.0);
@@ -283,6 +285,13 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
                 }
             }
 
+            #[cfg(not(windows))]
+            {
+                // On Linux, use Tauri's cross-platform positioning
+                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                let _ = w.show();
+            }
+
             // Auto-close slightly after the CSS fade-out animation finishes
             let h = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -299,3 +308,4 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
         }
     }
 }
+
