@@ -4,7 +4,6 @@ use crate::cache_store::{CacheResult, Collection};
 use crate::providers::search_in_collection;
 use crate::providers::commodities::{search_commodities, get_commodity_prices};
 use crate::providers::vehicles::search_vehicles;
-use crate::providers::items::search_items;
 use crate::providers::locations::search_locations;
 use crate::state::AppState;
 use crate::uex::types::{PriceEntry, UexResult};
@@ -41,7 +40,6 @@ pub async fn uex_search_all(
     let collections = [
         Collection::Commodities,
         Collection::Vehicles,
-        Collection::Items,
         Collection::Locations,
     ];
 
@@ -57,19 +55,8 @@ pub async fn uex_search_all(
                 let fetched = match collection {
                     Collection::Commodities => search_commodities(&state.uex, &query, &api_key).await,
                     Collection::Vehicles => search_vehicles(&state.uex, &query, &api_key).await,
-                    Collection::Items => search_items(&state.uex, &query, &api_key).await,
                     Collection::Locations => search_locations(&state.uex, &query, &api_key).await,
-                    Collection::CommodityPrices
-                    | Collection::RawCommodityPrices
-                    | Collection::ItemPrices
-                    | Collection::VehiclePurchasePrices
-                    | Collection::VehicleRentalPrices
-                    | Collection::FuelPrices
-                    | Collection::Fleet
-                    | Collection::UserProfile
-                    | Collection::EntityInfo
-                    | Collection::WikiSpecs
-                    | Collection::WikiloTrades => Ok(vec![]),
+                    _ => Ok(vec![]),
                 };
                 if let Ok(mut v) = fetched {
                     results.append(&mut v);
@@ -77,6 +64,8 @@ pub async fn uex_search_all(
             }
         }
     }
+
+    // Items are searched via Wiki API by the frontend (wiki_search command)
 
     Ok(results)
 }

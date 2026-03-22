@@ -13,6 +13,7 @@ use crate::process_tracker;
 use crate::settings::Settings;
 use crate::uex::UexClient;
 use crate::activity::ActivityLog;
+use crate::wiki::mapper::EntityMapper;
 
 /// Application state managed by Tauri
 pub struct AppState {
@@ -37,6 +38,8 @@ pub struct AppState {
     pub fetched_api_key: Mutex<String>,
     /// Authenticated backend account (None if not logged in or session expired).
     pub backend_account: Mutex<Option<BackendAccount>>,
+    /// Maps Wiki UUIDs ↔ UEX IDs for price lookups.
+    pub entity_mapper: Mutex<EntityMapper>,
 }
 
 impl AppState {

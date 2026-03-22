@@ -21,13 +21,6 @@ const { entityInfo, entityInfoLoading, entityInfoError, getEntityInfo } = useUex
 const favoritesStore = useFavoritesStore();
 
 function fetchInfo() {
-  if (props.entitySource === "wiki") {
-    // Wiki-only entities have no UEX info — clear stale data
-    entityInfo.value = null;
-    entityInfoError.value = null;
-    entityInfoLoading.value = false;
-    return;
-  }
   getEntityInfo(props.entityKind, props.entityId);
 }
 
@@ -42,7 +35,7 @@ function toggleFavorite() {
       kind: entityInfo.value.kind,
       slug: entityInfo.value.slug,
       uuid: entityInfo.value.uuid ?? "",
-      source: "uex",
+      source: props.entitySource ?? "uex",
     });
   } else if (props.entitySource === "wiki") {
     favoritesStore.toggleFavorite({

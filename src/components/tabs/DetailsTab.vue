@@ -24,15 +24,6 @@ const detailsStore = useDetailsStore();
 
     <!-- Entity details -->
     <template v-else>
-      <!-- Wiki-only banner -->
-      <div
-        v-if="detailsStore.currentEntity.source === 'wiki'"
-        class="bg-teal-500/10 border border-teal-500/20 rounded-xl px-4 py-2 text-teal-300 text-xs flex items-center gap-2"
-      >
-        <span class="font-semibold">Wiki only</span>
-        <span class="text-teal-300/60">— This item is not tracked by UEX. No price data available.</span>
-      </div>
-
       <!-- Entity info card -->
       <EntityInfoCard
         :entity-id="detailsStore.currentEntity.id"
@@ -42,8 +33,8 @@ const detailsStore = useDetailsStore();
         :entity-uuid="detailsStore.currentEntity.uuid"
       />
 
-      <!-- Price table (hidden for wiki-only) -->
-      <div v-if="detailsStore.currentEntity.source !== 'wiki'" class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
+      <!-- Price table -->
+      <div class="flex-1 min-h-0 bg-[#1a1d24] border border-white/10 rounded-xl overflow-hidden">
         <PricePanel
           :entity-id="detailsStore.currentEntity.id"
           :entity-name="detailsStore.currentEntity.name"

@@ -4,6 +4,7 @@ pub mod entity_info;
 pub mod fuel;
 pub mod items;
 pub mod locations;
+pub mod manufacturers;
 pub mod user;
 pub mod vehicles;
 pub mod wiki_specs;
@@ -15,6 +16,8 @@ use crate::cache_store::{CacheResult, CacheStore, Collection};
 use crate::settings::Settings;
 use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
 use crate::uex::UexClient;
+use crate::wiki::mapper::EntityMapper;
+use std::sync::Mutex;
 
 // ── Refresh context ────────────────────────────────────────────────────────
 
@@ -25,6 +28,7 @@ pub struct RefreshContext<'a> {
     pub api_key: &'a str,
     pub secret_key: Option<&'a str>,
     pub settings: &'a Settings,
+    pub entity_mapper: &'a Mutex<EntityMapper>,
 }
 
 // ── Provider traits ────────────────────────────────────────────────────────
@@ -97,7 +101,7 @@ pub fn all_providers() -> Vec<AnyProvider> {
         // Catalogs (no dependencies)
         AnyProvider::Blob(Box::new(commodities::provider::CommoditiesCatalog)),
         AnyProvider::Blob(Box::new(vehicles::provider::VehiclesCatalog)),
-        AnyProvider::Blob(Box::new(items::provider::ItemsCatalog)),
+        AnyProvider::Blob(Box::new(manufacturers::provider::ManufacturersCatalog)),
         AnyProvider::Blob(Box::new(locations::provider::LocationsCatalog)),
         // Prices (depend on catalogs)
         AnyProvider::PerEntity(Box::new(commodities::provider::CommodityPrices)),

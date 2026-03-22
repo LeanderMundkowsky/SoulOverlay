@@ -146,6 +146,7 @@ pub(crate) async fn refresh_collection_by_name(
         api_key: &api_key,
         secret_key: secret_key_owned.as_deref(),
         settings,
+        entity_mapper: &state.entity_mapper,
     };
 
     let result = provider.refresh(&ctx).await;
@@ -188,6 +189,27 @@ pub(crate) async fn refresh_collection_by_name(
 pub async fn prefetch_all(state: &AppState) {
     let settings = state.current_settings.lock().unwrap().clone();
     let all = providers::all_providers();
+
+    // Restore EntityMapper from cache if it's empty (happens on restart
+    // when vehicles are still fresh and VehiclesCatalog.refresh() is skipped).
+    {
+        use crate::cache_store::CacheResult;
+        use crate::wiki::mapper::MapperSnapshot;
+        use crate::providers::vehicles::provider::MAPPER_CACHE_KEY;
+
+        let needs_restore = state.entity_mapper.lock()
+            .map(|m| m.is_empty())
+            .unwrap_or(false);
+        if needs_restore {
+            if let CacheResult::Fresh(snap) | CacheResult::Stale(snap) =
+                state.cache.get::<MapperSnapshot>(MAPPER_CACHE_KEY)
+            {
+                if let Ok(mut mapper) = state.entity_mapper.lock() {
+                    mapper.restore_from_snapshot(snap);
+                }
+            }
+        }
+    }
 
     // Phase 1: no-dependency providers (catalogs)
     let phase1_keys: Vec<String> = all.iter()

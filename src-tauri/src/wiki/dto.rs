@@ -334,6 +334,17 @@ pub struct WikiCrew {
     pub max: Option<u32>,
 }
 
+// ── Manufacturer list item ──────────────────────────────────────────────────
+
+/// Manufacturer from `GET /api/manufacturers` (list endpoint).
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct WikiManufacturerListItem {
+    pub name: Option<String>,
+    pub code: Option<String>,
+    pub uuid: Option<String>,
+}
+
 // ── Main DTOs ──────────────────────────────────────────────────────────────
 
 /// Full item detail from `GET /api/items/{uuid}` or list endpoints.

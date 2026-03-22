@@ -7,8 +7,9 @@
 
 export const commands = {
 /**
- * Search all UEX entity types (commodities, vehicles, items, locations)
- * from the local cache, falling back to direct API calls.
+ * Search all entity types (commodities, vehicles, locations) from local cache.
+ * Items are NOT included here — the frontend supplements with Wiki API search
+ * via the separate `wiki_search` command (with deduplication).
  * 
  * Parameters:
  * - `query`: free-text search string
@@ -44,7 +45,7 @@ async apiSearchVehicles(query: string) : Promise<Result<ApiResponse<UexResult[]>
 }
 },
 /**
- * Search UEX items.
+ * Search items via Wiki API (on-demand search, not cached catalog).
  */
 async apiSearchItems(query: string) : Promise<Result<ApiResponse<UexResult[]>, string>> {
     try {
@@ -133,8 +134,10 @@ async apiFuelPrices(terminalId: string) : Promise<Result<ApiResponse<PriceEntry[
 }
 },
 /**
- * Fetch detailed entity metadata by kind and id from the cache.
- * Entity info is bulk-fetched at startup and refreshed by the background timer.
+ * Fetch detailed entity metadata by kind and id.
+ * - Items: fetched on-demand from Wiki API (not bulk-cached).
+ * - Vehicles: from bulk entity_info cache (Wiki vehicle data).
+ * - Commodities/locations: from bulk entity_info cache (UEX data).
  */
 async apiEntityInfo(kind: string, entityId: string) : Promise<Result<ApiResponse<EntityInfo>, string>> {
     try {
@@ -1036,7 +1039,7 @@ export type CacheRefreshResult = { ok: boolean; collection: string; error: strin
 /**
  * Known collection names used as cache keys.
  */
-export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "locations" | "fleet" | "user_profile" | "entity_info" | "wiki_specs" | "wikilo_trades"
+export type Collection = "commodities" | "commodity_prices" | "raw_commodity_prices" | "item_prices" | "vehicle_purchase_prices" | "vehicle_rental_prices" | "fuel_prices" | "vehicles" | "items" | "manufacturers" | "locations" | "fleet" | "user_profile" | "entity_info" | "wiki_specs" | "wikilo_trades"
 /**
  * Per-collection debug status (CollectionStatus extended with is_refreshing + expires_at).
  */

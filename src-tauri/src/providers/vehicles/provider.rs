@@ -3,12 +3,17 @@ use async_trait::async_trait;
 use super::dto::{VehicleDto, VehiclePurchasePriceDto, VehicleRentalPriceDto};
 use crate::cache_store::Collection;
 use crate::providers::{
-    catalog_ids_from_cache, enrich_locations_from_hierarchy, store_blob,
+    enrich_locations_from_hierarchy, store_blob,
     store_prices_by_terminal, store_prices_split,
     BlobProvider, PerEntityProvider, RefreshContext,
 };
-use crate::uex::types::{EntityInfo, PriceEntry, UexResult};
+use crate::uex::types::{PriceEntry, UexResult};
 use crate::uex::UexClient;
+use crate::wiki::client;
+use crate::wiki::dto::WikiVehicleDto;
+
+/// Cache key for persisted EntityMapper snapshot.
+pub const MAPPER_CACHE_KEY: &str = "entity_mapper_snapshot";
 
 // ── Catalog provider ───────────────────────────────────────────────────────
 
@@ -19,11 +24,62 @@ impl BlobProvider for VehiclesCatalog {
     fn collection(&self) -> Collection { Collection::Vehicles }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
-        let dtos: Vec<VehicleDto> = ctx.client.get("/vehicles", &[], ctx.api_key).await?;
-        let data: Vec<UexResult> = dtos.iter().map(UexResult::from).collect();
+        // 1. Fetch full vehicle catalog from Wiki API
+        let http = ctx.client.client();
+        let wiki_vehicles = client::list_all_vehicles(http).await?;
+
+        // 2. Convert Wiki vehicles to UexResult (uuid as primary ID)
+        let data: Vec<UexResult> = wiki_vehicles.iter().map(wiki_vehicle_to_result).collect();
         let count = data.len() as u32;
+
+        // 3. Fetch UEX vehicle list for EntityMapper (name → UEX ID mapping)
+        let uex_dtos: Vec<VehicleDto> = ctx.client.get("/vehicles", &[], ctx.api_key).await
+            .unwrap_or_else(|e| {
+                log::warn!("Failed to fetch UEX vehicles for mapper: {}", e);
+                vec![]
+            });
+
+        // 4. Build EntityMapper
+        let wiki_pairs: Vec<(String, String)> = wiki_vehicles.iter()
+            .filter_map(|v| {
+                let uuid = v.uuid.as_deref()?.to_string();
+                let name = v.name.as_deref()?.to_string();
+                Some((uuid, name))
+            })
+            .collect();
+        let uex_pairs: Vec<(String, String)> = uex_dtos.iter()
+            .map(|v| (v.id.clone(), v.name.clone()))
+            .collect();
+
         let ttl = self.collection().ttl_for(ctx.settings);
+        if let Ok(mut mapper) = ctx.entity_mapper.lock() {
+            mapper.set_vehicle_maps(&wiki_pairs, &uex_pairs);
+            // Persist mapper to cache so it survives app restarts
+            let snap = mapper.snapshot();
+            let _ = ctx.cache.put(MAPPER_CACHE_KEY, ttl, &snap);
+        }
+
+        // 5. Store catalog blob
         store_blob(ctx.cache, self.collection(), ttl, &data, count)
+    }
+}
+
+/// Convert a Wiki vehicle DTO to a search result entry.
+fn wiki_vehicle_to_result(dto: &WikiVehicleDto) -> UexResult {
+    let uuid = dto.uuid.clone().unwrap_or_default();
+    let name = dto.name.clone().unwrap_or_default();
+    let kind = match dto.vehicle_type.as_deref() {
+        Some("vehicle") => "ground vehicle",
+        Some("gravlev") => "ground vehicle",
+        _ => "vehicle",
+    };
+    UexResult {
+        id: uuid.clone(),
+        name,
+        kind: kind.to_string(),
+        slug: dto.slug.clone().unwrap_or_default(),
+        uuid,
+        source: "wiki".to_string(),
     }
 }
 
@@ -37,11 +93,24 @@ impl PerEntityProvider for VehiclePurchasePrices {
     fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
-        let ids = catalog_ids_from_cache(ctx.cache, Collection::Vehicles);
-        if ids.is_empty() {
-            return Err("Vehicles not in cache; refresh vehicles first".to_string());
+        // Get UEX IDs from EntityMapper (populated during vehicle catalog refresh)
+        let uex_ids = ctx.entity_mapper.lock()
+            .map_err(|e| format!("EntityMapper lock failed: {}", e))?
+            .all_mapped_vehicle_uex_ids();
+        if uex_ids.is_empty() {
+            return Err("No vehicle UEX ID mappings; refresh vehicles first".to_string());
         }
-        let mut data = fetch_all_vehicle_purchase_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        let mut data = fetch_all_vehicle_purchase_prices_per_entity(ctx.client, &uex_ids, ctx.api_key).await;
+
+        // Remap entity_id from UEX ID → Wiki UUID so cache keys match catalog IDs
+        if let Ok(mapper) = ctx.entity_mapper.lock() {
+            for entry in &mut data {
+                if let Some(uuid) = mapper.vehicle_uex_id_to_uuid(&entry.entity_id) {
+                    entry.entity_id = uuid.to_string();
+                }
+            }
+        }
+
         enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
@@ -62,11 +131,23 @@ impl PerEntityProvider for VehicleRentalPrices {
     fn depends_on(&self) -> &[Collection] { &[Collection::Vehicles, Collection::Locations] }
 
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
-        let ids = catalog_ids_from_cache(ctx.cache, Collection::Vehicles);
-        if ids.is_empty() {
-            return Err("Vehicles not in cache; refresh vehicles first".to_string());
+        let uex_ids = ctx.entity_mapper.lock()
+            .map_err(|e| format!("EntityMapper lock failed: {}", e))?
+            .all_mapped_vehicle_uex_ids();
+        if uex_ids.is_empty() {
+            return Err("No vehicle UEX ID mappings; refresh vehicles first".to_string());
         }
-        let mut data = fetch_all_vehicle_rental_prices_per_entity(ctx.client, &ids, ctx.api_key).await;
+        let mut data = fetch_all_vehicle_rental_prices_per_entity(ctx.client, &uex_ids, ctx.api_key).await;
+
+        // Remap entity_id from UEX ID → Wiki UUID so cache keys match catalog IDs
+        if let Ok(mapper) = ctx.entity_mapper.lock() {
+            for entry in &mut data {
+                if let Some(uuid) = mapper.vehicle_uex_id_to_uuid(&entry.entity_id) {
+                    entry.entity_id = uuid.to_string();
+                }
+            }
+        }
+
         enrich_locations_from_hierarchy(ctx.cache, &mut data);
         let ttl = self.collection().ttl_for(ctx.settings);
         let count = store_prices_split(ctx.cache, &data, self.collection(), ttl)?;
@@ -107,9 +188,9 @@ pub async fn fetch_vehicle_photo_map(
 pub async fn fetch_all_vehicle_infos(
     client: &UexClient,
     api_key: &str,
-) -> Result<Vec<EntityInfo>, String> {
+) -> Result<Vec<crate::uex::types::EntityInfo>, String> {
     let dtos: Vec<VehicleDto> = client.get("/vehicles", &[], api_key).await?;
-    Ok(dtos.iter().map(EntityInfo::from).collect())
+    Ok(dtos.iter().map(crate::uex::types::EntityInfo::from).collect())
 }
 
 async fn get_vehicle_purchase_prices(

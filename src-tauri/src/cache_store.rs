@@ -21,6 +21,7 @@ pub enum Collection {
     FuelPrices,
     Vehicles,
     Items,
+    Manufacturers,
     Locations,
     Fleet,
     UserProfile,
@@ -42,6 +43,7 @@ impl Collection {
             Self::FuelPrices => "Fuel Prices",
             Self::Vehicles => "Vehicles",
             Self::Items => "Items",
+            Self::Manufacturers => "Manufacturers",
             Self::Locations => "Locations",
             Self::Fleet => "Fleet",
             Self::UserProfile => "User Profile",
@@ -56,6 +58,7 @@ impl Collection {
         match self {
             Self::Items
             | Self::Commodities => 43200,
+            Self::Manufacturers => 86400,
             Self::CommodityPrices
             | Self::RawCommodityPrices
             | Self::ItemPrices
@@ -84,6 +87,7 @@ impl Collection {
             Self::FuelPrices => "fuel_prices".to_string(),
             Self::Vehicles => "vehicles".to_string(),
             Self::Items => "items".to_string(),
+            Self::Manufacturers => "manufacturers".to_string(),
             Self::Locations => "locations".to_string(),
             Self::Fleet => "fleet".to_string(),
             Self::UserProfile => "user_profile".to_string(),
@@ -110,6 +114,7 @@ impl Collection {
             Collection::FuelPrices,
             Collection::Vehicles,
             Collection::Items,
+            Collection::Manufacturers,
             Collection::Locations,
             Collection::Fleet,
             Collection::UserProfile,

@@ -62,6 +62,7 @@ pub fn run() {
         activity: std::sync::Arc::new(Mutex::new(activity::ActivityLog::new())),
         fetched_api_key: Mutex::new(String::new()),
         backend_account: Mutex::new(None),
+        entity_mapper: Mutex::new(wiki::mapper::EntityMapper::new()),
     };
 
     // Build the tauri-specta invoke handler + export TS bindings in dev mode.

@@ -1,77 +1,9 @@
 use serde::Deserialize;
 
 use crate::uex::types::{
-    deserialize_flexible_id, deserialize_nonempty_string, location_string, timestamp_string,
-    EntityInfo, PriceEntry, UexResult,
+    deserialize_flexible_id, location_string, timestamp_string,
+    PriceEntry,
 };
-
-// ── Category DTO ───────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct CategoryDto {
-    #[serde(deserialize_with = "deserialize_flexible_id")]
-    pub id: String,
-    #[serde(default, rename = "type")]
-    pub category_type: Option<String>,
-}
-
-// ── Item DTO ───────────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct ItemDto {
-    #[serde(deserialize_with = "deserialize_flexible_id")]
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub slug: String,
-    #[serde(default)]
-    pub uuid: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub section: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub category: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub company_name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub size: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub color: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_nonempty_string")]
-    pub game_version: Option<String>,
-}
-
-impl From<&ItemDto> for UexResult {
-    fn from(dto: &ItemDto) -> Self {
-        Self {
-            id: dto.id.clone(),
-            name: dto.name.clone(),
-            kind: "item".to_string(),
-            slug: dto.slug.clone(),
-            uuid: dto.uuid.clone().unwrap_or_default(),
-            source: "uex".to_string(),
-        }
-    }
-}
-
-impl From<&ItemDto> for EntityInfo {
-    fn from(dto: &ItemDto) -> Self {
-        Self {
-            id: dto.id.clone(),
-            name: dto.name.clone(),
-            kind: "item".to_string(),
-            slug: dto.slug.clone(),
-            uuid: dto.uuid.clone(),
-            section: dto.section.clone(),
-            category: dto.category.clone(),
-            company_name: dto.company_name.clone(),
-            size: dto.size.clone(),
-            color: dto.color.clone(),
-            game_version: dto.game_version.clone(),
-            ..Default::default()
-        }
-    }
-}
 
 // ── Item Price DTO ─────────────────────────────────────────────────────────
 
@@ -79,6 +11,9 @@ impl From<&ItemDto> for EntityInfo {
 pub struct ItemPriceDto {
     #[serde(default, deserialize_with = "deserialize_flexible_id")]
     pub id_item: String,
+    /// Game UUID from UEX — matches Wiki API item UUID for direct linking.
+    #[serde(default)]
+    pub item_uuid: Option<String>,
     #[serde(default)]
     pub item_name: Option<String>,
     #[serde(default)]
@@ -103,10 +38,20 @@ pub struct ItemPriceDto {
     pub date_added: Option<serde_json::Value>,
 }
 
+impl ItemPriceDto {
+    /// Primary key for price storage: UUID if available, else UEX id.
+    pub fn primary_id(&self) -> &str {
+        self.item_uuid
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&self.id_item)
+    }
+}
+
 impl From<&ItemPriceDto> for PriceEntry {
     fn from(dto: &ItemPriceDto) -> Self {
         Self {
-            entity_id: dto.id_item.clone(),
+            entity_id: dto.primary_id().to_string(),
             entity_name: dto.item_name.clone().unwrap_or_default(),
             price_type: "item".to_string(),
             location: location_string(&dto.star_system_name, &dto.planet_name),

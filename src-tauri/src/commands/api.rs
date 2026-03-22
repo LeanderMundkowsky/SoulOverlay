@@ -26,7 +26,6 @@ use crate::cache_store::{CacheResult, Collection};
 use crate::providers::search_in_collection;
 use crate::providers::commodities::search_commodities;
 use crate::providers::vehicles::search_vehicles;
-use crate::providers::items::search_items;
 use crate::providers::locations::{search_locations, TERMINAL_HIERARCHY_KEY};
 use crate::state::AppState;
 use crate::uex::types::{EntityInfo, LocationTerminal, PriceEntry, UexResult};
@@ -69,6 +68,7 @@ fn api_key(state: &AppState) -> String {
 
 /// Search a single collection from cache. Returns (results, is_stale).
 /// Falls back to a direct API call if the cache is empty.
+/// Note: Items are NOT in cache — use `search_items_wiki` for item search.
 async fn search_cached_or_fetch(
     state: &AppState,
     collection: Collection,
@@ -88,19 +88,8 @@ async fn search_cached_or_fetch(
             let results = match collection {
                 Collection::Commodities => search_commodities(&state.uex, query, api_key).await?,
                 Collection::Vehicles => search_vehicles(&state.uex, query, api_key).await?,
-                Collection::Items => search_items(&state.uex, query, api_key).await?,
                 Collection::Locations => search_locations(&state.uex, query, api_key).await?,
-                Collection::CommodityPrices
-                | Collection::RawCommodityPrices
-                | Collection::ItemPrices
-                | Collection::VehiclePurchasePrices
-                | Collection::VehicleRentalPrices
-                | Collection::FuelPrices
-                | Collection::Fleet
-                | Collection::UserProfile
-                | Collection::EntityInfo
-                | Collection::WikiSpecs
-                | Collection::WikiloTrades => return Err("Use specific price commands".to_string()),
+                _ => return Err("Use specific price commands".to_string()),
             };
             Ok((results, false))
         }
@@ -109,8 +98,9 @@ async fn search_cached_or_fetch(
 
 // ── Search endpoints ───────────────────────────────────────────────────────
 
-/// Search all UEX entity types (commodities, vehicles, items, locations)
-/// from the local cache, falling back to direct API calls.
+/// Search all entity types (commodities, vehicles, locations) from local cache.
+/// Items are NOT included here — the frontend supplements with Wiki API search
+/// via the separate `wiki_search` command (with deduplication).
 ///
 /// Parameters:
 /// - `query`: free-text search string
@@ -129,10 +119,10 @@ pub async fn api_search(
     let mut all_results = Vec::new();
     let mut any_stale = false;
 
+    // Local cache searches (instant)
     let collections = [
         Collection::Commodities,
         Collection::Vehicles,
-        Collection::Items,
         Collection::Locations,
     ];
 
@@ -143,7 +133,6 @@ pub async fn api_search(
                 if stale { any_stale = true; }
             }
             Err(e) => {
-                // Log but don't fail the entire search
                 log::warn!("Search failed for {:?} (query={:?}): {}", collection, query, e);
             }
         }
@@ -200,7 +189,7 @@ pub async fn api_search_vehicles(
     }
 }
 
-/// Search UEX items.
+/// Search items via Wiki API (on-demand search, not cached catalog).
 #[tauri::command]
 #[specta::specta]
 pub async fn api_search_items(
@@ -211,11 +200,9 @@ pub async fn api_search_items(
         return Ok(ApiResponse::ok(vec![]));
     }
 
-    let api_key = api_key(&state);
-    match search_cached_or_fetch(&state, Collection::Items, &query, &api_key).await {
-        Ok((results, stale)) => {
-            if stale { Ok(ApiResponse::ok_stale(results)) } else { Ok(ApiResponse::ok(results)) }
-        }
+    let http = state.uex.client();
+    match crate::providers::items::provider::search_items_wiki(http, &query, 100).await {
+        Ok(results) => Ok(ApiResponse::ok(results)),
         Err(e) => Ok(ApiResponse::err(e)),
     }
 }
@@ -382,8 +369,10 @@ pub async fn api_fuel_prices(
 
 // ── Entity info endpoint ──────────────────────────────────────────────────
 
-/// Fetch detailed entity metadata by kind and id from the cache.
-/// Entity info is bulk-fetched at startup and refreshed by the background timer.
+/// Fetch detailed entity metadata by kind and id.
+/// - Items: fetched on-demand from Wiki API (not bulk-cached).
+/// - Vehicles: from bulk entity_info cache (Wiki vehicle data).
+/// - Commodities/locations: from bulk entity_info cache (UEX data).
 #[tauri::command]
 #[specta::specta]
 pub async fn api_entity_info(
@@ -397,13 +386,93 @@ pub async fn api_entity_info(
 
     let cache_key = Collection::EntityInfo.storage_key_with_id(&format!("{}:{}", kind, entity_id));
 
+    // Check cache first (all kinds)
     match state.cache.get::<EntityInfo>(&cache_key) {
-        CacheResult::Fresh(info) if info.id == entity_id => Ok(ApiResponse::ok(info)),
-        CacheResult::Stale(info) if info.id == entity_id => Ok(ApiResponse::ok_stale(info)),
-        _ => Ok(ApiResponse::err(format!(
-            "Entity info for {} {} not in cache. Wait for cache to finish loading.",
-            kind, entity_id
-        ))),
+        CacheResult::Fresh(info) if info.id == entity_id => return Ok(ApiResponse::ok(info)),
+        CacheResult::Stale(info) if info.id == entity_id => return Ok(ApiResponse::ok_stale(info)),
+        _ => {}
+    }
+
+    // On-demand fetch for items from Wiki API
+    if kind == "item" {
+        let http = state.uex.client();
+        match crate::wiki::client::get_item(http, &entity_id).await {
+            Ok(dto) => {
+                let info = wiki_item_to_entity_info(&dto);
+                let ttl = Collection::EntityInfo.ttl_secs();
+                let _ = state.cache.put(&cache_key, ttl, &info);
+                return Ok(ApiResponse::ok(info));
+            }
+            Err(e) => {
+                log::warn!("Wiki item fetch failed for {}: {}", entity_id, e);
+            }
+        }
+    }
+
+    // On-demand fetch for vehicles from Wiki API
+    if kind == "vehicle" || kind == "ground vehicle" {
+        let http = state.uex.client();
+        match crate::wiki::client::get_vehicle(http, &entity_id).await {
+            Ok(dto) => {
+                let info = wiki_vehicle_to_entity_info(&dto);
+                let ttl = Collection::EntityInfo.ttl_secs();
+                let _ = state.cache.put(&cache_key, ttl, &info);
+                return Ok(ApiResponse::ok(info));
+            }
+            Err(e) => {
+                log::warn!("Wiki vehicle fetch failed for {}: {}", entity_id, e);
+            }
+        }
+    }
+
+    Ok(ApiResponse::err(format!(
+        "Entity info for {} {} not in cache. Wait for cache to finish loading.",
+        kind, entity_id
+    )))
+}
+
+/// Convert Wiki item DTO to EntityInfo for cache storage.
+fn wiki_item_to_entity_info(dto: &crate::wiki::dto::WikiItemDto) -> EntityInfo {
+    let manufacturer = dto.manufacturer.as_ref();
+    EntityInfo {
+        id: dto.uuid.clone().unwrap_or_default(),
+        name: dto.name.clone().unwrap_or_default(),
+        kind: "item".to_string(),
+        slug: String::new(),
+        uuid: dto.uuid.clone(),
+        company_name: manufacturer.and_then(|m| m.name.clone()),
+        game_version: dto.version.clone(),
+        section: dto.item_type.clone(),
+        category: dto.sub_type.clone(),
+        size: dto.size.map(|s| s.to_string()),
+        mass: dto.mass,
+        ..Default::default()
+    }
+}
+
+/// Convert Wiki vehicle DTO to EntityInfo for cache storage.
+fn wiki_vehicle_to_entity_info(dto: &crate::wiki::dto::WikiVehicleDto) -> EntityInfo {
+    let kind = match dto.vehicle_type.as_deref() {
+        Some("vehicle") | Some("gravlev") => "ground vehicle",
+        _ => "vehicle",
+    };
+    let dim = dto.dimension.as_ref();
+    EntityInfo {
+        id: dto.uuid.clone().unwrap_or_default(),
+        name: dto.name.clone().unwrap_or_default(),
+        kind: kind.to_string(),
+        slug: dto.slug.clone().unwrap_or_default(),
+        uuid: dto.uuid.clone(),
+        name_full: dto.name.clone(),
+        company_name: dto.manufacturer.as_ref().and_then(|m| m.name.clone()),
+        scu: dto.cargo_capacity,
+        crew: dto.crew.as_ref().and_then(|c| c.max).map(|v| v.to_string()).filter(|s| s != "0"),
+        length: dim.and_then(|d| d.length),
+        width: dim.and_then(|d| d.width),
+        height: dim.and_then(|d| d.height),
+        mass: dto.mass,
+        game_version: dto.version.clone(),
+        ..Default::default()
     }
 }
 
