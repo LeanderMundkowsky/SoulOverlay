@@ -77,10 +77,20 @@ pub fn run() {
         .expect("Failed to export typescript bindings");
 
     // Remember which window has focus before Tauri creates any windows,
-    // so we can restore focus after setup (window creation steals focus).
+    // so we can restore focus after setup (window creation steals focus on Windows).
+    #[cfg(windows)]
     window::capture_pre_launch_foreground();
 
-    tauri::Builder::default()
+    let tauri_builder = {
+        let b = tauri::Builder::default();
+        // Register the global shortcut plugin on Linux (KDE and other desktops).
+        // On Windows, the LL keyboard hook is used instead.
+        #[cfg(target_os = "linux")]
+        let b = b.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+        b
+    };
+
+    tauri_builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             use tauri::Manager;
             // On second instance, show the overlay
@@ -103,23 +113,25 @@ pub fn run() {
         .setup(move |app| {
             builder.mount_events(app);
             // Disable WebView2 built-in devtools, context menu, and status bar
-            // on the overlay window before any page content loads.
-            use tauri::Manager;
-            if let Some(webview) = app.get_webview_window("overlay") {
-                let _ = webview.with_webview(|wv| {
-                    #[cfg(windows)]
-                    unsafe {
-                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
-                        if let Ok(core) = wv.controller().CoreWebView2() {
-                            if let Ok(s) = core.Settings() {
-                                let s: ICoreWebView2Settings = s;
-                                let _ = s.SetAreDevToolsEnabled(cfg!(debug_assertions));
-                                let _ = s.SetAreDefaultContextMenusEnabled(false);
-                                let _ = s.SetIsStatusBarEnabled(false);
+            // on the overlay window before any page content loads (Windows only).
+            #[cfg(windows)]
+            {
+                use tauri::Manager;
+                if let Some(webview) = app.get_webview_window("overlay") {
+                    let _ = webview.with_webview(|wv| {
+                        unsafe {
+                            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings;
+                            if let Ok(core) = wv.controller().CoreWebView2() {
+                                if let Ok(s) = core.Settings() {
+                                    let s: ICoreWebView2Settings = s;
+                                    let _ = s.SetAreDevToolsEnabled(cfg!(debug_assertions));
+                                    let _ = s.SetAreDefaultContextMenusEnabled(false);
+                                    let _ = s.SetIsStatusBarEnabled(false);
+                                }
                             }
                         }
-                    }
-                });
+                    });
+                }
             }
             app_setup::initialize(app)?;
             info!("SoulOverlay initialized successfully");

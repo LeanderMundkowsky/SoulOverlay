@@ -3,29 +3,50 @@ use std::path::PathBuf;
 
 /// Centralized path configuration for all application files.
 ///
-/// Every file the app reads or writes lives under `%APPDATA%\SoulOverlay\`.
+/// On Windows, files live under `%APPDATA%\SoulOverlay\`.
+/// On Linux, files live under `$XDG_DATA_HOME/souloverlay/` (default: `~/.local/share/souloverlay/`).
 /// This struct is the single source of truth — no other module should
-/// resolve `APPDATA` or hard-code paths.
+/// resolve platform paths directly.
 #[derive(Debug, Clone)]
 pub struct AppPaths {
-    /// Root directory: `%APPDATA%\SoulOverlay\`
+    /// Root data directory
     pub data_dir: PathBuf,
-    /// Log file: `%APPDATA%\SoulOverlay\soul-overlay.log`
+    /// Log file
     pub log_file: PathBuf,
-    /// SQLite database: `%APPDATA%\SoulOverlay\soul_overlay.db`
+    /// SQLite database
     pub db_file: PathBuf,
-    /// Settings JSON: `%APPDATA%\SoulOverlay\settings.json`
+    /// Settings JSON
     pub settings_file: PathBuf,
 }
 
-impl AppPaths {
-    /// Resolve all paths from `%APPDATA%`. Creates the data directory if it
-    /// doesn't exist yet.
-    pub fn init() -> Result<Self, String> {
-        let app_data = std::env::var("APPDATA")
-            .map_err(|_| "APPDATA environment variable not set".to_string())?;
+#[cfg(windows)]
+fn get_data_dir() -> Result<PathBuf, String> {
+    let app_data = std::env::var("APPDATA")
+        .map_err(|_| "APPDATA environment variable not set".to_string())?;
+    Ok(PathBuf::from(app_data).join("SoulOverlay"))
+}
 
-        let data_dir = PathBuf::from(app_data).join("SoulOverlay");
+#[cfg(not(windows))]
+fn get_data_dir() -> Result<PathBuf, String> {
+    // Follow the XDG Base Directory Specification
+    let base = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".local").join("share"))
+        })
+        .ok_or_else(|| "Could not determine XDG_DATA_HOME or HOME".to_string())?;
+    Ok(base.join("souloverlay"))
+}
+
+impl AppPaths {
+    /// Resolve all paths from the platform-appropriate base directory.
+    /// Creates the data directory if it doesn't exist yet.
+    pub fn init() -> Result<Self, String> {
+        let data_dir = get_data_dir()?;
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
