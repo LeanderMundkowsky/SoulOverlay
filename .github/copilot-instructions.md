@@ -1,9 +1,16 @@
 # SoulOverlay — Copilot Instructions
 
 SoulOverlay is a Tauri 2 + Vue 3 overlay for Star Citizen on Windows x86_64. It renders a
-transparent, always-on-top window over the game showing UEX Corp commodity prices. Data from
-the UEX Corp API is cached in a local SQLite database with per-collection TTLs and served
-from an in-memory mirror for instant search.
+transparent, always-on-top window over the game. Data comes from two sources:
+
+- **UEX Corp API** — commodities, vehicles, locations, prices, fleet, user profile
+- **Star Citizen Wiki API** (`api.star-citizen.wiki`) — item catalog (19k+ items), full vehicle
+  specs, manufacturers
+
+Items are fetched **on-demand** from the Wiki API (no bulk cache). Vehicles are cross-referenced
+between both APIs via the `EntityMapper` (UUID ↔ UEX ID). Commodity prices are UEX-only.
+All data is cached in a local SQLite database with per-collection TTLs and served from an
+in-memory mirror for instant search.
 
 ## Shell & Git Rules
 
@@ -81,7 +88,7 @@ src/                                 # Vue 3 + TypeScript frontend
 │                                    #   FuelPriceView, TerminalPriceView
 │   ├── panels/                      # SettingsPanel, DebugPanel
 │   ├── settings/                    # HotkeyCapture, OpacitySlider, SettingsField, CacheSettingsPanel
-│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab, CZTab, WikiloTab, ProfileTab, PlaceholderTab
+│   ├── tabs/                        # SearchTab, HangarTab, InventoryTab, DetailsTab (In Development placeholder), CZTab, WikiloTab, ProfileTab, PlaceholderTab
 │   └── ui/                          # AlertBanner, LoadingSpinner, PanelHeader, ToggleSwitch,
 │                                    #   ResizeHandle, ContextMenu, KeybindsModal, SortControls,
 │                                    #   InventoryBar, InventoryModal, UpdateBanner, UpdateModal
@@ -124,8 +131,9 @@ src-tauri/src/                       # Rust backend
 │   ├── wikelo/                      # dto.rs + provider.rs: Wikelo data provider
 │   └── wiki_specs/                  # provider.rs: lazy per-entity wiki specs (no bulk refresh)
 ├── wiki/                            # Star Citizen Wiki API (api.star-citizen.wiki)
-│   ├── client.rs                    # get_item, get_vehicle, search_items, search_vehicles
-│   ├── dto.rs                       # API response DTOs (WikiItemDto, WikiVehicleDto, WikiApiResponse)
+│   ├── client.rs                    # get_item, get_vehicle, search_items, search_vehicles, list_all_vehicles, list_all_manufacturers
+│   ├── dto.rs                       # API response DTOs (WikiItemDto, WikiVehicleDto, WikiManufacturerListItem, WikiApiResponse)
+│   ├── mapper.rs                    # EntityMapper: bidirectional Wiki UUID ↔ UEX ID for vehicles; MapperSnapshot for persistence
 │   ├── types.rs                     # Shared type WikiEntitySpecs (IPC-safe)
 │   └── mod.rs                       # Module declarations
 ├── tray.rs                          # System tray icon + menu
@@ -319,7 +327,8 @@ Both share: `collection()`, `requires_secret()`, `depends_on()`, `async fn refre
 3. Create `providers/new_entity/mod.rs` with module declarations + re-exports
 4. Add `pub mod new_entity;` to `providers/mod.rs`
 5. Register the provider in `all_providers()` in `providers/mod.rs`
-6. Add a `Collection` variant in `cache_store.rs` with TTL/key/display_name
+6. Add a `Collection` variant in `cache_store.rs` with TTL/key/display_name, **and** add it to
+   `Collection::all()` — the background refresh timer iterates `all()`, not the full enum
 7. If the command crosses IPC: add types with `#[derive(specta::Type)]`, add command to
    `collect_commands![]` in `lib.rs`
 
@@ -476,12 +485,17 @@ Each variant provides `display_name()`, `ttl_secs()` (default), `storage_key()`,
 | `VehicleRentalPrices` | 12 h | `vehicle_rental_prices:{id}` | Yes |
 | `FuelPrices` | 20 min | `fuel_prices:{id}` | Yes |
 | `Vehicles` | 12 h | `vehicles` | No |
-| `Items` | 12 h | `items` | No |
+| `Manufacturers` | 24 h | `manufacturers` | No |
 | `Locations` | 24 h | `locations` | No |
-| `Fleet` | 12 h | `fleet` | No |
 | `UserProfile` | 1 h | `user_profile` | No |
 | `EntityInfo` | 24 h | `entity_info:{kind}:{id}` | Yes |
 | `WikiSpecs` | 24 h | `wiki_specs:{kind}:{id}` | Yes |
+| `WikiloTrades` | 24 h | `wikelo_trades` | No |
+
+> **Note**: `Collection::Items` and `Collection::Fleet` exist as enum variants (for backward
+> compatibility with cached SQLite data) but are **not** in `Collection::all()` and have no
+> registered providers. Items are fetched on-demand via the Wiki API; Fleet is managed by the
+> SoulOverlay backend, not the UEX cache.
 
 Default TTLs are defined in `Collection::ttl_secs()`. Per-collection overrides are stored in
 `settings.cache_ttls` (`HashMap<String, u32>`) keyed by `Collection::storage_key()`.
@@ -537,7 +551,19 @@ close buttons.
 
 ## Search System
 
-Search is handled in `composables/useUex.ts` with type-prefix filtering:
+Search uses **two parallel backends** merged client-side in `composables/useUex.ts`:
+
+1. **`api_search`** (`commands/api.rs`) — cache-only, instant:
+   - Searches `Commodities`, `Vehicles`, `Locations` from in-memory cache
+   - Returns `ApiResponse<Vec<UexResult>>` — always fast, never blocks
+   - `source: "uex"` on all results
+
+2. **`wiki_search`** (`commands/wiki.rs`) — live API call, slower:
+   - Searches items and vehicles from `api.star-citizen.wiki` in parallel
+   - Returns `ApiResponse<Vec<UexResult>>` with `source: "wiki"`
+   - Frontend deduplicates by UUID and name similarity before rendering
+
+**Type-prefix filtering** (parsed in `useUex.parsePrefix()`):
 
 | Prefix | Searches | Example |
 |--------|----------|---------|
@@ -548,9 +574,7 @@ Search is handled in `composables/useUex.ts` with type-prefix filtering:
 | `:l` | Locations (non-terminals) | `:l Seraphim` |
 | `:t` | Terminals | `:t Cargo` |
 
-Prefixes are parsed in `useUex.parsePrefix()` and routed to per-collection backend commands
-(`apiSearchCommodities`, etc.). `:l` and `:t` both call `apiSearchLocations` but filter
-results client-side by `slug === "terminal"` vs `slug !== "terminal"`.
+`:l` and `:t` both call `apiSearchLocations` but filter client-side by `slug === "terminal"`.
 
 **Pinned locations**: Users can pin a location to filter all search results to that location's
 terminals. Pinned state lives in `SearchTab.pinnedLocation` and flows down to `SearchBar`
@@ -722,15 +746,43 @@ as inventory locations (enforced in `commands/inventory.rs` via `STORAGE_SLUGS`)
 `uex/` and follows the same pattern: transport in `client.rs`, DTOs in `dto.rs`, shared IPC
 types in `types.rs`.
 
+**Data provided exclusively by the Wiki API:**
+- Items (19k+ entries) — searched on-demand, never bulk-cached
+- Vehicle specs (full stats) — fetched per-entity and cached under `wiki_specs:{kind}:{id}`
+- Manufacturers — bulk-cached as `Collection::Manufacturers`
+
+**Vehicle cross-referencing (EntityMapper):**
+
+Vehicles exist in both APIs but UEX uses numeric IDs while the Wiki uses UUIDs. The
+`EntityMapper` (`wiki/mapper.rs`) maintains bidirectional maps:
+
+```
+Wiki UUID ↔ UEX numeric ID   (vehicles only)
+Normalized name → Wiki UUID  (fallback matching)
+```
+
+Lifecycle:
+1. **Built** by `VehiclesCatalog::refresh()` — name-matches UEX and Wiki vehicle lists
+2. **Persisted** to cache under `MAPPER_CACHE_KEY = "entity_mapper_snapshot"` as a `MapperSnapshot`
+3. **Restored** in `prefetch_all()` before Phase 2 providers, so prices work after restart
+   without re-fetching the catalog
+
+**Key rule:** vehicle prices are stored under **Wiki UUIDs** (remapped from UEX IDs before
+`store_prices_split()`). Item prices are stored under `item_uuid` from UEX
+`/items_prices_all` (which already contains Wiki UUIDs — no remapping needed).
+
 **`wiki_search`** (`commands/wiki.rs`): searches items and vehicles in parallel, returns
 `ApiResponse<Vec<UexResult>>` with `source: "wiki"` so the frontend can distinguish results.
+
+**`api_entity_info`** (`commands/api.rs`): when entity info is missing from cache, falls back to
+a live Wiki API fetch for both items (`wiki_item_to_entity_info`) and vehicles
+(`wiki_vehicle_to_entity_info`).
 
 **`wiki_get_specs`** / `fetch_wiki_specs` (`providers/wiki_specs/`): lazy per-entity fetch —
 no bulk refresh. Lookup order: cache → UUID direct lookup → name search fallback. Cached under
 `wiki_specs:{kind}:{id}` with 24-hour TTL.
 
-`WikiEntitySpecs` (in `wiki/types.rs`) is the IPC type — used in `DetailsTab.vue` to show
-ship specs, item stats, etc. alongside UEX price data.
+`WikiEntitySpecs` (in `wiki/types.rs`) is the IPC type — used alongside UEX price data.
 
 ## SC Process Detection
 

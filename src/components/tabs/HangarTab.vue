@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
 import FleetVehicleModal from "@/components/ui/FleetVehicleModal.vue";
+import UexImportModal from "@/components/ui/UexImportModal.vue";
 import type { FleetModalMode } from "@/components/ui/FleetVehicleModal.vue";
 import IconPackage from "@/components/icons/IconPackage.vue";
 import { useHangarStore } from "@/stores/hangar";
@@ -61,6 +62,9 @@ function cancelDelete() {
 // Import feedback
 const importFeedback = ref<string | null>(null);
 
+// Import confirmation
+const confirmingImport = ref(false);
+
 const canFetch = computed(() => backendStore.isLoggedIn);
 
 watch(canFetch, (ready) => {
@@ -74,13 +78,17 @@ function refresh() {
 }
 
 async function importFromUex() {
-  if (!canFetch.value) return;
+  confirmingImport.value = false;
   importFeedback.value = null;
   const result = await hangarStore.importFleet();
   if (result) {
     importFeedback.value = `Imported ${result.imported} ships (${result.created} new, ${result.updated} updated, ${result.removed} removed).`;
     setTimeout(() => { importFeedback.value = null; }, 5000);
   }
+}
+
+function cancelImport() {
+  confirmingImport.value = false;
 }
 
 function viewVehicle(uexVehicleId: string, modelName: string) {
@@ -155,7 +163,7 @@ function viewShipInventory(shipId: number, modelName: string) {
         </button>
         <!-- Import from UEX -->
         <button
-          @click="importFromUex"
+          @click="confirmingImport = true"
           :disabled="hangarStore.importing || hangarStore.loading"
           class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#1e2028] text-white/50 hover:bg-[#272a33] hover:text-white/70 disabled:opacity-30 disabled:pointer-events-none border border-white/10 transition-colors"
         >
@@ -296,6 +304,13 @@ function viewShipInventory(shipId: number, modelName: string) {
     :vehicle="modalVehicle"
     @close="modalOpen = false"
     @saved="onModalSaved"
+  />
+
+  <!-- UEX import confirmation modal -->
+  <UexImportModal
+    v-if="confirmingImport"
+    @confirm="importFromUex"
+    @cancel="cancelImport"
   />
   </div>
 </template>

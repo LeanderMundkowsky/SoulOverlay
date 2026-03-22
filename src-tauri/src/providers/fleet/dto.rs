@@ -1,7 +1,8 @@
 use serde::Deserialize;
 
+use crate::commands::hangar::HangarVehicle;
 use crate::uex::types::{
-    deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string, HangarVehicle,
+    deserialize_bool_flag, deserialize_flexible_id, deserialize_nonempty_string,
 };
 
 #[derive(Deserialize)]

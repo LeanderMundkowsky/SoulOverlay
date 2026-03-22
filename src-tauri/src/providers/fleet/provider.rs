@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use super::dto::FleetVehicleDto;
 use crate::cache_store::Collection;
+use crate::commands::hangar::HangarVehicle;
 use crate::providers::{store_blob, BlobProvider, RefreshContext};
-use crate::uex::types::HangarVehicle;
 use crate::uex::UexClient;
 
 pub struct FleetProvider;

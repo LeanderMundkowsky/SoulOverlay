@@ -6,12 +6,10 @@ import IconPlane from "@/components/icons/IconPlane.vue";
 import IconMapPin from "@/components/icons/IconMapPin.vue";
 import IconDollarSign from "@/components/icons/IconDollarSign.vue";
 import IconHeart from "@/components/icons/IconHeart.vue";
-import IconInfoCircle from "@/components/icons/IconInfoCircle.vue";
 import IconPin from "@/components/icons/IconPin.vue";
 import ContextMenu from "@/components/ui/ContextMenu.vue";
 import type { MenuItem, MenuSeparator } from "@/components/ui/ContextMenu.vue";
 import { useFavoritesStore } from "@/stores/favorites";
-import { useDetailsStore } from "@/stores/details";
 import { startDrag } from "@/composables/useDragDrop";
 import type { UexResult } from "@/composables/useUex";
 
@@ -29,7 +27,6 @@ const emit = defineEmits<{
 defineOptions({ inheritAttrs: false });
 
 const favoritesStore = useFavoritesStore();
-const detailsStore = useDetailsStore();
 
 const rootEl = ref<HTMLElement | null>(null);
 defineExpose({ rootEl });
@@ -54,11 +51,6 @@ function buildMenuItems(): (MenuItem | MenuSeparator)[] {
       icon: props.result.kind === "commodity" ? "💰" : "🔍",
       action: () => emit("select"),
     },
-    {
-      label: "Open in Details",
-      icon: "ℹ️",
-      action: () => detailsStore.openEntity(props.result),
-    },
     { separator: true },
     {
       label: isFav ? "Remove from Favorites" : "Add to Favorites",
@@ -79,10 +71,6 @@ function buildMenuItems(): (MenuItem | MenuSeparator)[] {
 
 function toggleFavorite() {
   favoritesStore.toggleFavorite(props.result);
-}
-
-function openInDetails() {
-  detailsStore.openEntity(props.result);
 }
 
 function onPointerDown(e: PointerEvent) {
@@ -152,14 +140,6 @@ function onPointerDown(e: PointerEvent) {
         >
           <IconHeart class="w-3 h-3" :filled="favoritesStore.isFavorite(props.result.id, props.result.kind)" />
           {{ favoritesStore.isFavorite(props.result.id, props.result.kind) ? 'Unfavorite' : 'Favorite' }}
-        </button>
-
-        <button
-          @click.stop="openInDetails"
-          class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
-        >
-          <IconInfoCircle class="w-3 h-3" />
-          Details
         </button>
 
         <button

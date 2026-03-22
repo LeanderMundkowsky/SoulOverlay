@@ -101,11 +101,15 @@ watch(() => settingsStore.settings.font_size, (px) => {
   document.documentElement.style.fontSize = px + "px";
 });
 
-// Watch for details store tab-switch requests
+// Watch for details store tab-switch requests → redirect to search tab
 watch(() => detailsStore.requestTabSwitch, (shouldSwitch) => {
   if (shouldSwitch) {
-    activeTab.value = "details";
+    const entity = detailsStore.currentEntity;
+    activeTab.value = "search";
     detailsStore.clearTabSwitchRequest();
+    if (entity) {
+      nextTick(() => searchTabRef.value?.selectEntity(entity));
+    }
   }
 });
 
@@ -246,11 +250,10 @@ function onToggleDebug() {
 }
 
 function onFavoriteSelect(fav: { id: string; name: string; kind: string; slug: string; uuid: string; source: string }) {
-  if (activeTab.value === "search") {
-    searchTabRef.value?.selectEntity(fav);
-  } else {
-    detailsStore.currentEntity = { id: fav.id, name: fav.name, kind: fav.kind, slug: fav.slug, uuid: fav.uuid, source: fav.source };
+  if (activeTab.value !== "search") {
+    activeTab.value = "search";
   }
+  nextTick(() => searchTabRef.value?.selectEntity(fav));
 }
 
 function onFavoritePin(fav: { id: string; name: string; kind: string; slug: string }) {
@@ -263,11 +266,10 @@ function onFavoritePin(fav: { id: string; name: string; kind: string; slug: stri
 function onWatchSelect(entry: WatchEntry) {
   const entity = { id: entry.entity_id, name: entry.entity_name, kind: entry.entity_kind, slug: entry.entity_slug };
   watchlistStore.highlightTarget = { terminalId: entry.terminal_id, priceType: entry.price_type };
-  if (activeTab.value === "search") {
-    searchTabRef.value?.selectEntity(entity);
-  } else {
-    detailsStore.currentEntity = { ...entity, uuid: "", source: "uex" };
+  if (activeTab.value !== "search") {
+    activeTab.value = "search";
   }
+  nextTick(() => searchTabRef.value?.selectEntity(entity));
 }
 
 function onToggleFavorites() {
@@ -375,8 +377,7 @@ watch(isDragActive, (active) => {
           <SearchTab v-show="activeTab === 'search'"
             ref="searchTabRef"
             :active="activeTab === 'search'" />
-          <DetailsTab v-show="activeTab === 'details'"
-            :active="activeTab === 'details'" />
+          <DetailsTab v-show="activeTab === 'details'" />
           <InventoryTab v-show="activeTab === 'inventory'" />
           <HangarTab v-show="activeTab === 'hangar'" @switch-to-inventory="onSwitchToInventory" />
           <WikiloTab v-show="activeTab === 'wikelo'" />

@@ -16,6 +16,7 @@ interface Tab {
   label: string;
   shortcut: string | null;
   disabled: boolean;
+  title?: string;
   action: "switch" | "close" | "toggle-settings" | "toggle-debug";
 }
 
@@ -39,7 +40,7 @@ const emit = defineEmits<{
 
 const tabs: Tab[] = [
   { id: "search",    label: "SEARCH",    shortcut: "F3",  disabled: false, action: "switch" },
-  { id: "details",   label: "DETAILS",   shortcut: null,  disabled: false, action: "switch" },
+  { id: "details",   label: "DETAILS",   shortcut: null,  disabled: true,  title: "In Development", action: "switch" },
   { id: "inventory", label: "INVENTORY", shortcut: null,  disabled: false, action: "switch" },
   { id: "hangar",    label: "HANGAR",    shortcut: "F8",  disabled: false, action: "switch" },
   { id: "wikelo",    label: "WIKELO",    shortcut: null,  disabled: false, action: "switch" },
@@ -105,6 +106,7 @@ function handleTab(tab: Tab) {
               ? 'hover:bg-red-500/10'
               : 'hover:bg-white/5',
         ]"
+        :title="tab.title"
         @click="handleTab(tab)"
       >
         <!-- Tab icon + label + shortcut -->
