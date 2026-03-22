@@ -107,6 +107,46 @@ Output: `src-tauri\target\release\bundle\nsis\SoulOverlay_*_x64-setup.exe`
 
 ---
 
+## Building for Linux (Experimental)
+
+While SoulOverlay is primarily designed for Windows, the codebase includes experimental Linux support with KDE integration. Linux builds are **not** included in official releases, but you can build locally for development or personal use.
+
+**Prerequisites (Ubuntu/Debian):**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev \
+  libappindicator3-dev \
+  librsvg2-dev \
+  patchelf \
+  libxdo-dev \
+  libxi-dev \
+  libxtst-dev
+```
+
+**Build steps:**
+
+1. Clone the GitHub repository and install dependencies
+
+2. Set environment variables (same as Windows — see Dev environment variables section above)
+
+3. Run development server or build:
+
+```bash
+# Development with hot-reload
+npm run tauri dev
+
+# Release build (executable only, no installer)
+npm run tauri build
+```
+
+The release binary will be at: `src-tauri/target/release/soul-overlay`
+
+> **Note:** Auto-update functionality is not available on Linux. You'll need to manually rebuild to get the latest version.
+
+---
+
 ## Common Commands
 
 | Task | Command |
