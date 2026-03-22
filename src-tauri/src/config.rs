@@ -3,18 +3,22 @@ use std::path::PathBuf;
 
 /// Centralized path configuration for all application files.
 ///
-/// Every file the app reads or writes lives under `%APPDATA%\SoulOverlay\`.
+/// The data directory varies by build profile so dev and production data never mix:
+/// - `tester` feature active  → `%APPDATA%\SoulOverlayTest`
+/// - debug build (tauri dev)  → `%APPDATA%\SoulOverlayDev`
+/// - release build            → `%APPDATA%\SoulOverlay`
+///
 /// This struct is the single source of truth — no other module should
 /// resolve `APPDATA` or hard-code paths.
 #[derive(Debug, Clone)]
 pub struct AppPaths {
-    /// Root directory: `%APPDATA%\SoulOverlay\`
+    /// Root data directory (path depends on build profile — see struct docs)
     pub data_dir: PathBuf,
-    /// Log file: `%APPDATA%\SoulOverlay\soul-overlay.log`
+    /// `<data_dir>\soul-overlay.log`
     pub log_file: PathBuf,
-    /// SQLite database: `%APPDATA%\SoulOverlay\soul_overlay.db`
+    /// `<data_dir>\soul_overlay.db`
     pub db_file: PathBuf,
-    /// Settings JSON: `%APPDATA%\SoulOverlay\settings.json`
+    /// `<data_dir>\settings.json`
     pub settings_file: PathBuf,
 }
 
@@ -25,7 +29,14 @@ impl AppPaths {
         let app_data = std::env::var("APPDATA")
             .map_err(|_| "APPDATA environment variable not set".to_string())?;
 
-        let data_dir = PathBuf::from(app_data).join("SoulOverlay");
+        let dir_name = if cfg!(feature = "tester") {
+            "SoulOverlayTest"
+        } else if cfg!(debug_assertions) {
+            "SoulOverlayDev"
+        } else {
+            "SoulOverlay"
+        };
+        let data_dir = PathBuf::from(app_data).join(dir_name);
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 

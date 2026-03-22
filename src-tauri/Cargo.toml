@@ -7,6 +7,11 @@ edition = "2021"
 name = "soul_overlay_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+[features]
+# Activates the SoulOverlayTest build: separate data dir + different Tauri identity.
+# Used with: tauri build --config src-tauri/tauri.tester.conf.json -- --features tester
+tester = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

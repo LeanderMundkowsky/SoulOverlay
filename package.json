@@ -9,6 +9,10 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "flush-cache": "node scripts/flush-cache.mjs",
+    "flush-cache:dev": "node scripts/flush-cache.mjs --dev",
+    "flush-cache:test": "node scripts/flush-cache.mjs --test",
+    "build:release": "node scripts/build-release.mjs",
+    "build:tester": "node scripts/build-tester.mjs",
     "bump": "node scripts/bump-version.mjs",
     "check-version": "node scripts/check-version.mjs"
   },

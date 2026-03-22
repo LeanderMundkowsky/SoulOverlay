@@ -12,3 +12,11 @@
 [env]
 BACKEND_URL = { value = "http://localhost:8000" }
 SOUL_APP_TOKEN = { value = "your-dev-token-here" }
+
+# Backend URL compiled into the production release build.
+# Run: npm run build:release
+PROD_BACKEND_URL = { value = "https://overlay.soulreturns.com" }
+
+# Backend URL compiled into the SoulOverlayTest portable build.
+# Run: npm run build:tester
+TESTER_BACKEND_URL = { value = "http://localhost:8000" }

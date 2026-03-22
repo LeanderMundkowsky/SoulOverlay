@@ -2,6 +2,9 @@
 node_modules/
 dist/
 
+# Tester build output
+dist-tester/
+
 # Rust build artifacts
 src-tauri/target/
 
