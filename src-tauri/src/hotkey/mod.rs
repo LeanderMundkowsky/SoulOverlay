@@ -286,6 +286,8 @@ mod linux_impl {
 pub struct HookHandle(
     #[cfg(windows)] windows_impl::HookHandle,
     #[cfg(target_os = "linux")] linux_impl::HookHandle,
+    /// Placeholder so the struct is valid on other platforms (e.g. macOS).
+    #[cfg(not(any(windows, target_os = "linux")))] (),
 );
 
 /// Register the global overlay toggle hotkey.
@@ -303,8 +305,9 @@ pub fn register_hotkey(hotkey: &str, app: &tauri::AppHandle) -> Result<HookHandl
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        warn!("Global hotkey not supported on this platform");
-        Err("Global hotkey not supported on this platform".to_string())
+        let _ = (hotkey, app);
+        log::warn!("Global hotkey not supported on this platform");
+        Ok(HookHandle(()))
     }
 }
 

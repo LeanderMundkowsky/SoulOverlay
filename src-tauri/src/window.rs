@@ -338,7 +338,7 @@ mod windows_impl {
 // post_hotkey_toggle (called from the hotkey thread) can access the window.
 
 #[cfg(not(windows))]
-mod linux_impl {
+mod unix_impl {
     use log::info;
     use tauri::{AppHandle, Emitter, Manager};
 
@@ -437,7 +437,7 @@ pub fn post_hotkey_toggle(show: bool) {
     windows_impl::post_hotkey_toggle(show);
 
     #[cfg(not(windows))]
-    linux_impl::post_hotkey_toggle(show);
+    unix_impl::post_hotkey_toggle(show);
 }
 
 /// Initialize platform-specific overlay window properties.
@@ -446,7 +446,7 @@ pub fn init_overlay_window(window: &WebviewWindow, app: &AppHandle) {
     windows_impl::init_overlay_window(window, app);
 
     #[cfg(not(windows))]
-    linux_impl::init_overlay_window(window, app);
+    unix_impl::init_overlay_window(window, app);
 }
 
 /// Show the overlay and take focus.
@@ -455,7 +455,7 @@ pub fn show_overlay(app: &AppHandle) {
     windows_impl::show_overlay(app);
 
     #[cfg(not(windows))]
-    linux_impl::show_overlay(app);
+    unix_impl::show_overlay(app);
 }
 
 /// Hide the overlay and return focus to the previously active window.
@@ -464,7 +464,7 @@ pub fn hide_overlay(app: &AppHandle) {
     windows_impl::hide_overlay(app);
 
     #[cfg(not(windows))]
-    linux_impl::hide_overlay(app);
+    unix_impl::hide_overlay(app);
 }
 
 /// Position and resize the overlay window.
@@ -473,7 +473,7 @@ pub fn set_window_geometry(app: &AppHandle, x: i32, y: i32, w: u32, h: u32) {
     windows_impl::set_window_geometry(app, x, y, w, h);
 
     #[cfg(not(windows))]
-    linux_impl::set_window_geometry(app, x, y, w, h);
+    unix_impl::set_window_geometry(app, x, y, w, h);
 }
 
 /// Get the full screen rect of the primary monitor.
@@ -482,7 +482,7 @@ pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
     return windows_impl::get_primary_monitor_geometry();
 
     #[cfg(not(windows))]
-    return linux_impl::get_primary_monitor_geometry();
+    return unix_impl::get_primary_monitor_geometry();
 }
 
 /// Get the full screen rect of the monitor containing the given HWND (Windows only).
