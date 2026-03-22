@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  release-windows:
+  release:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -35,7 +35,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and release (Windows)
+      - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,63 +49,3 @@ jobs:
           releaseBody: "See the [full changelog](https://github.com/Soul-Returns/SoulOverlay/commits/${{ github.ref_name }})."
           releaseDraft: true
           prerelease: false
-          # Restrict to NSIS only — tauri.conf.json also lists deb/appimage for Linux,
-          # but those targets must only be built on the Linux job below.
-          args: --target x86_64-pc-windows-msvc --bundles nsis
-
-  release-linux:
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-          cache: npm
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-          shared-key: "release-linux"
-          add-rust-environment-hash-key: false
-          cache-on-failure: true
-
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libxdo-dev \
-            libxi-dev \
-            libxtst-dev
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build and release (Linux)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
-          SOUL_APP_TOKEN: ${{ secrets.SOUL_APP_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "SoulOverlay ${{ github.ref_name }}"
-          releaseBody: "See the [full changelog](https://github.com/Soul-Returns/SoulOverlay/commits/${{ github.ref_name }})."
-          releaseDraft: true
-          prerelease: false
-          args: --target x86_64-unknown-linux-gnu --bundles deb,appimage
