@@ -242,7 +242,14 @@ pub fn default_log_path() -> PathBuf {
         // Star Citizen on Linux runs under Wine or Proton.
         // The game log lives inside the Wine prefix at the Windows AppData\Local path.
         let home = std::env::var("HOME").unwrap_or_default();
-        let user = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+
+        // Sanitize the username to prevent path traversal. Keep only safe characters.
+        let user_raw = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+        let user: String = user_raw
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+            .collect();
+        let user = if user.is_empty() { "user".to_string() } else { user };
 
         // Relative path inside any Wine prefix drive_c root
         let sc_rel = format!(

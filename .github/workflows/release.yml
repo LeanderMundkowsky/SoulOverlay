@@ -49,6 +49,8 @@ jobs:
           releaseBody: "See the [full changelog](https://github.com/Soul-Returns/SoulOverlay/commits/${{ github.ref_name }})."
           releaseDraft: true
           prerelease: false
+          # Restrict to NSIS only — tauri.conf.json also lists deb/appimage for Linux,
+          # but those targets must only be built on the Linux job below.
           args: --target x86_64-pc-windows-msvc --bundles nsis
 
   release-linux:

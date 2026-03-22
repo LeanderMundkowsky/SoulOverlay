@@ -277,8 +277,12 @@ fn spawn_startup_hint(handle: &tauri::AppHandle, hotkey: &str) {
             #[cfg(not(windows))]
             {
                 // On Linux, use Tauri's cross-platform positioning
-                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
-                let _ = w.show();
+                if let Err(e) = w.set_position(tauri::PhysicalPosition::new(x, y)) {
+                    log::warn!("Failed to position startup hint: {}", e);
+                }
+                if let Err(e) = w.show() {
+                    log::warn!("Failed to show startup hint: {}", e);
+                }
             }
 
             // Auto-close slightly after the CSS fade-out animation finishes
