@@ -10,23 +10,19 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "overlay",
-        "title": "SoulOverlay",
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false,
-        "resizable": false,
-        "fullscreen": false,
-        "shadow": false,
-        "devtools": true,
-        "width": 1920,
-        "height": 1080
-      }
-    ],
+  "windows": [
+    {
+      "label": "overlay",
+      "title": "SoulOverlay",
+      "transparent": true,
+      "decorations": false,
+      "alwaysOnTop": true,
+      "maximized": true,
+      "fullscreen": false,
+      "resizable": true,
+      "visible": false
+    }
+  ],
     "security": {
       "csp": null
     },
