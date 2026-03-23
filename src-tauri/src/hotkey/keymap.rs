@@ -1,11 +1,13 @@
-/// Virtual key code lookup table.
+/// Virtual key code lookup table (Windows only).
 ///
 /// Maps lowercase key name strings (e.g. "a", "f9", "space") to Win32 VK codes.
 /// Returns `None` for unrecognised tokens.
+#[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
-/// Look up the Win32 virtual key code for a key name token.
+/// Look up the Win32 virtual key code for a key name token (Windows only).
 /// The token must already be trimmed and lowercased.
+#[cfg(windows)]
 pub fn token_to_vk(token: &str) -> Option<u32> {
     let code: u32 = match token {
         // Letters

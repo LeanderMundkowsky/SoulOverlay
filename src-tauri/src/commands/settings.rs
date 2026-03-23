@@ -44,7 +44,7 @@ pub async fn save_settings(
 
     // Side effects: re-register hotkey if changed
     if old_settings.hotkey != settings_to_save.hotkey {
-        let new_handle = hotkey::register_hotkey(&settings_to_save.hotkey);
+        let new_handle = hotkey::register_hotkey(&settings_to_save.hotkey, &app);
         match new_handle {
             Ok(handle) => {
                 *state.hotkey_handle.lock().unwrap() = Some(handle);

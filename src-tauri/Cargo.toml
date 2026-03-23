@@ -16,7 +16,7 @@ tester = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "unstable"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
@@ -39,6 +39,9 @@ specta-typescript = "=0.0.9"
 futures = "0.3.32"
 async-trait = "0.1"
 scraper = "0.22"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-global-shortcut = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

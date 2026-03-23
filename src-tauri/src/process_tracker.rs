@@ -1,19 +1,17 @@
 /// Process tracker for Star Citizen.
 ///
-/// Polls the Windows process list every 2 seconds to detect whether
-/// StarCitizen.exe is running. Emits `sc-window-found` / `sc-window-lost`
-/// Tauri events so the frontend knows when to show the "Connected" indicator.
+/// Polls the process list every 2 seconds to detect whether StarCitizen.exe
+/// is running. Emits `sc-window-found` / `sc-window-lost` Tauri events so the
+/// frontend knows when to show the "Connected" indicator.
+///
+/// On Windows: uses the ToolHelp32 snapshot API.
+/// On Linux: reads /proc to detect StarCitizen.exe running under Wine/Proton.
 use log::info;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 use tauri::{AppHandle, Emitter};
-
-use windows::Win32::Foundation::CloseHandle;
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-};
 
 pub struct ProcessTracker {
     app: AppHandle,
@@ -81,6 +79,22 @@ impl Drop for ProcessTracker {
 
 /// Returns true if a process named `StarCitizen.exe` is currently running.
 fn is_sc_running() -> bool {
+    #[cfg(windows)]
+    return is_sc_running_windows();
+
+    #[cfg(not(windows))]
+    return is_sc_running_linux();
+}
+
+/// Windows: scan the process list using the ToolHelp32 snapshot API.
+#[cfg(windows)]
+fn is_sc_running_windows() -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
     unsafe {
         let snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
             Ok(h) => h,
@@ -116,3 +130,40 @@ fn is_sc_running() -> bool {
         found
     }
 }
+
+/// Linux: scan /proc to find StarCitizen.exe running under Wine/Proton.
+///
+/// Star Citizen on Linux runs via Wine or Proton. The process name in /proc
+/// may be truncated by the kernel (TASK_COMM_LEN = 15 chars), so we check
+/// both /proc/<pid>/comm (for the truncated name) and /proc/<pid>/cmdline
+/// (for the full command line that includes the .exe path).
+#[cfg(not(windows))]
+fn is_sc_running_linux() -> bool {
+    let proc_dir = match std::fs::read_dir("/proc") {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+
+    for entry in proc_dir.flatten() {
+        // Only consider numeric directories (PIDs)
+        let name = entry.file_name();
+        let pid_str = match name.to_str() {
+            Some(s) => s,
+            None => continue,
+        };
+        if !pid_str.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+
+        // Check /proc/<pid>/cmdline for the full exe path
+        let cmdline_path = format!("/proc/{}/cmdline", pid_str);
+        if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
+            if cmdline.to_ascii_lowercase().contains("starcitizen.exe") {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+

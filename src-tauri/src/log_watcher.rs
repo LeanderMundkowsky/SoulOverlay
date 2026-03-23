@@ -214,23 +214,73 @@ impl Drop for LogWatcher {
     }
 }
 
-/// Get the default log path for Star Citizen
+/// Get the default log path for Star Citizen.
+///
+/// On Windows: `%APPDATA%\..\Local\Star Citizen\StarCitizen\LIVE\game.log`
+/// On Linux: searches common Wine/Proton prefix locations used by Lutris
+/// and manual Wine installs.
 pub fn default_log_path() -> PathBuf {
-    // On Windows: C:\Users\<USERNAME>\AppData\Local\..
-    // Roberts Space Industries\StarCitizen\LIVE\game.log
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        // APPDATA is Roaming, go up one level to get to Local's parent
-        let base = PathBuf::from(appdata);
-        // Actually the path in the spec uses APPDATA\..\Roberts Space Industries
-        // which resolves to C:\Users\<USERNAME>\AppData\Roberts Space Industries
-        base.join("..")
-            .join("Local")
-            .join("Star Citizen")
-            .join("StarCitizen")
-            .join("LIVE")
-            .join("game.log")
-    } else {
-        // Fallback
-        PathBuf::from(r"C:\Users\Default\AppData\Local\Star Citizen\StarCitizen\LIVE\game.log")
+    #[cfg(windows)]
+    {
+        // APPDATA is Roaming; go up one level to reach AppData\Local
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata)
+                .join("..")
+                .join("Local")
+                .join("Star Citizen")
+                .join("StarCitizen")
+                .join("LIVE")
+                .join("game.log");
+        }
+        PathBuf::from(
+            r"C:\Users\Default\AppData\Local\Star Citizen\StarCitizen\LIVE\game.log",
+        )
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Star Citizen on Linux runs under Wine or Proton.
+        // The game log lives inside the Wine prefix at the Windows AppData\Local path.
+        let home = std::env::var("HOME").unwrap_or_default();
+
+        // Sanitize the username to prevent path traversal. Keep only safe characters.
+        let user_raw = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+        let user: String = user_raw
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+            .collect();
+        let user = if user.is_empty() { "user".to_string() } else { user };
+
+        // Relative path inside any Wine prefix drive_c root
+        let sc_rel = format!(
+            "drive_c/users/{}/AppData/Local/Star Citizen/StarCitizen/LIVE/game.log",
+            user
+        );
+
+        // Common Wine prefix locations to probe, in priority order
+        let candidates: &[String] = &[
+            // Lutris default Wine prefix
+            format!("{}/.wine/{}", home, sc_rel),
+            // Lutris SC-specific game directory
+            format!("{}/Games/star-citizen/{}", home, sc_rel),
+            // Another common Lutris path
+            format!("{}/Games/StarCitizen/{}", home, sc_rel),
+            // XDG_DATA_HOME based
+            format!(
+                "{}/.local/share/lutris/runners/wine/starcitizen/{}",
+                home, sc_rel
+            ),
+        ];
+
+        for path in candidates {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return p;
+            }
+        }
+
+        // Return the Lutris default even if it doesn't exist yet,
+        // so the user sees a sensible default in the Settings panel.
+        PathBuf::from(format!("{}/.wine/{}", home, sc_rel))
     }
 }
