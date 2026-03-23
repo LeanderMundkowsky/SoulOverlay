@@ -228,6 +228,7 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 
   if (matchesHotkey(e, settingsStore.settings.hotkey)) {
+    console.log("[Frontend] Hotkey matched in handleKeyDown, calling hideOverlayCmd()");
     e.preventDefault();
     commands.hideOverlayCmd();
   }

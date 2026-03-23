@@ -340,20 +340,27 @@ mod windows_impl {
 #[cfg(not(windows))]
 mod unix_impl {
     use log::info;
+    use std::sync::{Arc, LazyLock, RwLock};
     use tauri::{AppHandle, Emitter, Manager};
 
     /// Stored AppHandle so `post_hotkey_toggle` can access the window from any thread.
-    static LINUX_APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+    /// Uses RwLock to allow multiple updates and concurrent reads.
+    static LINUX_APP: LazyLock<Arc<RwLock<Option<AppHandle>>>> =
+        LazyLock::new(|| Arc::new(RwLock::new(None)));
 
     pub fn post_hotkey_toggle(show: bool) {
-        if let Some(app) = LINUX_APP.get() {
-            if show {
-                show_overlay(app);
+        if let Ok(guard) = LINUX_APP.read() {
+            if let Some(app) = guard.as_ref() {
+                if show {
+                    show_overlay(app);
+                } else {
+                    hide_overlay(app);
+                }
             } else {
-                hide_overlay(app);
+                log::warn!("post_hotkey_toggle: app handle not yet stored (Linux)");
             }
         } else {
-            log::warn!("post_hotkey_toggle: app handle not yet stored (Linux)");
+            log::error!("post_hotkey_toggle: failed to acquire read lock");
         }
     }
 
@@ -361,8 +368,12 @@ mod unix_impl {
         _window: &tauri::WebviewWindow,
         app: &AppHandle,
     ) {
-        let _ = LINUX_APP.set(app.clone());
-        info!("Overlay window initialized (Linux/KDE — Tauri GTK backend)");
+        if let Ok(mut guard) = LINUX_APP.write() {
+            *guard = Some(app.clone());
+            info!("Overlay window initialized (Linux/KDE — Tauri GTK backend)");
+        } else {
+            log::error!("init_overlay_window: failed to acquire write lock");
+        }
     }
 
     pub fn show_overlay(app: &AppHandle) {
@@ -383,6 +394,9 @@ mod unix_impl {
             let _ = window.set_focus();
         }
         let _ = app.emit("overlay-shown", ());
+        
+        // Update the atomic flag to keep hotkey handler in sync
+        crate::hotkey::notify_overlay_shown();
         info!("Overlay shown (Linux)");
     }
 
@@ -390,6 +404,9 @@ mod unix_impl {
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.hide();
         }
+        
+        // Update the atomic flag to keep hotkey handler in sync
+        crate::hotkey::notify_overlay_hidden();
         info!("Overlay hidden (Linux)");
     }
 
@@ -403,11 +420,13 @@ mod unix_impl {
 
     pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
         // Best-effort from the stored handle; falls back to 1920×1080.
-        if let Some(app) = LINUX_APP.get() {
-            if let Ok(Some(monitor)) = app.primary_monitor() {
-                let pos = monitor.position();
-                let size = monitor.size();
-                return (pos.x, pos.y, size.width, size.height);
+        if let Ok(guard) = LINUX_APP.read() {
+            if let Some(app) = guard.as_ref() {
+                if let Ok(Some(monitor)) = app.primary_monitor() {
+                    let pos = monitor.position();
+                    let size = monitor.size();
+                    return (pos.x, pos.y, size.width, size.height);
+                }
             }
         }
         (0, 0, 1920, 1080)
