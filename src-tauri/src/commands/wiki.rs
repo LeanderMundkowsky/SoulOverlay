@@ -1,7 +1,9 @@
 use tauri::State;
+use std::collections::HashMap;
 
 use crate::cache_store::{CacheResult, Collection};
 use crate::commands::api::ApiResponse;
+use crate::providers::items::provider::{normalize_item_name, ITEM_NAME_MAPPER_KEY};
 use crate::providers::wiki_specs::provider::fetch_wiki_specs;
 use crate::state::AppState;
 use crate::uex::types::{PriceEntry, UexResult};
@@ -33,6 +35,14 @@ pub async fn wiki_search(
 
     let mut results: Vec<UexResult> = Vec::new();
 
+    // Load item name mapper (normalized_name → price entity_id) built during ItemPrices refresh.
+    // Used to resolve price lookup IDs for items whose item_uuid is null in UEX.
+    let name_mapper: HashMap<String, String> =
+        match state.cache.get::<HashMap<String, String>>(ITEM_NAME_MAPPER_KEY) {
+            CacheResult::Fresh(m) | CacheResult::Stale(m) => m,
+            CacheResult::Missing => HashMap::new(),
+        };
+
     // Convert item results.
     // Deduplicate by name, preferring the variant that has UEX prices in cache.
     // This handles `_hair_extension` variants: the wiki stores e.g. "Deadhead Helmet" as
@@ -42,7 +52,7 @@ pub async fn wiki_search(
     if let Ok(resp) = items_res {
         // Collect candidates keyed by name
         struct Candidate { uuid: String, class_name: String, classification: String }
-        let mut by_name: std::collections::HashMap<String, Candidate> = std::collections::HashMap::new();
+        let mut by_name: HashMap<String, Candidate> = HashMap::new();
 
         for dto in resp.data {
             let uuid = dto.uuid.clone().unwrap_or_default();
@@ -78,8 +88,21 @@ pub async fn wiki_search(
         }
 
         for (name, c) in by_name {
+            // Resolve the price-lookup ID: prefer UUID if prices exist under it,
+            // otherwise fall back to the UEX numeric ID from the name mapper.
+            // UexResult.id is used for price lookups; .uuid is used for spec lookups.
+            let price_key = Collection::ItemPrices.storage_key_with_id(&c.uuid);
+            let has_uuid_prices = !matches!(state.cache.get::<Vec<PriceEntry>>(&price_key), CacheResult::Missing);
+            let price_id = if has_uuid_prices {
+                c.uuid.clone()
+            } else {
+                // Try name mapper for items where UEX item_uuid was null
+                name_mapper.get(&normalize_item_name(&name))
+                    .cloned()
+                    .unwrap_or_else(|| c.uuid.clone())
+            };
             results.push(UexResult {
-                id: c.uuid.clone(),
+                id: price_id,
                 name,
                 kind: "item".to_string(),
                 slug: c.classification,
