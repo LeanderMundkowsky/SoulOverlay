@@ -16,16 +16,31 @@ mod keymap;
 pub(crate) static OVERLAY_VISIBLE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Timestamp of the last visibility change (ms since epoch).
+/// Used to detect if the frontend handled a hotkey event just before the global shortcut fired.
+pub(crate) static LAST_VISIBILITY_CHANGE: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+fn update_visibility_timestamp() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    LAST_VISIBILITY_CHANGE.store(now, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Notify the hotkey module that the overlay was hidden by means other than
 /// the hotkey (e.g. ESC key from the frontend). Keeps OVERLAY_VISIBLE in sync.
 pub fn notify_overlay_hidden() {
     OVERLAY_VISIBLE.store(false, std::sync::atomic::Ordering::SeqCst);
+    update_visibility_timestamp();
 }
 
 /// Notify the hotkey module that the overlay was shown by means other than
 /// the hotkey. Keeps OVERLAY_VISIBLE in sync.
 pub fn notify_overlay_shown() {
     OVERLAY_VISIBLE.store(true, std::sync::atomic::Ordering::SeqCst);
+    update_visibility_timestamp();
 }
 
 // ─── Windows implementation (WH_KEYBOARD_LL) ─────────────────────────────────
@@ -237,37 +252,92 @@ mod windows_impl {
 
 #[cfg(target_os = "linux")]
 mod linux_impl {
-    use log::info;
-    use tauri::AppHandle;
+    use log::{info, warn};
+    use std::sync::{
+        atomic::{AtomicU64, Ordering::SeqCst},
+        Arc,
+    };
+    use tauri::{AppHandle, Manager};
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    const DEBOUNCE_MS: u64 = 200;
 
     pub struct HookHandle {
         hotkey: String,
         app: AppHandle,
+        // Kept alive for the closure
+        #[allow(dead_code)]
+        last_callback_ms: Arc<AtomicU64>,
     }
 
     impl Drop for HookHandle {
         fn drop(&mut self) {
-            if let Err(e) = self.app.global_shortcut().unregister(self.hotkey.as_str()) {
-                log::warn!("Failed to unregister Linux shortcut '{}': {}", self.hotkey, e);
+            let manager = self.app.global_shortcut();
+            if let Err(e) = manager.unregister(self.hotkey.as_str()) {
+                warn!("Failed to unregister Linux shortcut '{}': {}", self.hotkey, e);
             } else {
                 info!("Linux global shortcut '{}' unregistered", self.hotkey);
             }
         }
     }
 
-    pub fn register_hotkey(hotkey: &str, app: &AppHandle) -> Result<HookHandle, String> {
-        // Unregister any previously registered shortcut with this key string first
-        // (best-effort, ignore errors in case it wasn't registered).
-        let _ = app.global_shortcut().unregister(hotkey);
+    fn current_time_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
 
-        app.global_shortcut()
-            .on_shortcut(hotkey, move |_app, _shortcut, _event| {
-                use std::sync::atomic::Ordering::SeqCst;
-                let was_visible = super::OVERLAY_VISIBLE.fetch_xor(true, SeqCst);
-                let show = !was_visible;
-                info!("Global shortcut fired, was_visible={}", was_visible);
-                crate::window::post_hotkey_toggle(show);
+    pub fn register_hotkey(hotkey: &str, app: &AppHandle) -> Result<HookHandle, String> {
+        let manager = app.global_shortcut();
+
+        // Cleanup previous handlers to avoid accumulation.
+        // Unregistering specific hotkey + unregister_all is a workaround for
+        // tauri-plugin-global-shortcut handler accumulation issues.
+        let _ = manager.unregister(hotkey);
+        let _ = manager.unregister_all();
+
+        let last_callback_ms = Arc::new(AtomicU64::new(0));
+        let last_callback_ms_clone = last_callback_ms.clone();
+
+        manager
+            .on_shortcut(hotkey, move |app_handle, _shortcut, _event| {
+                // 1. Check if we should let the frontend handle it (window focused)
+                if let Some(window) = app_handle.get_webview_window("overlay") {
+                    if window.is_focused().unwrap_or(false) {
+                        info!("Global shortcut fired but overlay focused - delegating to frontend");
+                        return;
+                    }
+                }
+
+                let now = current_time_ms();
+
+                // 2. Check global visibility change debounce (race condition with frontend)
+                let last_change = super::LAST_VISIBILITY_CHANGE.load(SeqCst);
+                if now.saturating_sub(last_change) < DEBOUNCE_MS {
+                    info!("Global shortcut ignored: state changed recently ({}ms ago)", 
+                          now.saturating_sub(last_change));
+                    return;
+                }
+
+                // 3. Check local debounce (rapid repeated firing)
+                // Swap ensures we atomically update the last run time
+                let last_run = last_callback_ms_clone.swap(now, SeqCst);
+                if last_run > 0 && now.saturating_sub(last_run) < DEBOUNCE_MS {
+                    info!("Global shortcut fired too quickly (debounced)");
+                    return;
+                }
+
+                // 4. Toggle visibility
+                let is_visible = super::OVERLAY_VISIBLE.load(SeqCst);
+                let should_show = !is_visible;
+
+                info!("Global shortcut fired: {} -> {}", 
+                      if is_visible { "visible" } else { "hidden" },
+                      if should_show { "visible" } else { "hidden" }
+                );
+
+                crate::window::post_hotkey_toggle(should_show);
             })
             .map_err(|e| format!("Failed to register global shortcut '{}': {}", hotkey, e))?;
 
@@ -275,6 +345,7 @@ mod linux_impl {
         Ok(HookHandle {
             hotkey: hotkey.to_string(),
             app: app.clone(),
+            last_callback_ms,
         })
     }
 }
