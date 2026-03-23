@@ -79,6 +79,8 @@ pub struct Settings {
     pub keybinds: Keybinds,
     /// Whether debug-level log output is enabled (default: false)
     pub debug_logging: bool,
+    /// Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
+    pub hide_untranslated_items: bool,
 }
 
 impl Default for Settings {
@@ -96,6 +98,7 @@ impl Default for Settings {
             font_size: 14,
             keybinds: Keybinds::default(),
             debug_logging: false,
+            hide_untranslated_items: true,
         }
     }
 }

@@ -27,6 +27,8 @@ pub async fn wiki_search(
         return Ok(ApiResponse::ok(vec![]));
     }
 
+    let hide_untranslated = state.current_settings.lock().unwrap().hide_untranslated_items;
+
     // Search items and vehicles in parallel
     let (items_res, vehicles_res) = tokio::join!(
         client::search_items(http, q, 20),
@@ -59,6 +61,7 @@ pub async fn wiki_search(
             if uuid.is_empty() { continue; }
             let name = dto.name.clone().unwrap_or_default();
             if name.is_empty() { continue; }
+            if hide_untranslated && name.starts_with('@') { continue; }
             let class_name = dto.class_name.clone().unwrap_or_default();
             let classification = dto.classification.clone().unwrap_or_default();
 

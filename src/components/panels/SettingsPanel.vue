@@ -147,6 +147,13 @@ function resetDefaults() {
         description="Switch to Search tab and focus input when overlay opens"
       />
 
+      <!-- Hide untranslated items -->
+      <ToggleSwitch
+        v-model="form.hide_untranslated_items"
+        label="Hide untranslated items"
+        description="Hide items with missing translations (names starting with '@') from search results and inventory dialogs"
+      />
+
       <!-- Max search results -->
       <SettingsField
         label="Max Search Results"

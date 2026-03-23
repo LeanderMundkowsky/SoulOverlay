@@ -200,9 +200,15 @@ pub async fn api_search_items(
         return Ok(ApiResponse::ok(vec![]));
     }
 
+    let hide_untranslated = state.current_settings.lock().unwrap().hide_untranslated_items;
     let http = state.uex.client();
     match crate::providers::items::provider::search_items_wiki(http, &query, 100).await {
-        Ok(results) => Ok(ApiResponse::ok(results)),
+        Ok(mut results) => {
+            if hide_untranslated {
+                results.retain(|r| !r.name.starts_with('@'));
+            }
+            Ok(ApiResponse::ok(results))
+        }
         Err(e) => Ok(ApiResponse::err(e)),
     }
 }

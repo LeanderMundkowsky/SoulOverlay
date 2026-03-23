@@ -1303,7 +1303,11 @@ keybinds: Keybinds;
 /**
  * Whether debug-level log output is enabled (default: false)
  */
-debug_logging: boolean }
+debug_logging: boolean; 
+/**
+ * Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
+ */
+hide_untranslated_items: boolean }
 export type TransferResult = { source: InventoryEntry | null; target: InventoryEntry }
 /**
  * A search result from UEX API (or Wiki API for supplemental results).
