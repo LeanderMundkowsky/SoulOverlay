@@ -387,6 +387,7 @@ pub struct WikiItemDto {
 pub struct WikiVehicleDto {
     pub uuid: Option<String>,
     pub name: Option<String>,
+    pub game_name: Option<String>,
     pub slug: Option<String>,
     pub class_name: Option<String>,
     pub description: Option<HashMap<String, String>>,

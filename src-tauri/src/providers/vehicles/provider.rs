@@ -26,20 +26,29 @@ impl BlobProvider for VehiclesCatalog {
     async fn refresh(&self, ctx: &RefreshContext<'_>) -> Result<u32, String> {
         // 1. Fetch full vehicle catalog from Wiki API
         let http = ctx.client.client();
-        let wiki_vehicles = client::list_all_vehicles(http).await?;
+        let wiki_vehicles_raw = client::list_all_vehicles(http).await?;
 
-        // 2. Convert Wiki vehicles to UexResult (uuid as primary ID)
+        // 2. Deduplicate:
+        //    a) By UUID first — parallel page fetches can return the same vehicle twice if a
+        //       record sits at a page boundary and the dataset shifts between requests.
+        //    b) By wiki page name — the wiki stores multiple entries per ship for store variants
+        //       (e.g. "Polaris" and "Polaris Collector Military" both named "Polaris" in the wiki
+        //       but with different class_names like RSI_Polaris vs RSI_Polaris_Collector_Military).
+        //       We keep the first-seen entry per wiki name (API returns base ship first).
+        let wiki_vehicles = dedup_vehicles_by_name(dedup_vehicles_by_uuid(wiki_vehicles_raw));
+
+        // 3. Convert Wiki vehicles to UexResult (uuid as primary ID)
         let data: Vec<UexResult> = wiki_vehicles.iter().map(wiki_vehicle_to_result).collect();
         let count = data.len() as u32;
 
-        // 3. Fetch UEX vehicle list for EntityMapper (name → UEX ID mapping)
+        // 4. Fetch UEX vehicle list for EntityMapper (name → UEX ID mapping)
         let uex_dtos: Vec<VehicleDto> = ctx.client.get("/vehicles", &[], ctx.api_key).await
             .unwrap_or_else(|e| {
                 log::warn!("Failed to fetch UEX vehicles for mapper: {}", e);
                 vec![]
             });
 
-        // 4. Build EntityMapper
+        // 5. Build EntityMapper
         let wiki_pairs: Vec<(String, String)> = wiki_vehicles.iter()
             .filter_map(|v| {
                 let uuid = v.uuid.as_deref()?.to_string();
@@ -59,15 +68,56 @@ impl BlobProvider for VehiclesCatalog {
             let _ = ctx.cache.put(MAPPER_CACHE_KEY, ttl, &snap);
         }
 
-        // 5. Store catalog blob
+        // 6. Store catalog blob
         store_blob(ctx.cache, self.collection(), ttl, &data, count)
     }
 }
 
+/// Deduplicate a list of wiki vehicles by UUID.
+///
+/// The wiki API uses parallel page fetching; if the dataset changes between requests
+/// a vehicle at a page boundary can appear on two consecutive pages. Remove any
+/// second occurrence of a UUID, keeping the first one seen.
+fn dedup_vehicles_by_uuid(vehicles: Vec<WikiVehicleDto>) -> Vec<WikiVehicleDto> {
+    use std::collections::HashSet;
+    let mut seen: HashSet<String> = HashSet::with_capacity(vehicles.len());
+    vehicles.into_iter().filter(|dto| {
+        match dto.uuid.as_deref().filter(|s| !s.is_empty()) {
+            Some(uuid) => seen.insert(uuid.to_string()),
+            None => true,
+        }
+    }).collect()
+}
+
+/// Deduplicate a list of wiki vehicles by wiki page `name`.
+///
+/// The SC Wiki stores store variants and limited editions as separate entries
+/// sharing the same `name` and `game_name` but with different class_name suffixes
+/// (e.g. "Polaris" → RSI_Polaris and RSI_Polaris_Collector_Military).
+/// Keep the first-seen entry per name — the API returns the base ship first.
+fn dedup_vehicles_by_name(vehicles: Vec<WikiVehicleDto>) -> Vec<WikiVehicleDto> {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    vehicles.into_iter().filter(|dto| {
+        match dto.name.as_deref().filter(|s| !s.is_empty()) {
+            Some(name) => seen.insert(name.to_string()),
+            None => true,
+        }
+    }).collect()
+}
+
 /// Convert a Wiki vehicle DTO to a search result entry.
+///
+/// `game_name` is preferred over `name` for display — it's the canonical in-game
+/// manufacturer-prefixed name (e.g. "Anvil Carrack" vs the wiki page name "Carrack").
+/// EntityMapper matching still uses `dto.name` (wiki page name / short form) which
+/// aligns with UEX short names, so no changes needed there.
 fn wiki_vehicle_to_result(dto: &WikiVehicleDto) -> UexResult {
     let uuid = dto.uuid.clone().unwrap_or_default();
-    let name = dto.name.clone().unwrap_or_default();
+    // Prefer game_name (canonical in-game name) for display; fall back to wiki page name.
+    let display_name = dto.game_name.as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| dto.name.as_deref().unwrap_or(""))
+        .to_string();
     let kind = match dto.vehicle_type.as_deref() {
         Some("vehicle") => "ground vehicle",
         Some("gravlev") => "ground vehicle",
@@ -75,7 +125,7 @@ fn wiki_vehicle_to_result(dto: &WikiVehicleDto) -> UexResult {
     };
     UexResult {
         id: uuid.clone(),
-        name,
+        name: display_name,
         kind: kind.to_string(),
         slug: dto.slug.clone().unwrap_or_default(),
         uuid,
