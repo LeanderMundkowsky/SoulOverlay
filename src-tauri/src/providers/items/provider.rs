@@ -50,13 +50,23 @@ impl PerEntityProvider for ItemPrices {
 // ── Wiki-based item search ─────────────────────────────────────────────────
 
 /// Search items via Wiki API (on-demand, not cached catalog).
+///
+/// Filters out `_hair_extension` class variants — the wiki stores "hairstyle-compatible"
+/// versions of helmets/armor as separate items with the same name but a `_hair_extension`
+/// suffix in their class_name. These add no value to search results.
 pub async fn search_items_wiki(
     http_client: &reqwest::Client,
     query: &str,
     limit: u32,
 ) -> Result<Vec<UexResult>, String> {
     let resp = wiki_client::search_items(http_client, query, limit).await?;
-    Ok(resp.data.iter().map(wiki_item_to_result).collect())
+    let results = resp.data.iter()
+        .filter(|dto| {
+            !dto.class_name.as_deref().unwrap_or("").ends_with("_hair_extension")
+        })
+        .map(wiki_item_to_result)
+        .collect();
+    Ok(results)
 }
 
 /// Convert a Wiki item DTO to a UexResult for unified search.
