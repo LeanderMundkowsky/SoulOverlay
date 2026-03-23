@@ -24,6 +24,7 @@ const form = ref<Settings>(structuredClone(toRaw(settingsStore.settings)));
 const saving = ref(false);
 const saveError = ref<string | null>(null);
 const saveSuccess = ref(false);
+const advancedOpen = ref(false);
 
 onMounted(() => {
   form.value = structuredClone(toRaw(settingsStore.settings));
@@ -163,6 +164,33 @@ function resetDefaults() {
 
       <!-- Cache Management -->
       <CacheSettingsPanel />
+
+      <!-- Advanced (collapsed by default) -->
+      <div class="border border-white/10 rounded-lg overflow-hidden">
+        <button
+          @click="advancedOpen = !advancedOpen"
+          class="w-full flex items-center justify-between px-3 py-2 text-white/60 text-xs font-medium uppercase tracking-wider hover:bg-white/5 transition-colors"
+        >
+          <span>Advanced</span>
+          <svg
+            class="w-4 h-4 text-white/30 transition-transform duration-200"
+            :class="{ 'rotate-180': advancedOpen }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div v-show="advancedOpen" class="px-3 pb-3 space-y-4">
+          <ToggleSwitch
+            v-model="form.debug_logging"
+            label="Debug Logging"
+            description="Verbose debug output to terminal and log file"
+          />
+        </div>
+      </div>
 
       <!-- Feedback -->
       <AlertBanner v-if="saveError" variant="error" :message="saveError" />

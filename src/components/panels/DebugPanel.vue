@@ -171,6 +171,27 @@ function fmtMs(ms: number): string {
 
       <div class="border-t border-white/[0.06]"></div>
 
+      <!-- Backend -->
+      <div>
+        <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">Backend</p>
+        <div class="space-y-0.5">
+          <div class="flex justify-between gap-1 min-w-0">
+            <span class="text-white/40 shrink-0">URL</span>
+            <span class="text-white/55 truncate text-right text-xs" :title="info.backend_url">{{ info.backend_url }}</span>
+          </div>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">Account</span>
+            <span :class="info.backend_logged_in ? 'text-green-400' : 'text-white/30'">{{ info.backend_logged_in ? "logged in" : "not logged in" }}</span>
+          </div>
+          <div class="flex justify-between gap-1">
+            <span class="text-white/40">API key</span>
+            <span :class="info.fetched_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.fetched_api_key_set ? "fetched" : "unavailable" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-white/[0.06]"></div>
+
       <!-- Background Timer -->
       <div>
         <p class="text-white/25 uppercase tracking-widest text-xs mb-1 font-sans">BG Timer (30s)</p>
@@ -203,10 +224,6 @@ function fmtMs(ms: number): string {
           <div class="flex justify-between gap-1">
             <span class="text-white/40">Opacity</span>
             <span class="text-white/55">{{ (info.overlay_opacity * 100).toFixed(0) }}%</span>
-          </div>
-          <div class="flex justify-between gap-1">
-            <span class="text-white/40">API key</span>
-            <span :class="info.fetched_api_key_set ? 'text-green-400' : 'text-yellow-400'">{{ info.fetched_api_key_set ? "fetched" : "unavailable" }}</span>
           </div>
           <div class="flex justify-between gap-1">
             <span class="text-white/40">ESC close</span>

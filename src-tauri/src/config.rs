@@ -14,8 +14,10 @@ use std::path::PathBuf;
 pub struct AppPaths {
     /// Root data directory (path depends on build profile — see struct docs)
     pub data_dir: PathBuf,
-    /// `<data_dir>\soul-overlay.log`
+    /// `<data_dir>\latest.log`
     pub log_file: PathBuf,
+    /// `<data_dir>\logs\` — rotated log archive
+    pub logs_dir: PathBuf,
     /// `<data_dir>\soul_overlay.db`
     pub db_file: PathBuf,
     /// `<data_dir>\settings.json`
@@ -41,7 +43,8 @@ impl AppPaths {
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
         let paths = Self {
-            log_file: data_dir.join("soul-overlay.log"),
+            log_file: data_dir.join("latest.log"),
+            logs_dir: data_dir.join("logs"),
             db_file: data_dir.join("soul_overlay.db"),
             settings_file: data_dir.join("settings.json"),
             data_dir,

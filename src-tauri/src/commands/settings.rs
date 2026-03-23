@@ -1,5 +1,6 @@
 use log::{error, info};
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::cache_store::Collection;
@@ -82,6 +83,21 @@ pub async fn save_settings(
         if old_settings.cache_ttls != settings_to_save.cache_ttls {
             let _ = app.emit("cache-updated", ());
         }
+    }
+
+    // Side effects: toggle debug logging at runtime
+    if old_settings.debug_logging != settings_to_save.debug_logging {
+        state
+            .debug_logging
+            .store(settings_to_save.debug_logging, Ordering::Relaxed);
+        info!(
+            "Debug logging {}",
+            if settings_to_save.debug_logging {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
     }
 
     info!("Settings saved");

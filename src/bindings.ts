@@ -1103,7 +1103,11 @@ fetched_api_key_set: boolean; esc_closes_overlay: boolean; reset_on_open: boolea
 /**
  * Whether a backend account is currently authenticated.
  */
-backend_logged_in: boolean; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
+backend_logged_in: boolean; 
+/**
+ * The backend URL compiled into this build.
+ */
+backend_url: string; log_watcher_active: boolean; hotkey_registered: boolean; refreshing_collections: string[]; cache_total_keys: number; cache_collections: CollectionDebugInfo[]; 
 /**
  * ISO8601 timestamp of the last background check tick.
  */
@@ -1295,7 +1299,11 @@ font_size: number;
 /**
  * In-app panel keybinds (not the global Rust hook hotkey)
  */
-keybinds: Keybinds }
+keybinds: Keybinds; 
+/**
+ * Whether debug-level log output is enabled (default: false)
+ */
+debug_logging: boolean }
 export type TransferResult = { source: InventoryEntry | null; target: InventoryEntry }
 /**
  * A search result from UEX API (or Wiki API for supplemental results).

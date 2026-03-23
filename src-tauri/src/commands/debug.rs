@@ -52,6 +52,8 @@ pub struct DebugInfo {
     pub cache_ttls: std::collections::HashMap<String, u32>,
     /// Whether a backend account is currently authenticated.
     pub backend_logged_in: bool,
+    /// The backend URL compiled into this build.
+    pub backend_url: String,
     // ── Services ──────────────────────────────────────────────────────────────
     pub log_watcher_active: bool,
     pub hotkey_registered: bool,
@@ -141,6 +143,7 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         max_search_results: settings.max_search_results,
         cache_ttls: settings.cache_ttls,
         backend_logged_in: state.backend_account.lock().unwrap().is_some(),
+        backend_url: crate::constants::BACKEND_URL.to_string(),
         log_watcher_active,
         hotkey_registered,
         refreshing_collections: refreshing,

@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{debug, error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -73,12 +73,15 @@ pub(crate) fn http_client() -> Result<Client, String> {
 pub async fn fetch_account_with_token(token: &str) -> Option<BackendAccount> {
     let client = http_client().ok()?;
     let url = format!("{}/api/account", BACKEND_URL);
+    debug!("[backend] → GET /api/account");
+    let t = std::time::Instant::now();
     let resp = client
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
         .ok()?;
+    debug!("[backend] ← GET /api/account {} ({}ms)", resp.status(), t.elapsed().as_millis());
 
     if resp.status() == 401 {
         info!("Backend token invalid or expired (401)");
@@ -115,9 +118,17 @@ pub async fn fetch_account_on_startup(handle: &tauri::AppHandle) {
 pub async fn check_backend_status() -> bool {
     let Ok(client) = http_client() else { return false; };
     let url = format!("{}/api/status", BACKEND_URL);
+    debug!("[backend] → GET /api/status");
+    let t = std::time::Instant::now();
     match client.get(&url).send().await {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+        Ok(resp) => {
+            debug!("[backend] ← GET /api/status {} ({}ms)", resp.status(), t.elapsed().as_millis());
+            resp.status().is_success()
+        }
+        Err(e) => {
+            debug!("[backend] ✗ GET /api/status: {} ({}ms)", e, t.elapsed().as_millis());
+            false
+        }
     }
 }
 
@@ -181,7 +192,8 @@ pub async fn backend_login(
 ) -> Result<BackendAuthResult, String> {
     let client = http_client()?;
     let url = format!("{}/api/auth/login", BACKEND_URL);
-
+    debug!("[backend] → POST /api/auth/login");
+    let t = std::time::Instant::now();
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "username": username, "password": password }))
@@ -190,6 +202,7 @@ pub async fn backend_login(
         .map_err(|e| format!("Network error: {}", e))?;
 
     let status = resp.status();
+    debug!("[backend] ← POST /api/auth/login {} ({}ms)", status, t.elapsed().as_millis());
     let json: serde_json::Value = resp
         .json()
         .await
@@ -226,7 +239,8 @@ pub async fn backend_register(
 ) -> Result<BackendAuthResult, String> {
     let client = http_client()?;
     let url = format!("{}/api/auth/register", BACKEND_URL);
-
+    debug!("[backend] → POST /api/auth/register");
+    let t = std::time::Instant::now();
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "username": username, "email": email, "password": password }))
@@ -235,6 +249,7 @@ pub async fn backend_register(
         .map_err(|e| format!("Network error: {}", e))?;
 
     let status = resp.status();
+    debug!("[backend] ← POST /api/auth/register {} ({}ms)", status, t.elapsed().as_millis());
     let json: serde_json::Value = resp
         .json()
         .await
@@ -285,7 +300,8 @@ pub async fn backend_update_secret_key(
 
     let client = http_client()?;
     let url = format!("{}/api/account", BACKEND_URL);
-
+    debug!("[backend] → PATCH /api/account");
+    let t = std::time::Instant::now();
     let resp = client
         .patch(&url)
         .header("Authorization", format!("Bearer {}", token))
@@ -296,6 +312,7 @@ pub async fn backend_update_secret_key(
         .map_err(|e| format!("Network error: {}", e))?;
 
     let status = resp.status();
+    debug!("[backend] ← PATCH /api/account {} ({}ms)", status, t.elapsed().as_millis());
     let json: serde_json::Value = resp
         .json()
         .await

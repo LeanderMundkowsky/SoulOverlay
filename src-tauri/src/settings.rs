@@ -77,6 +77,8 @@ pub struct Settings {
     pub font_size: u32,
     /// In-app panel keybinds (not the global Rust hook hotkey)
     pub keybinds: Keybinds,
+    /// Whether debug-level log output is enabled (default: false)
+    pub debug_logging: bool,
 }
 
 impl Default for Settings {
@@ -93,6 +95,7 @@ impl Default for Settings {
             layout_widths: LayoutWidths::default(),
             font_size: 14,
             keybinds: Keybinds::default(),
+            debug_logging: false,
         }
     }
 }

@@ -1,14 +1,6 @@
 {
   "productName": "SoulOverlayTest",
   "identifier": "dev.souloverlay-test",
-  "app": {
-    "windows": [
-      {
-        "label": "overlay",
-        "title": "SoulOverlayTest"
-      }
-    ]
-  },
   "bundle": {
     "active": false
   }

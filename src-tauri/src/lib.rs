@@ -35,7 +35,7 @@ pub fn run() {
     };
 
     // 2. Set up logging (needs data dir to exist)
-    logging::setup(&paths.log_file);
+    let debug_logging = logging::setup(&paths.log_file, &paths.logs_dir);
 
     // 3. Initialize SQLite database
     let db_conn = match database::init(&paths.db_file) {
@@ -63,6 +63,7 @@ pub fn run() {
         fetched_api_key: Mutex::new(String::new()),
         backend_account: Mutex::new(None),
         entity_mapper: Mutex::new(wiki::mapper::EntityMapper::new()),
+        debug_logging,
     };
 
     // Build the tauri-specta invoke handler + export TS bindings in dev mode.

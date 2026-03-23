@@ -40,6 +40,8 @@ pub struct AppState {
     pub backend_account: Mutex<Option<BackendAccount>>,
     /// Maps Wiki UUIDs ↔ UEX IDs for price lookups.
     pub entity_mapper: Mutex<EntityMapper>,
+    /// Runtime toggle for debug-level log output (shared with fern filter).
+    pub debug_logging: Arc<AtomicBool>,
 }
 
 impl AppState {

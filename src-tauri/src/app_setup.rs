@@ -18,6 +18,11 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let settings = {
         let state = handle.state::<AppState>();
         let loaded = state.paths.load_settings();
+        // Sync the debug logging flag with the persisted setting
+        state.debug_logging.store(
+            loaded.debug_logging,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let mut current = state.current_settings.lock().unwrap();
         *current = loaded.clone();
         loaded
@@ -166,6 +171,7 @@ pub fn initialize(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 /// Silently proceeds with an empty key if the backend is unreachable or returns an error.
 async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
     use crate::constants::{BACKEND_CONFIG_ENDPOINT, BACKEND_URL, SOUL_APP_TOKEN};
+    use log::debug;
     use tauri::Manager;
 
     let url = format!("{}{}", BACKEND_URL, BACKEND_CONFIG_ENDPOINT);
@@ -174,6 +180,8 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
         .build()
         .unwrap_or_default();
 
+    debug!("[backend] → GET {} (app-token: {})", BACKEND_CONFIG_ENDPOINT, if SOUL_APP_TOKEN.is_empty() { "not set" } else { "set" });
+    let t = std::time::Instant::now();
     match client
         .get(&url)
         .header("X-Soul-App-Token", SOUL_APP_TOKEN)
@@ -181,6 +189,7 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
         .await
     {
         Ok(resp) if resp.status().is_success() => {
+            debug!("[backend] ← GET {} {} ({}ms)", BACKEND_CONFIG_ENDPOINT, resp.status(), t.elapsed().as_millis());
             match resp.json::<serde_json::Value>().await {
                 Ok(json) => {
                     if let Some(key) = json["data"]["uexApiKey"].as_str() {
@@ -197,9 +206,11 @@ async fn fetch_and_store_api_key(handle: &tauri::AppHandle) {
             }
         }
         Ok(resp) => {
+            debug!("[backend] ← GET {} {} ({}ms)", BACKEND_CONFIG_ENDPOINT, resp.status(), t.elapsed().as_millis());
             error!("Backend returned {} for config endpoint", resp.status());
         }
         Err(e) => {
+            debug!("[backend] ✗ GET {} ({}ms)", BACKEND_CONFIG_ENDPOINT, t.elapsed().as_millis());
             info!("Backend unreachable, proceeding without UEX API key: {}", e);
         }
     }

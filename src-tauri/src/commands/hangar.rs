@@ -241,11 +241,21 @@ pub async fn hangar_add_vehicle(
     let client = http_client()?;
     let url = format!("{}/api/fleet", BACKEND_URL);
 
+    // The frontend passes a Wiki UUID as the vehicle identifier. Resolve it to the
+    // UEX numeric vehicle ID so the backend can auto-fetch the photo URL from UEX.
+    let resolved_uex_vehicle_id: Option<String> = uex_vehicle_id.as_deref()
+        .filter(|id| !id.is_empty())
+        .map(|uuid| {
+            state.entity_mapper.lock().ok()
+                .and_then(|m| m.vehicle_uuid_to_uex_id(uuid).map(|s| s.to_string()))
+                .unwrap_or_else(|| uuid.to_string())
+        });
+
     let mut body = serde_json::Map::new();
     body.insert("modelName".to_string(), serde_json::Value::String(model_name));
-    body.insert("uexVehicleId".to_string(), match uex_vehicle_id {
-        Some(id) if !id.is_empty() => serde_json::Value::String(id),
-        _ => serde_json::Value::Null,
+    body.insert("uexVehicleId".to_string(), match resolved_uex_vehicle_id {
+        Some(id) => serde_json::Value::String(id),
+        None => serde_json::Value::Null,
     });
     if let Some(n) = name {
         body.insert("name".to_string(), serde_json::Value::String(n));

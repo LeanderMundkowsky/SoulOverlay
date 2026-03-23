@@ -54,7 +54,7 @@ async function searchVehicles(q: string) {
     try {
       const result = await commands.apiSearchVehicles(q);
       if (result.status === "ok" && result.data.data) {
-        vehicleResults.value = result.data.data.filter((r) => r.source === "uex");
+        vehicleResults.value = result.data.data.filter((r) => r.source === "wiki");
       } else {
         vehicleResults.value = [];
       }
