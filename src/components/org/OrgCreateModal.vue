@@ -25,7 +25,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="emit('close')">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
     <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-full max-w-md mx-4 p-6 space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-white font-semibold text-sm uppercase tracking-wider">Create Organization</h2>

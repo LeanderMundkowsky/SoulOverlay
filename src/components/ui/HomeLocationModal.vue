@@ -50,7 +50,7 @@ function skip() {
 <template>
   <div
     class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
-    @click.self="skip"
+
   >
     <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-[420px] shadow-2xl">
       <!-- Header -->

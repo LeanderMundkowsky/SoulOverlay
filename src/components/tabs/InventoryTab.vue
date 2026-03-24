@@ -4,6 +4,7 @@ import { useInventoryStore } from "@/stores/inventory";
 import type { InventoryEntry } from "@/stores/inventory";
 import { useBackendStore } from "@/stores/backend";
 import { useOrgStore } from "@/stores/org";
+import type { OrgInventoryEntry } from "@/stores/org";
 import { useHomeLocationStore } from "@/stores/homeLocation";
 import { commands } from "@/bindings";
 import InventoryModal from "@/components/ui/InventoryModal.vue";
@@ -149,46 +150,120 @@ const filteredEntries = computed(() => {
   return result;
 });
 
+type OrgEntryWithOrg = { entry: OrgInventoryEntry; orgId: number; orgName: string };
+
+const myOrgEntries = computed((): OrgEntryWithOrg[] => {
+  const username = backendStore.account?.username;
+  if (!username) return [];
+  const result: OrgEntryWithOrg[] = [];
+  for (const org of orgStore.myOrgs) {
+    for (const entry of orgStore.getInventory(org.id)) {
+      if (entry.created_by.username === username) {
+        result.push({ entry, orgId: org.id, orgName: org.name });
+      }
+    }
+  }
+  return result;
+});
+
+const filteredMyOrgEntries = computed((): OrgEntryWithOrg[] => {
+  let result = myOrgEntries.value;
+
+  if (sidebarCollection.value !== null) {
+    const targetName = inventoryStore.collections.find((c) => c.id === sidebarCollection.value)?.name;
+    if (targetName) {
+      result = result.filter(({ entry }) => entry.collections.some((c) => c.name === targetName));
+    } else {
+      result = [];
+    }
+  }
+
+  if (selectedFilter.value) {
+    if (groupMode.value === "location") {
+      result = result.filter(({ entry }) => entry.location_id === selectedFilter.value!.id);
+    } else {
+      const collName = inventoryStore.collections.find((c) => String(c.id) === selectedFilter.value!.id)?.name;
+      if (collName) {
+        result = result.filter(({ entry }) => entry.collections.some((c) => c.name === collName));
+      } else {
+        result = [];
+      }
+    }
+  }
+
+  const q = searchQuery.value.toLowerCase();
+  if (q) {
+    result = result.filter(
+      ({ entry }) =>
+        entry.entity_name.toLowerCase().includes(q) ||
+        entry.location_name.toLowerCase().includes(q) ||
+        entry.collections.some((c) => c.name.toLowerCase().includes(q)),
+    );
+  }
+
+  return result;
+});
+
 interface Group {
   key: string;
   label: string;
   totalQuantity: number;
   entries: InventoryEntry[];
+  orgEntries: OrgEntryWithOrg[];
 }
 
 const groupedEntries = computed((): Group[] => {
-  const map = new Map<string, InventoryEntry[]>();
+  type MapVal = { label: string; entries: InventoryEntry[]; orgEntries: OrgEntryWithOrg[] };
+  const map = new Map<string, MapVal>();
+
+  function getOrCreate(key: string, label: string): MapVal {
+    if (!map.has(key)) map.set(key, { label, entries: [], orgEntries: [] });
+    return map.get(key)!;
+  }
 
   for (const entry of filteredEntries.value) {
     if (groupMode.value === "location") {
-      const key = entry.location_id;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(entry);
+      getOrCreate(entry.location_id, entry.location_name).entries.push(entry);
     } else {
-      // Entry appears in each of its collections (or "__none__" if none)
       if (entry.collections.length === 0) {
-        if (!map.has("__none__")) map.set("__none__", []);
-        map.get("__none__")!.push(entry);
+        getOrCreate("__none__", "No Collection").entries.push(entry);
       } else {
         for (const coll of entry.collections) {
-          const key = String(coll.id);
-          if (!map.has(key)) map.set(key, []);
-          map.get(key)!.push(entry);
+          getOrCreate(String(coll.id), coll.name).entries.push(entry);
+        }
+      }
+    }
+  }
+
+  for (const item of filteredMyOrgEntries.value) {
+    const { entry } = item;
+    if (groupMode.value === "location") {
+      getOrCreate(entry.location_id, entry.location_name).orgEntries.push(item);
+    } else {
+      if (entry.collections.length === 0) {
+        getOrCreate("__none__", "No Collection").orgEntries.push(item);
+      } else {
+        for (const coll of entry.collections) {
+          const personalColl = inventoryStore.collections.find((c) => c.name === coll.name);
+          const key = personalColl ? String(personalColl.id) : `org:${coll.id}`;
+          getOrCreate(key, coll.name).orgEntries.push(item);
         }
       }
     }
   }
 
   const groups: Group[] = [];
-  for (const [key, entries] of map) {
-    const label =
+  for (const [key, { label, entries, orgEntries }] of map) {
+    const resolvedLabel =
       groupMode.value === "location"
-        ? entries[0].location_name
+        ? label
         : key === "__none__"
           ? "No Collection"
-          : inventoryStore.collections.find((c) => String(c.id) === key)?.name ?? key;
-    const totalQuantity = entries.reduce((sum, e) => sum + e.quantity, 0);
-    groups.push({ key, label, totalQuantity, entries });
+          : inventoryStore.collections.find((c) => String(c.id) === key)?.name ?? label;
+    const totalQuantity =
+      entries.reduce((sum, e) => sum + e.quantity, 0) +
+      orgEntries.reduce((sum, { entry }) => sum + entry.quantity, 0);
+    groups.push({ key, label: resolvedLabel, totalQuantity, entries, orgEntries });
   }
 
   groups.sort((a, b) => a.label.localeCompare(b.label));
@@ -198,7 +273,8 @@ const groupedEntries = computed((): Group[] => {
 // ── Total count ────────────────────────────────────────────────────────────
 
 const totalItems = computed(() =>
-  inventoryStore.entries.reduce((sum, e) => sum + e.quantity, 0),
+  inventoryStore.entries.reduce((sum, e) => sum + e.quantity, 0) +
+  myOrgEntries.value.reduce((sum, { entry }) => sum + entry.quantity, 0),
 );
 
 // ── Modal state ────────────────────────────────────────────────────────────
@@ -208,6 +284,19 @@ const modalMode = ref<ModalMode>("add");
 const modalSourceEntry = ref<InventoryEntry | null>(null);
 const modalPrefillLocation = ref<{ id: string; name: string; slug: string } | null>(null);
 const modalPrefillCollection = ref<number | null>(null);
+
+// ── Sharable orgs (user has manage_inventory permission) ─────────────────
+
+const sharableOrgs = computed(() =>
+  orgStore.myOrgs.filter((org) => orgStore.canInOrg(org.id, "manage_inventory")),
+);
+
+// ── Share / Unshare state ──────────────────────────────────────────────────
+
+const sharingEntryId = ref<number | null>(null);
+const unsharingOrgEntryId = ref<number | null>(null);
+const shareUnshareError = ref<string | null>(null);
+const orgPickerEntry = ref<InventoryEntry | null>(null);
 
 function openAddModal() {
   modalMode.value = "add";
@@ -270,8 +359,130 @@ const collectionEntryCounts = computed(() => {
       map.set(c.id, (map.get(c.id) ?? 0) + 1);
     }
   }
+  for (const { entry } of myOrgEntries.value) {
+    for (const oc of entry.collections) {
+      const pc = inventoryStore.collections.find((c) => c.name === oc.name);
+      if (pc) map.set(pc.id, (map.get(pc.id) ?? 0) + 1);
+    }
+  }
   return map;
 });
+
+// ── Org entry modal (for org entries shown in personal view) ──────────────
+
+const showOrgModal = ref(false);
+const orgModalOrgId = ref<number>(0);
+const orgModalMode = ref<ModalMode>("edit");
+const orgModalSourceEntry = ref<OrgInventoryEntry | null>(null);
+
+function openOrgEditModal(orgId: number, entry: OrgInventoryEntry) {
+  orgModalOrgId.value = orgId;
+  orgModalMode.value = "edit";
+  orgModalSourceEntry.value = entry;
+  showOrgModal.value = true;
+}
+
+function openOrgRemoveModal(orgId: number, entry: OrgInventoryEntry) {
+  orgModalOrgId.value = orgId;
+  orgModalMode.value = "remove";
+  orgModalSourceEntry.value = entry;
+  showOrgModal.value = true;
+}
+
+function openOrgTransferModal(orgId: number, entry: OrgInventoryEntry) {
+  orgModalOrgId.value = orgId;
+  orgModalMode.value = "transfer";
+  orgModalSourceEntry.value = entry;
+  showOrgModal.value = true;
+}
+
+// ── Load org inventories for personal view ────────────────────────────────
+
+watch(
+  () => orgStore.myOrgs,
+  (orgs) => {
+    if (!backendStore.account) return;
+    for (const org of orgs) {
+      orgStore.loadInventory(org.id);
+    }
+  },
+  { immediate: true },
+);
+
+// ── Share personal entry to org ────────────────────────────────────────────
+
+async function shareToOrg(entry: InventoryEntry, orgId?: number) {
+  if (orgId === undefined) {
+    if (sharableOrgs.value.length === 1) {
+      orgId = sharableOrgs.value[0].id;
+    } else {
+      orgPickerEntry.value = entry;
+      return;
+    }
+  }
+  orgPickerEntry.value = null;
+  sharingEntryId.value = entry.id;
+  shareUnshareError.value = null;
+  try {
+    await orgStore.loadInventory(orgId);
+    const targetCollIds: number[] = [];
+    for (const pc of entry.collections) {
+      let match = orgStore.getCollections(orgId).find((c) => c.name === pc.name);
+      if (!match) {
+        const err = await orgStore.createCollection(orgId, pc.name);
+        if (err) throw new Error(err);
+        match = orgStore.getCollections(orgId).find((c) => c.name === pc.name);
+      }
+      if (match) targetCollIds.push(match.id);
+    }
+    const err = await orgStore.addInventoryEntry(
+      orgId,
+      entry.entity_id, entry.entity_name, entry.entity_kind,
+      entry.location_id, entry.location_name, entry.location_slug,
+      entry.quantity, targetCollIds,
+    );
+    if (err) throw new Error(err);
+    await inventoryStore.removeEntry(entry.id);
+  } catch (e) {
+    shareUnshareError.value = String(e);
+  } finally {
+    sharingEntryId.value = null;
+  }
+}
+
+// ── Move org entry back to personal inventory ─────────────────────────────
+
+async function unshareToPersonal(orgId: number, entry: OrgInventoryEntry) {
+  unsharingOrgEntryId.value = entry.id;
+  shareUnshareError.value = null;
+  try {
+    await inventoryStore.loadCollections();
+    const targetCollIds: number[] = [];
+    for (const oc of entry.collections) {
+      let match = inventoryStore.collections.find((c) => c.name === oc.name);
+      if (!match) {
+        match = await inventoryStore.createCollection(oc.name);
+      }
+      targetCollIds.push(match.id);
+    }
+    await inventoryStore.addEntry({
+      entityId: entry.entity_id,
+      entityName: entry.entity_name,
+      entityKind: entry.entity_kind,
+      locationId: entry.location_id,
+      locationName: entry.location_name,
+      locationSlug: entry.location_slug,
+      quantity: entry.quantity,
+      collectionIds: targetCollIds,
+    });
+    const err = await orgStore.deleteInventoryEntry(orgId, entry.id);
+    if (err) throw new Error(err);
+  } catch (e) {
+    shareUnshareError.value = String(e);
+  } finally {
+    unsharingOrgEntryId.value = null;
+  }
+}
 
 function slugIcon(slug: string): string {
   switch (slug) {
@@ -389,6 +600,11 @@ async function confirmTransferAll() {
       variant="error"
       :message="inventoryStore.error"
     />
+    <AlertBanner
+      v-if="shareUnshareError"
+      variant="error"
+      :message="shareUnshareError"
+    />
 
     <!-- Header -->
     <div class="flex items-center justify-between gap-3">
@@ -486,7 +702,7 @@ async function confirmTransferAll() {
     </div>
     <!-- Empty state -->
     <div
-      v-if="!inventoryStore.loading && inventoryStore.entries.length === 0 && !inventoryStore.error"
+      v-if="!inventoryStore.loading && inventoryStore.entries.length === 0 && myOrgEntries.length === 0 && !inventoryStore.error"
       class="text-center text-white/30 py-12 text-sm"
     >
       <p>No items in your inventory.</p>
@@ -494,7 +710,7 @@ async function confirmTransferAll() {
     </div>
 
     <!-- Sidebar + list row (only when entries exist) -->
-    <div v-if="inventoryStore.entries.length > 0" class="flex gap-4 items-start">
+    <div v-if="inventoryStore.entries.length > 0 || myOrgEntries.length > 0" class="flex gap-4 items-start">
 
       <!-- Collections sidebar -->
       <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5">
@@ -623,7 +839,10 @@ async function confirmTransferAll() {
                 </div>
 
                 <!-- Action buttons -->
-                <div class="flex items-center gap-1 opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0">
+                <div
+                  class="flex items-center gap-1 opacity-0 group-hover/entry:opacity-100 transition-opacity shrink-0"
+                  :class="{ '!opacity-100': orgPickerEntry?.id === entry.id }"
+                >
                   <button
                     @click.stop="openEditModal(entry)"
                     class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
@@ -631,6 +850,31 @@ async function confirmTransferAll() {
                   >
                     ✎ Edit
                   </button>
+                  <template v-if="sharableOrgs.length > 0">
+                    <template v-if="orgPickerEntry?.id !== entry.id">
+                      <button
+                        @click.stop="shareToOrg(entry)"
+                        :disabled="sharingEntryId === entry.id"
+                        class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-teal-400 hover:bg-teal-400/10 transition-colors disabled:opacity-40"
+                        title="Share to org"
+                      >
+                        {{ sharingEntryId === entry.id ? '…' : '⬆ Share' }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <span class="text-xs text-white/40">Share to:</span>
+                      <button
+                        v-for="org in sharableOrgs"
+                        :key="org.id"
+                        @click.stop="shareToOrg(entry, org.id)"
+                        class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-teal-400 hover:bg-teal-400/10 transition-colors"
+                      >{{ org.name }}</button>
+                      <button
+                        @click.stop="orgPickerEntry = null"
+                        class="text-xs px-1 py-1 rounded-lg text-white/20 hover:text-white/50 transition-colors"
+                      >✕</button>
+                    </template>
+                  </template>
                   <button
                     @click.stop="openTransferModal(entry)"
                     class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
@@ -644,6 +888,62 @@ async function confirmTransferAll() {
                     title="Remove"
                   >
                     ✕ Remove
+                  </button>
+                </div>
+              </div>
+
+              <!-- Org entries (my entries shared to this org) -->
+              <div
+                v-for="{ entry: orgEntry, orgId, orgName } in group.orgEntries"
+                :key="`org-${orgId}-${orgEntry.id}`"
+                class="flex items-center gap-3 px-4 py-2 hover:bg-teal-500/5 transition-colors group/orgentry border-l-2 border-teal-500/20"
+              >
+                <div class="flex-shrink-0 w-6 h-6 rounded-md border bg-teal-500/5 border-teal-500/20 flex items-center justify-center text-teal-400/40">
+                  <IconCommodity v-if="orgEntry.entity_kind === 'commodity'" class="w-3 h-3" />
+                  <IconPackage v-else class="w-3 h-3" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-white text-sm truncate">{{ orgEntry.entity_name }}</span>
+                    <span class="text-white/60 text-xs font-medium shrink-0">{{ orgEntry.quantity }}×</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-400/80 shrink-0">{{ orgName }}</span>
+                    <template v-if="groupMode === 'location'">
+                      <span
+                        v-for="c in orgEntry.collections"
+                        :key="c.id"
+                        class="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400/70 shrink-0 truncate max-w-[80px]"
+                      >{{ c.name }}</span>
+                    </template>
+                  </div>
+                  <div v-if="groupMode === 'collection'" class="text-white/30 text-xs truncate mt-0.5">
+                    {{ orgEntry.location_name }}
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 opacity-0 group-hover/orgentry:opacity-100 transition-opacity shrink-0">
+                  <template v-if="orgStore.canInOrg(orgId, 'manage_inventory')">
+                    <button
+                      @click.stop="openOrgEditModal(orgId, orgEntry)"
+                      class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+                      title="Edit"
+                    >✎ Edit</button>
+                    <button
+                      @click.stop="openOrgTransferModal(orgId, orgEntry)"
+                      class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
+                      title="Transfer"
+                    >↗ Transfer</button>
+                    <button
+                      @click.stop="openOrgRemoveModal(orgId, orgEntry)"
+                      class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                      title="Remove"
+                    >✕ Remove</button>
+                  </template>
+                  <button
+                    @click.stop="unshareToPersonal(orgId, orgEntry)"
+                    :disabled="unsharingOrgEntryId === orgEntry.id"
+                    class="text-xs px-2 py-1 rounded-lg text-white/30 hover:text-green-400 hover:bg-green-400/10 transition-colors disabled:opacity-40"
+                    title="Move to personal inventory"
+                  >
+                    {{ unsharingOrgEntryId === orgEntry.id ? '…' : '⬇ Move to Personal' }}
                   </button>
                 </div>
               </div>
@@ -662,6 +962,15 @@ async function confirmTransferAll() {
       :prefill-collection="modalPrefillCollection"
       @close="showModal = false"
       @saved="showModal = false"
+    />
+    <!-- Org entry modal (Edit / Transfer / Remove from personal view) -->
+    <InventoryModal
+      v-if="showOrgModal"
+      :mode="orgModalMode"
+      :org-id="orgModalOrgId"
+      :source-entry="orgModalSourceEntry"
+      @close="showOrgModal = false"
+      @saved="showOrgModal = false"
     />
     </template>
     </template>

@@ -149,12 +149,19 @@ onMounted(async () => {
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
   document.addEventListener("click", handleExternalLinks);
+
+  orgRefreshTimer = setInterval(() => {
+    if (backendStore.isLoggedIn) orgStore.loadMyOrgs();
+  }, 30_000);
 });
+
+let orgRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleKeyDown);
   document.removeEventListener("keydown", blockBrowserShortcuts, true);
   document.removeEventListener("click", handleExternalLinks);
+  if (orgRefreshTimer) clearInterval(orgRefreshTimer);
 });
 
 useOverlayEvents({

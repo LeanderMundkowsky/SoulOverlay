@@ -419,13 +419,6 @@ function onKeyDown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeyDown, true));
 onUnmounted(() => window.removeEventListener("keydown", onKeyDown, true));
 
-function onBackdropClick(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  if (target.classList.contains("modal-backdrop")) {
-    emit("close");
-  }
-}
-
 function locationSlugLabel(slug: string): string {
   switch (slug) {
     case "space_station": return "Station";
@@ -441,13 +434,11 @@ function locationSlugLabel(slug: string): string {
 <template>
   <Teleport to="body">
     <div
-      class="modal-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      @mousedown="onBackdropClick"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
     >
       <div
         class="bg-[#1a1d24] border border-white/10 rounded-xl shadow-2xl max-h-[80vh] flex flex-col overflow-hidden"
         :class="mode === 'remove' ? 'w-[420px]' : 'w-[580px]'"
-        @mousedown.stop
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">

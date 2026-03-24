@@ -76,6 +76,13 @@ export const useOrgStore = defineStore("org", () => {
     return role.permissions[permission];
   }
 
+  function canInOrg(orgId: number, permission: keyof OrgPermissions): boolean {
+    const role = myOrgs.value.find((o) => o.id === orgId)?.my_role;
+    if (!role) return false;
+    if (role.is_leader) return true;
+    return role.permissions[permission];
+  }
+
   /** sort_order of my current role, looked up from full roles list. Leaders get -Infinity. */
   const myRoleSortOrder = computed((): number => {
     const myRole = currentOrgMyRole.value;
@@ -521,7 +528,7 @@ export const useOrgStore = defineStore("org", () => {
     // Computed
     pendingInvitationCount, currentOrgMyRole, myRoleSortOrder, assignableRoles,
     // Helpers
-    can, getInventory, getCollections,
+    can, canInOrg, getInventory, getCollections,
     // Actions
     loadMyOrgs, createOrg, updateOrg, deleteOrg,
     loadOrgDetail, selectOrg, clearCurrentOrg,
