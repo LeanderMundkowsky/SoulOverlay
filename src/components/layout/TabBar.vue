@@ -174,22 +174,20 @@ function handleTab(tab: Tab) {
         LOGIN
       </button>
       <!-- User icon when authenticated -->
-      <div
+      <button
         v-else
-        class="cursor-pointer"
+        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wider bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+        :class="
+          activeTab === 'profile'
+            ? 'text-white border border-blue-500'
+            : 'text-white/60 hover:text-white border border-white/10 hover:border-white/20'
+        "
         title="View profile"
         @click="emit('update:activeTab', 'profile')"
       >
-        <div
-          class="relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center transition-all"
-          :class="activeTab === 'profile' ? 'ring-2 ring-blue-500' : 'hover:ring-2 hover:ring-white/30'"
-        >
-          <IconUser
-            class="w-4 h-4"
-            :class="activeTab === 'profile' ? 'text-white' : 'text-white/50 hover:text-white/80'"
-          />
-        </div>
-      </div>
+        <IconUser class="w-3.5 h-3.5 flex-shrink-0" />
+        PROFILE
+      </button>
     </div>
   </div>
 </template>

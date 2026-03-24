@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
 import LoadingSpinner from "@/components/ui/LoadingSpinner.vue";
+import SearchableDropdown from "@/components/ui/SearchableDropdown.vue";
+import type { DropdownOption } from "@/components/ui/SearchableDropdown.vue";
 import { useBackendStore } from "@/stores/backend";
+import { useHomeLocationStore } from "@/stores/homeLocation";
 
 const backendStore = useBackendStore();
+const homeLocationStore = useHomeLocationStore();
 
 const secretKeyInput = ref(backendStore.account?.uex_secret_key ?? "");
 const secretKeySaving = ref(false);
@@ -17,6 +21,64 @@ watch(
   () => backendStore.account?.uex_secret_key,
   (val) => { secretKeyInput.value = val ?? ""; },
 );
+
+// ── Home location ──────────────────────────────────────────────────────────
+
+const selectedHomeLocation = ref<DropdownOption | null>(
+  homeLocationStore.homeLocation
+    ? {
+        id: String(homeLocationStore.homeLocation.id),
+        label: `${homeLocationStore.homeLocation.system_name} → ${homeLocationStore.homeLocation.name}`,
+        meta: homeLocationStore.homeLocation.type_name,
+      }
+    : null,
+);
+const homeLocationSaving = ref(false);
+const homeLocationError = ref<string | null>(null);
+const homeLocationSaved = ref(false);
+const confirmingReset = ref(false);
+
+// Sync dropdown on initial load only (don't override after a deliberate save/clear)
+watch(
+  () => homeLocationStore.homeLocation,
+  (loc) => {
+    if (selectedHomeLocation.value === null && loc) {
+      selectedHomeLocation.value = {
+        id: String(loc.id),
+        label: `${loc.system_name} → ${loc.name}`,
+        meta: loc.type_name,
+      };
+    }
+  },
+);
+
+const homeLocationChanged = computed(() => {
+  const currentId = homeLocationStore.homeLocationId;
+  const selectedId = selectedHomeLocation.value ? Number(selectedHomeLocation.value.id) : null;
+  return currentId !== selectedId;
+});
+
+async function saveHomeLocation() {
+  homeLocationSaving.value = true;
+  homeLocationError.value = null;
+  homeLocationSaved.value = false;
+  const id = selectedHomeLocation.value ? Number(selectedHomeLocation.value.id) : null;
+  const err = await homeLocationStore.setHomeLocation(id);
+  homeLocationSaving.value = false;
+  if (err) {
+    homeLocationError.value = err;
+  } else {
+    selectedHomeLocation.value = null;
+    homeLocationSaved.value = true;
+    setTimeout(() => { homeLocationSaved.value = false; }, 3000);
+  }
+}
+
+async function clearHomeLocation() {
+  confirmingReset.value = false;
+  selectedHomeLocation.value = null;
+  await saveHomeLocation();
+}
 
 async function saveSecretKey() {
   secretKeySaving.value = true;
@@ -148,6 +210,78 @@ function formatDate(ts: string | undefined): string {
           Secret key is configured
         </div>
         <div v-else class="text-xs text-yellow-400/60">No secret key set — Hangar will be unavailable.</div>
+      </div>
+
+      <!-- Home Location -->
+      <div class="bg-[#1a1d24] border border-white/10 rounded-lg p-5 space-y-3">
+        <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider">Home Location</h3>
+        <p class="text-white/30 text-xs leading-relaxed">
+          Your spawn location in Star Citizen. Used to bulk-transfer inventory after major patches.
+        </p>
+
+        <!-- Current saved value -->
+        <div class="space-y-0.5">
+          <span class="text-white/40 text-xs">Current Home Location</span>
+          <div v-if="homeLocationStore.homeLocation" class="text-white/80 text-sm font-medium">
+            {{ homeLocationStore.homeLocation.system_name }} → {{ homeLocationStore.homeLocation.name }}
+          </div>
+          <div v-else class="text-yellow-400/60 text-xs">Not set</div>
+        </div>
+
+        <!-- Change to / Set to -->
+        <div class="space-y-1.5">
+          <label class="block text-white/40 text-xs">
+            {{ homeLocationStore.homeLocation ? 'Change to' : 'Set to' }}
+          </label>
+          <SearchableDropdown
+            v-model="selectedHomeLocation"
+            :options="homeLocationStore.dropdownOptions"
+            :loading="homeLocationStore.loading"
+            :show-meta="false"
+            placeholder="Search for a location..."
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            @click="saveHomeLocation"
+            :disabled="homeLocationSaving || !homeLocationChanged"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            :class="homeLocationSaved
+              ? 'bg-green-600/80 text-white'
+              : 'bg-blue-600 hover:bg-blue-500 text-white'"
+          >
+            {{ homeLocationSaving ? "Saving…" : homeLocationSaved ? "Saved!" : "Save" }}
+          </button>
+          <!-- Reset: first click shows confirm, second executes -->
+          <template v-if="homeLocationStore.homeLocation && !homeLocationSaving">
+            <button
+              v-if="!confirmingReset"
+              @click="confirmingReset = true"
+              class="text-xs text-white/30 hover:text-red-400 transition-colors"
+            >
+              Reset Home Location
+            </button>
+            <template v-else>
+              <span class="text-xs text-white/40">Are you sure?</span>
+              <button
+                @click="clearHomeLocation"
+                class="text-xs text-red-400 hover:text-red-300 font-medium transition-colors"
+              >
+                Yes, reset
+              </button>
+              <button
+                @click="confirmingReset = false"
+                class="text-xs text-white/30 hover:text-white/60 transition-colors"
+              >
+                Cancel
+              </button>
+            </template>
+          </template>
+        </div>
+        <div v-if="homeLocationError" class="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {{ homeLocationError }}
+        </div>
       </div>
     </template>
 

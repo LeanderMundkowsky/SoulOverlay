@@ -81,6 +81,8 @@ pub struct Settings {
     pub debug_logging: bool,
     /// Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
     pub hide_untranslated_items: bool,
+    /// Backend HomeLocation entity ID for the user's chosen home location (None = not set)
+    pub home_location_id: Option<u32>,
 }
 
 impl Default for Settings {
@@ -99,6 +101,7 @@ impl Default for Settings {
             keybinds: Keybinds::default(),
             debug_logging: false,
             hide_untranslated_items: true,
+            home_location_id: None,
         }
     }
 }

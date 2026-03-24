@@ -18,8 +18,10 @@ const props = withDefaults(
     loading?: boolean;
     disabled?: boolean;
     clearable?: boolean;
+    /** Whether to show the "✓ meta" confirmation hint below the input (default: true). */
+    showMeta?: boolean;
   }>(),
-  { placeholder: "Search...", loading: false, disabled: false, clearable: true },
+  { placeholder: "Search...", loading: false, disabled: false, clearable: true, showMeta: true },
 );
 
 const emit = defineEmits<{
@@ -168,71 +170,82 @@ defineExpose({
 </script>
 
 <template>
-  <div class="relative">
-    <input
-      ref="inputEl"
-      type="text"
-      :value="query"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      autocomplete="off"
-      spellcheck="false"
-      class="w-full bg-[#111318] border rounded-lg px-3 py-2 pr-8 text-white text-sm placeholder-white/20 focus:outline-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      :class="modelValue ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
-      @input="onInput"
-      @focus="onFocus"
-      @blur="onBlur"
-      @keydown="onKeyDown"
-    />
+  <div>
+    <!-- Input row — own relative container so top-1/2 is always relative to input height -->
+    <div class="relative">
+      <input
+        ref="inputEl"
+        type="text"
+        :value="query"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        autocomplete="off"
+        spellcheck="false"
+        class="w-full bg-[#111318] border rounded-lg px-3 py-2 pr-8 text-white text-sm placeholder-white/20 focus:outline-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :class="modelValue ? 'border-green-500/40' : 'border-white/10 focus:border-white/30'"
+        @input="onInput"
+        @focus="onFocus"
+        @blur="onBlur"
+        @keydown="onKeyDown"
+      />
 
-    <!-- Right-side icon: clear (when selected + clearable), loading dots, or chevron -->
-    <button
-      v-if="modelValue && clearable"
-      tabindex="-1"
-      class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
-      @mousedown.prevent="clear"
-    >
-      <IconClose class="w-3.5 h-3.5" />
-    </button>
-    <span
-      v-else-if="loading"
-      class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/20 text-xs select-none pointer-events-none"
-    >
-      •••
-    </span>
-    <IconChevronDown
-      v-else
-      class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none transition-transform"
-      :class="[open ? 'rotate-180' : '', modelValue ? 'text-green-500/60' : 'text-white/25']"
-    />
-
-    <!-- Dropdown list -->
-    <div
-      v-if="open && filteredOptions.length > 0"
-      :id="dropdownId"
-      class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
-    >
+      <!-- Right-side icon: clear (when selected + clearable), loading dots, or chevron -->
       <button
-        v-for="(opt, i) in filteredOptions"
-        :key="opt.id"
-        :data-idx="i"
-        class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
-        :class="
-          i === highlightIndex
-            ? 'bg-white/10 text-white'
-            : 'hover:bg-white/[0.08] text-white'
-        "
-        @mousedown.prevent="select(opt)"
+        v-if="modelValue && clearable"
+        tabindex="-1"
+        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-white/30 hover:text-white transition-colors"
+        @mousedown.prevent="clear"
       >
-        <span class="truncate">{{ opt.label }}</span>
-        <span v-if="opt.meta" class="text-white/30 text-xs ml-auto uppercase shrink-0">
-          {{ opt.meta }}
-        </span>
+        <IconClose class="w-3.5 h-3.5" />
       </button>
+      <span
+        v-else-if="loading"
+        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/20 text-xs select-none pointer-events-none"
+      >
+        •••
+      </span>
+      <button
+        v-else
+        tabindex="-1"
+        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center transition-colors"
+        :class="modelValue ? 'text-green-500/60 hover:text-green-400' : 'text-white/25 hover:text-white/50'"
+        :disabled="disabled"
+        @mousedown.prevent="open ? (open = false) : (filteredOptions.length > 0 && (open = true), inputEl?.focus())"
+      >
+        <IconChevronDown
+          class="w-3.5 h-3.5 transition-transform"
+          :class="open ? 'rotate-180' : ''"
+        />
+      </button>
+
+      <!-- Dropdown list -->
+      <div
+        v-if="open && filteredOptions.length > 0"
+        :id="dropdownId"
+        class="absolute z-10 left-0 right-0 top-full mt-1 bg-[#1e2130] border border-white/10 rounded-lg shadow-xl max-h-[200px] overflow-y-auto"
+      >
+        <button
+          v-for="(opt, i) in filteredOptions"
+          :key="opt.id"
+          :data-idx="i"
+          class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2"
+          :class="
+            i === highlightIndex
+              ? 'bg-white/10 text-white'
+              : 'hover:bg-white/[0.08] text-white'
+          "
+          @mousedown.prevent="select(opt)"
+        >
+          <span class="truncate">{{ opt.label }}</span>
+          <span v-if="opt.meta" class="text-white/30 text-xs ml-auto uppercase shrink-0">
+            {{ opt.meta }}
+          </span>
+        </button>
+      </div>
     </div>
 
     <!-- Confirmed-selection indicator -->
-    <div v-if="modelValue?.meta" class="text-green-400/60 text-xs mt-1">
+    <div v-if="showMeta && modelValue?.meta" class="text-green-400/60 text-xs mt-1">
       ✓ {{ modelValue.meta }}
     </div>
   </div>

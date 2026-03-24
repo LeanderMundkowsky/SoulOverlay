@@ -4,6 +4,8 @@ import { useInventoryStore } from "@/stores/inventory";
 import type { InventoryEntry } from "@/stores/inventory";
 import { useBackendStore } from "@/stores/backend";
 import { useOrgStore } from "@/stores/org";
+import { useHomeLocationStore } from "@/stores/homeLocation";
+import { commands } from "@/bindings";
 import InventoryModal from "@/components/ui/InventoryModal.vue";
 import type { ModalMode } from "@/components/ui/InventoryModal.vue";
 import OrgInventoryPanel from "@/components/org/OrgInventoryPanel.vue";
@@ -19,6 +21,7 @@ import AlertBanner from "@/components/ui/AlertBanner.vue";
 const inventoryStore = useInventoryStore();
 const backendStore = useBackendStore();
 const orgStore = useOrgStore();
+const homeLocationStore = useHomeLocationStore();
 
 // Scope: null = personal inventory, number = org ID
 const inventoryScope = ref<number | null>(null);
@@ -280,6 +283,69 @@ function slugIcon(slug: string): string {
     default: return "📦";
   }
 }
+
+// ── Transfer All to Home Location ──────────────────────────────────────────
+
+const showTransferAllConfirm = ref(false);
+const transferAllLoading = ref(false);
+const transferAllError = ref<string | null>(null);
+const transferAllDone = ref(false);
+
+/** Entries not already at the home location */
+const entriesToTransfer = computed(() => {
+  const loc = homeLocationStore.homeLocation;
+  if (!loc || !loc.uex_id) return [];
+  return inventoryStore.entries.filter(
+    (e) => e.location_id !== loc.uex_id,
+  );
+});
+
+function openTransferAllConfirm() {
+  transferAllError.value = null;
+  transferAllDone.value = false;
+  showTransferAllConfirm.value = true;
+}
+
+function cancelTransferAll() {
+  showTransferAllConfirm.value = false;
+}
+
+async function confirmTransferAll() {
+  const loc = homeLocationStore.homeLocation;
+  if (!loc?.uex_id) return;
+
+  transferAllLoading.value = true;
+  transferAllError.value = null;
+
+  const entries = entriesToTransfer.value.slice();
+  let failed = 0;
+
+  for (const entry of entries) {
+    const result = await commands.transferInventory(
+      entry.id,
+      entry.quantity,
+      loc.uex_id,
+      loc.name,
+      loc.type_name,
+      [],
+    );
+    if (result.status === "error") {
+      failed++;
+    }
+  }
+
+  transferAllLoading.value = false;
+
+  if (failed > 0) {
+    transferAllError.value = `${failed} item(s) could not be transferred.`;
+  } else {
+    transferAllDone.value = true;
+    showTransferAllConfirm.value = false;
+    // Reload inventory to reflect changes
+    await inventoryStore.loadInventory();
+    setTimeout(() => { transferAllDone.value = false; }, 3000);
+  }
+}
 </script>
 
 <template>
@@ -343,6 +409,21 @@ function slugIcon(slug: string): string {
         >
           {{ groupMode === 'location' ? '📍 By Location' : '🏷️ By Collection' }}
         </button>
+        <!-- Transfer All to Home Location -->
+        <button
+          v-if="homeLocationStore.homeLocation && inventoryStore.entries.length > 0"
+          @click="openTransferAllConfirm"
+          :disabled="entriesToTransfer.length === 0 || transferAllLoading"
+          class="text-xs px-2.5 py-1 rounded-lg border transition-colors"
+          :class="transferAllDone
+            ? 'border-green-500/30 bg-[#15261c] text-green-400'
+            : 'border-orange-500/30 bg-orange-500/5 text-orange-400 hover:bg-orange-500/10 disabled:opacity-40 disabled:cursor-not-allowed'"
+          :title="entriesToTransfer.length === 0
+            ? 'All items already at home location'
+            : `Transfer ${entriesToTransfer.length} item(s) to ${homeLocationStore.homeLocation.name}`"
+        >
+          {{ transferAllDone ? '✓ Transferred' : `🏠 Transfer All (${entriesToTransfer.length})` }}
+        </button>
         <!-- Add button -->
         <button
           @click="openAddModal"
@@ -353,11 +434,56 @@ function slugIcon(slug: string): string {
       </div>
     </div>
 
+    <!-- Transfer All confirmation panel -->
+    <div
+      v-if="showTransferAllConfirm"
+      class="bg-[#2a1400] border border-orange-700 rounded-xl p-4 space-y-3"
+    >
+      <div class="flex items-start gap-3">
+        <span class="text-xl shrink-0">🏠</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-white/80 text-sm font-medium">
+            Transfer {{ entriesToTransfer.length }} item(s) to
+            <span class="text-orange-300">{{ homeLocationStore.homeLocation?.system_name }} → {{ homeLocationStore.homeLocation?.name }}</span>?
+          </p>
+          <p class="text-white/40 text-xs mt-1">
+            This simulates a patch wipe — all items not already at your home location will be moved there.
+            Items already at home are unaffected.<br>You can change your home location in the Profile tab.
+          </p>
+        </div>
+      </div>
+      <div v-if="transferAllError" class="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+        {{ transferAllError }}
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          @click="confirmTransferAll"
+          :disabled="transferAllLoading"
+          class="text-xs px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors"
+        >
+          {{ transferAllLoading ? "Transferring…" : "Confirm Transfer" }}
+        </button>
+        <button
+          @click="cancelTransferAll"
+          :disabled="transferAllLoading"
+          class="text-xs px-3 py-1.5 rounded-lg text-white/40 hover:text-white/70 transition-colors disabled:opacity-40"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <!-- Transfer All error (when panel is closed) -->
+    <AlertBanner
+      v-if="transferAllError && !showTransferAllConfirm"
+      variant="error"
+      :message="transferAllError"
+    />
+
     <!-- Loading -->
     <div v-if="inventoryStore.loading && inventoryStore.entries.length === 0" class="flex justify-center py-12">
       <LoadingSpinner />
     </div>
-
     <!-- Empty state -->
     <div
       v-if="!inventoryStore.loading && inventoryStore.entries.length === 0 && !inventoryStore.error"
