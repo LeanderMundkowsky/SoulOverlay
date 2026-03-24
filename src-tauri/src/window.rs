@@ -343,6 +343,11 @@ mod unix_impl {
     use std::sync::{Arc, LazyLock, RwLock};
     use tauri::{AppHandle, Emitter, Manager};
 
+    #[cfg(target_os = "linux")]
+    use gtk::prelude::*;
+    #[cfg(target_os = "linux")]
+    use gtk_layer_shell::LayerShell;
+
     /// Stored AppHandle so `post_hotkey_toggle` can access the window from any thread.
     /// Uses RwLock to allow multiple updates and concurrent reads.
     static LINUX_APP: LazyLock<Arc<RwLock<Option<AppHandle>>>> =
@@ -365,7 +370,7 @@ mod unix_impl {
     }
 
     pub fn init_overlay_window(
-        _window: &tauri::WebviewWindow,
+        window: &tauri::WebviewWindow,
         app: &AppHandle,
     ) {
         if let Ok(mut guard) = LINUX_APP.write() {
@@ -373,6 +378,65 @@ mod unix_impl {
             info!("Overlay window initialized (Linux/KDE — Tauri GTK backend)");
         } else {
             log::error!("init_overlay_window: failed to acquire write lock");
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Use with_webview to access the underlying GTK widget.
+            // On Linux, the closure receives the webkit2gtk::WebView which is a GtkWidget.
+            // We traverse up to the toplevel window to apply Layer Shell settings.
+            let _ = window.with_webview(|webview| {
+                // webview is tauri::webview::PlatformWebview.
+                // We need to access the inner webkit2gtk::WebView via .inner() which returns &Rc<webkit2gtk::WebView>.
+                use gtk::prelude::*;
+                use gtk_layer_shell::LayerShell;
+                
+                // Dereference the Rc to get the actual WebView widget
+                let inner = webview.inner();
+                
+                if let Some(toplevel) = inner.toplevel() {
+                    if let Some(gtk_window) = toplevel.downcast_ref::<gtk::Window>() {
+                        info!("Initializing Layer Shell for overlay window...");
+
+                        // Ensure window is not managed by regular window manager fullscreen/maximize states
+                        gtk_window.unfullscreen();
+                        gtk_window.unmaximize();
+                        // Reset size request to -1 (default) to allow anchors to determine size
+                        gtk_window.set_size_request(-1, -1);
+                        
+                        // Initialize as a Layer Shell surface
+                        gtk_window.init_layer_shell();
+                        
+                        // Set the layer to Overlay (top-most, above fullscreen windows)
+                        gtk_window.set_layer(gtk_layer_shell::Layer::Overlay);
+
+                        // Anchor to all edges to cover the screen
+                        gtk_window.set_anchor(gtk_layer_shell::Edge::Top, true);
+                        gtk_window.set_anchor(gtk_layer_shell::Edge::Bottom, true);
+                        gtk_window.set_anchor(gtk_layer_shell::Edge::Left, true);
+                        gtk_window.set_anchor(gtk_layer_shell::Edge::Right, true);
+
+                        // Explicitly set zero margins to ensure full screen coverage
+                        gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Top, 0);
+                        gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Bottom, 0);
+                        gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Left, 0);
+                        gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Right, 0);
+                        gtk_window.set_margin(0);
+
+                        // Set namespace for compositor rules
+                        gtk_window.set_namespace("soul-overlay");
+                        
+                        // Allow keyboard interactivity when focused (OnDemand)
+                        gtk_window.set_keyboard_mode(gtk_layer_shell::KeyboardMode::OnDemand);
+                        // Ensure no exclusive zone (don't push other windows)
+                        gtk_window.set_exclusive_zone(-1);
+                    } else {
+                        log::error!("Failed to downcast toplevel widget to GtkWindow");
+                    }
+                } else {
+                    log::error!("Failed to get toplevel widget from webview");
+                }
+            });
         }
     }
 
@@ -383,13 +447,20 @@ mod unix_impl {
         }
 
         if let Some(window) = app.get_webview_window("overlay") {
-            // Position to cover the primary monitor before showing
-            if let Ok(Some(monitor)) = app.primary_monitor() {
-                let pos = monitor.position();
-                let size = monitor.size();
-                let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
-                let _ = window.set_size(tauri::PhysicalSize::new(size.width, size.height));
+            // On Linux with Layer Shell, manual positioning is handled by anchors.
+            // We only need to show and focus.
+            
+            #[cfg(not(target_os = "linux"))]
+            {
+                // Fallback for non-Linux Unix (e.g. MacOS)
+                if let Ok(Some(monitor)) = app.primary_monitor() {
+                    let pos = monitor.position();
+                    let size = monitor.size();
+                    let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
+                    let _ = window.set_size(tauri::PhysicalSize::new(size.width, size.height));
+                }
             }
+
             let _ = window.show();
             let _ = window.set_focus();
         }
@@ -411,11 +482,14 @@ mod unix_impl {
     }
 
     pub fn set_window_geometry(app: &AppHandle, x: i32, y: i32, w: u32, h: u32) {
+        // With Layer Shell, geometry is constrained by anchors.
+        // We log it but skip setting it on Linux to avoid conflicts.
+        #[cfg(not(target_os = "linux"))]
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             let _ = window.set_size(tauri::PhysicalSize::new(w, h));
         }
-        info!("Overlay geometry set to {}x{} at ({}, {}) (Linux)", w, h, x, y);
+        info!("Overlay geometry request: {}x{} at ({}, {}) (handled by Layer Shell on Linux)", w, h, x, y);
     }
 
     pub fn get_primary_monitor_geometry() -> (i32, i32, u32, u32) {
