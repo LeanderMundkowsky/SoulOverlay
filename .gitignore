@@ -19,6 +19,9 @@ src-tauri/target/
 # Cargo local dev config (contains BACKEND_URL + SOUL_APP_TOKEN, never commit)
 src-tauri/.cargo/config.toml
 
+# Nested copy of the project (accidental)
+SoulOverlay/
+
 # OS files
 .DS_Store
 Thumbs.db

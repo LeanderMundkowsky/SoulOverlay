@@ -438,6 +438,39 @@ async backendLogout() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Fetch all active home locations from the backend (public endpoint, no auth required).
+ */
+async backendGetHomeLocations() : Promise<Result<HomeLocationOption[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backend_get_home_locations") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Returns the currently saved home location ID from settings.
+ */
+async getHomeLocationId() : Promise<Result<number | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_home_location_id") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Persists the chosen home location ID to settings.
+ */
+async setHomeLocationId(id: number | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_home_location_id", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getWatchlist() : Promise<Result<WatchEntry[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_watchlist") };
@@ -1170,6 +1203,30 @@ export type GameState = { sc_detected: boolean }
  * A vehicle in the user's fleet managed by the backend.
  */
 export type HangarVehicle = { id: number; uex_id: string; uex_vehicle_id: string; name: string; model_name: string; serial: string | null; description: string | null; organization_name: string | null; is_hidden: boolean; is_pledged: boolean; url_photo: string | null; date_added: string | null; created_at: string; updated_at: string }
+/**
+ * A curated home location available for selection.
+ */
+export type HomeLocationOption = { 
+/**
+ * Backend HomeLocation entity ID.
+ */
+id: number; 
+/**
+ * Location name (e.g. "New Babbage").
+ */
+name: string; 
+/**
+ * UEX platform ID as string (used as `location_id` in inventory). None if not mapped.
+ */
+uex_id: string | null; 
+/**
+ * Location type name — matches inventory storage slugs (e.g. "city", "space_station").
+ */
+type_name: string; 
+/**
+ * Star system name (e.g. "Stanton").
+ */
+system_name: string }
 export type InventoryCollection = { id: number; name: string }
 export type InventoryEntry = { id: number; entity_id: string; entity_name: string; entity_kind: string; location_id: string; location_name: string; location_slug: string; quantity: number; collections: InventoryCollection[]; added_at: string; updated_at: string }
 /**
@@ -1307,7 +1364,11 @@ debug_logging: boolean;
 /**
  * Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
  */
-hide_untranslated_items: boolean }
+hide_untranslated_items: boolean; 
+/**
+ * Backend HomeLocation entity ID for the user's chosen home location (None = not set)
+ */
+home_location_id: number | null }
 export type TransferResult = { source: InventoryEntry | null; target: InventoryEntry }
 /**
  * A search result from UEX API (or Wiki API for supplemental results).

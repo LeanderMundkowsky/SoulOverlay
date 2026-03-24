@@ -340,3 +340,85 @@ pub async fn backend_logout(state: State<'_, AppState>) -> Result<(), String> {
     info!("User logged out");
     Ok(())
 }
+
+// ── Home Locations ────────────────────────────────────────────────────────────
+
+/// A curated home location available for selection.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct HomeLocationOption {
+    /// Backend HomeLocation entity ID.
+    pub id: u32,
+    /// Location name (e.g. "New Babbage").
+    pub name: String,
+    /// UEX platform ID as string (used as `location_id` in inventory). None if not mapped.
+    pub uex_id: Option<String>,
+    /// Location type name — matches inventory storage slugs (e.g. "city", "space_station").
+    pub type_name: String,
+    /// Star system name (e.g. "Stanton").
+    pub system_name: String,
+}
+
+/// Fetch all active home locations from the backend (public endpoint, no auth required).
+#[tauri::command]
+#[specta::specta]
+pub async fn backend_get_home_locations() -> Result<Vec<HomeLocationOption>, String> {
+    let client = http_client()?;
+    let url = format!("{}/api/home-locations", BACKEND_URL);
+    debug!("[backend] → GET /api/home-locations");
+    let t = std::time::Instant::now();
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    let status = resp.status();
+    debug!("[backend] ← GET /api/home-locations {} ({}ms)", status, t.elapsed().as_millis());
+
+    if !status.is_success() {
+        return Err(format!("Failed to fetch home locations: HTTP {}", status));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let items = json["data"]
+        .as_array()
+        .ok_or("Invalid response: missing data array")?;
+
+    let mut result = Vec::with_capacity(items.len());
+    for item in items {
+        let id = item["id"].as_u64().ok_or("Missing id")? as u32;
+        let name = item["name"].as_str().ok_or("Missing name")?.to_string();
+        let uex_id = item["uexId"].as_i64().map(|n| n.to_string());
+        let type_name = item["type"]["name"].as_str().ok_or("Missing type.name")?.to_string();
+        let system_name = item["system"]["name"].as_str().ok_or("Missing system.name")?.to_string();
+        result.push(HomeLocationOption { id, name, uex_id, type_name, system_name });
+    }
+
+    Ok(result)
+}
+
+/// Returns the currently saved home location ID from settings.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_home_location_id(state: State<'_, AppState>) -> Result<Option<u32>, String> {
+    Ok(state.current_settings.lock().unwrap().home_location_id)
+}
+
+/// Persists the chosen home location ID to settings.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_home_location_id(
+    id: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut settings = state.current_settings.lock().unwrap();
+    settings.home_location_id = id;
+    state
+        .paths
+        .save_settings(&settings)
+        .map_err(|e| format!("Failed to save settings: {}", e))
+}

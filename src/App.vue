@@ -28,6 +28,7 @@ import { useBackendStore } from "./stores/backend";
 import { useWatchlistStore } from "./stores/watchlist";
 import { useInventoryStore } from "./stores/inventory";
 import { useOrgStore } from "./stores/org";
+import { useHomeLocationStore } from "./stores/homeLocation";
 import { useLogWatcher } from "./composables/useLogWatcher";
 import { useOverlayEvents } from "./composables/useOverlayEvents";
 import { matchesHotkey } from "./composables/useHotkeyMatch";
@@ -35,6 +36,7 @@ import { useDragDrop } from "./composables/useDragDrop";
 import UpdateBanner from "./components/ui/UpdateBanner.vue";
 import UpdateModal from "./components/ui/UpdateModal.vue";
 import AuthModal from "./components/ui/AuthModal.vue";
+import HomeLocationModal from "./components/ui/HomeLocationModal.vue";
 
 const gameStore = useGameStore();
 const settingsStore = useSettingsStore();
@@ -44,6 +46,7 @@ const backendStore = useBackendStore();
 const watchlistStore = useWatchlistStore();
 const inventoryStore = useInventoryStore();
 const orgStore = useOrgStore();
+const homeLocationStore = useHomeLocationStore();
 const { dragging: isDragActive, payload: dragPayload, ghostX, ghostY, ghostLabel } = useDragDrop();
 const activeTab = ref("search");
 const showSettings = ref(false);
@@ -51,6 +54,7 @@ const showDebug = ref(false);
 const showKeybinds = ref(false);
 const showUpdateModal = ref(false);
 const showAuthModal = ref(false);
+const showHomeLocationModal = ref(false);
 const showFavorites = ref(true);
 const showWatchlist = ref(false);
 const scDetected = ref(false);
@@ -136,6 +140,11 @@ onMounted(async () => {
   if (backendStore.isLoggedIn) {
     orgStore.loadMyOrgs();
     orgStore.loadUserInvitations();
+    await homeLocationStore.loadHomeLocationId();
+    await homeLocationStore.loadHomeLocations();
+    if (homeLocationStore.shouldPrompt) {
+      showHomeLocationModal.value = true;
+    }
   }
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keydown", blockBrowserShortcuts, true);
@@ -168,6 +177,17 @@ function onOverlayShown() {
   activeTab.value = "search";
   nextTick(() => { searchTabRef.value?.focusInput(); });
 }
+
+// Watch for login: initialize home location and show prompt if needed
+watch(isLoggedIn, async (loggedIn) => {
+  if (loggedIn) {
+    await homeLocationStore.loadHomeLocationId();
+    await homeLocationStore.loadHomeLocations();
+    if (homeLocationStore.shouldPrompt) {
+      showHomeLocationModal.value = true;
+    }
+  }
+});
 
 // Capture-phase handler: block all browser built-in shortcuts that make no
 // sense in an overlay context (devtools, reload, zoom, find, print, etc.).
@@ -432,6 +452,12 @@ watch(isDragActive, (active) => {
 
     <!-- Auth modal -->
     <AuthModal v-if="showAuthModal" @close="showAuthModal = false" />
+
+    <!-- Home location prompt (shown after login if home location is unset/invalid) -->
+    <HomeLocationModal
+      v-if="showHomeLocationModal"
+      @close="showHomeLocationModal = false"
+    />
   </div>
 </template>
 
