@@ -296,6 +296,28 @@ async getGameState() : Promise<Result<GameState, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Returns the recent backend API call log, newest first.
+ */
+async getBackendCallLog() : Promise<Result<BackendCallEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_backend_call_log") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Clear the backend call log.
+ */
+async clearBackendCallLog() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_backend_call_log") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getFavorites() : Promise<Result<Favorite[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_favorites") };
@@ -1065,6 +1087,7 @@ export type BackendAccount = { id: number; username: string; email: string; uex_
  */
 export type BackendAccountStatus = { account: BackendAccount | null; token_present: boolean }
 export type BackendAuthResult = { account: BackendAccount }
+export type BackendCallEntry = { method: string; path: string; status: number | null; duration_ms: number; error: string | null; timestamp: string }
 /**
  * Response from cache refresh operations.
  */
@@ -1361,6 +1384,10 @@ keybinds: Keybinds;
  * Whether debug-level log output is enabled (default: false)
  */
 debug_logging: boolean; 
+/**
+ * Whether verbose backend API call logging is enabled (default: false)
+ */
+backend_api_logging: boolean; 
 /**
  * Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
  */

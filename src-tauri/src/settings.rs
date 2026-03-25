@@ -79,6 +79,8 @@ pub struct Settings {
     pub keybinds: Keybinds,
     /// Whether debug-level log output is enabled (default: false)
     pub debug_logging: bool,
+    /// Whether verbose backend API call logging is enabled (default: false)
+    pub backend_api_logging: bool,
     /// Hide items with untranslated names (starting with '@') from search and inventory add dialogs (default: true)
     pub hide_untranslated_items: bool,
     /// Backend HomeLocation entity ID for the user's chosen home location (None = not set)
@@ -100,6 +102,7 @@ impl Default for Settings {
             font_size: 14,
             keybinds: Keybinds::default(),
             debug_logging: false,
+            backend_api_logging: false,
             hide_untranslated_items: true,
             home_location_id: None,
         }

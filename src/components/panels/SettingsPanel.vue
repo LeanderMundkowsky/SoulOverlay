@@ -196,6 +196,11 @@ function resetDefaults() {
             label="Debug Logging"
             description="Verbose debug output to terminal and log file"
           />
+          <ToggleSwitch
+            v-model="form.backend_api_logging"
+            label="Backend API Logging"
+            description="Log all SoulOverlay backend calls in the Debug → Backend panel"
+          />
         </div>
       </div>
 

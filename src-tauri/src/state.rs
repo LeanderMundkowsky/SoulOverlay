@@ -4,6 +4,7 @@ use std::sync::{
     {Arc, Mutex},
 };
 
+use crate::backend_log::BackendCallLog;
 use crate::cache_store::CacheStore;
 use crate::commands::backend::BackendAccount;
 use crate::config::AppPaths;
@@ -42,6 +43,10 @@ pub struct AppState {
     pub entity_mapper: Mutex<EntityMapper>,
     /// Runtime toggle for debug-level log output (shared with fern filter).
     pub debug_logging: Arc<AtomicBool>,
+    /// Runtime toggle for verbose backend API call logging.
+    pub backend_api_logging: Arc<AtomicBool>,
+    /// Ring-buffer log of recent backend API calls (when backend_api_logging is enabled).
+    pub backend_call_log: Arc<BackendCallLog>,
 }
 
 impl AppState {

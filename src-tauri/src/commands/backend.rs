@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
+use chrono::Utc;
+use crate::backend_log::BackendCallEntry;
 use crate::constants::BACKEND_URL;
 use crate::state::AppState;
 
@@ -208,6 +210,15 @@ pub async fn backend_login(
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
+    state.backend_call_log.record(BackendCallEntry {
+        method: "POST".into(),
+        path: "/api/auth/login".into(),
+        status: Some(status.as_u16()),
+        duration_ms: t.elapsed().as_millis() as u32,
+        error: if !status.is_success() { Some(extract_error_message(&json)) } else { None },
+        timestamp: Utc::now().to_rfc3339(),
+    });
+
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -254,6 +265,15 @@ pub async fn backend_register(
         .json()
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    state.backend_call_log.record(BackendCallEntry {
+        method: "POST".into(),
+        path: "/api/auth/register".into(),
+        status: Some(status.as_u16()),
+        duration_ms: t.elapsed().as_millis() as u32,
+        error: if !status.is_success() { Some(extract_error_message(&json)) } else { None },
+        timestamp: Utc::now().to_rfc3339(),
+    });
 
     if !status.is_success() {
         return Err(extract_error_message(&json));
@@ -317,6 +337,15 @@ pub async fn backend_update_secret_key(
         .json()
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    state.backend_call_log.record(BackendCallEntry {
+        method: "PATCH".into(),
+        path: "/api/account".into(),
+        status: Some(status.as_u16()),
+        duration_ms: t.elapsed().as_millis() as u32,
+        error: if !status.is_success() { Some(extract_error_message(&json)) } else { None },
+        timestamp: Utc::now().to_rfc3339(),
+    });
 
     if !status.is_success() {
         return Err(extract_error_message(&json));

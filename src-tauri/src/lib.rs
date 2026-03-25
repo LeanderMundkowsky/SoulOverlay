@@ -1,5 +1,6 @@
 mod activity;
 mod app_setup;
+mod backend_log;
 mod cache_store;
 mod commands;
 pub mod config;
@@ -48,6 +49,7 @@ pub fn run() {
     };
 
     let sc_running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let backend_api_logging = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     let app_state = AppState {
         paths,
@@ -64,6 +66,8 @@ pub fn run() {
         backend_account: Mutex::new(None),
         entity_mapper: Mutex::new(wiki::mapper::EntityMapper::new()),
         debug_logging,
+        backend_api_logging: backend_api_logging.clone(),
+        backend_call_log: std::sync::Arc::new(backend_log::BackendCallLog::new(backend_api_logging)),
     };
 
     // Build the tauri-specta invoke handler + export TS bindings in dev mode.
@@ -174,6 +178,8 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::overlay::show_overlay_cmd,
             commands::debug::get_debug_info,
             commands::debug::get_game_state,
+            commands::debug::get_backend_call_log,
+            commands::debug::clear_backend_call_log,
             commands::favorites::get_favorites,
             commands::favorites::add_favorite,
             commands::favorites::remove_favorite,
