@@ -687,7 +687,7 @@ async function confirmTransferAll() {
 </script>
 
 <template>
-  <div class="p-6 max-w-5xl mx-auto w-full space-y-4">
+  <div class="h-full flex flex-col overflow-hidden p-6 max-w-5xl mx-auto w-full gap-4">
     <!-- Not logged in prompt -->
     <div
       v-if="!backendStore.account"
@@ -718,7 +718,7 @@ async function confirmTransferAll() {
     </div>
 
     <!-- Org inventory panel when org scope selected -->
-    <OrgInventoryPanel v-if="inventoryScope !== null" :org-id="inventoryScope" />
+    <OrgInventoryPanel v-if="inventoryScope !== null" :org-id="inventoryScope" class="flex-1 min-h-0" />
 
     <template v-else>
     <!-- Error -->
@@ -837,10 +837,10 @@ async function confirmTransferAll() {
     </div>
 
     <!-- Sidebar + list row (only when entries exist) -->
-    <div v-if="inventoryStore.entries.length > 0 || myOrgEntries.length > 0" class="flex gap-4 items-start">
+    <div v-if="inventoryStore.entries.length > 0 || myOrgEntries.length > 0" class="flex gap-4 items-stretch flex-1 min-h-0">
 
       <!-- Collections sidebar -->
-      <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5">
+      <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5 self-start max-h-full overflow-y-auto">
         <div class="text-white/40 text-xs font-semibold uppercase tracking-wider px-1 pb-1.5">Collections</div>
         <!-- All -->
         <button
@@ -921,8 +921,9 @@ async function confirmTransferAll() {
       </div>
 
       <!-- Grouped list -->
-      <div class="flex-1 min-w-0 space-y-3">
+      <div class="flex-1 min-w-0 flex flex-col min-h-0">
         <!-- Search + Dropdown filter row -->
+        <div class="pb-3">
         <div class="flex items-center gap-2">
           <!-- Text search -->
           <div class="flex-1 relative">
@@ -952,8 +953,10 @@ async function confirmTransferAll() {
             />
           </div>
         </div>
+        </div>
 
         <!-- No results for filter -->
+        <div class="flex-1 overflow-y-auto min-h-0 space-y-3">
         <div
           v-if="groupedEntries.length === 0"
           class="text-center text-white/30 py-8 text-sm"
@@ -1112,8 +1115,9 @@ async function confirmTransferAll() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </div><!-- end scroll area -->
+      </div><!-- end right column -->
+    </div><!-- end sidebar+list row -->
 
     <!-- Modal -->
     <InventoryModal

@@ -406,7 +406,7 @@ watch(isDragActive, (active) => {
           </div>
         </Transition>
 
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
           <SearchTab v-show="activeTab === 'search'"
             ref="searchTabRef"
             :active="activeTab === 'search'" />

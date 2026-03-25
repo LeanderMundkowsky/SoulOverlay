@@ -203,7 +203,7 @@ function slugIcon(slug: string): string {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="flex flex-col gap-4 overflow-hidden h-full">
     <AlertBanner v-if="orgStore.inventoryError" variant="error" :message="orgStore.inventoryError" />
 
     <!-- Header -->
@@ -246,9 +246,9 @@ function slugIcon(slug: string): string {
     </div>
 
     <!-- Sidebar + list (always shown when there are collections OR user can manage) -->
-    <div v-if="!orgStore.loadingInventory && (entries.length > 0 || collections.length > 0 || canManageCollections)" class="flex gap-4 items-start">
+    <div v-if="!orgStore.loadingInventory && (entries.length > 0 || collections.length > 0 || canManageCollections)" class="flex gap-4 items-stretch flex-1 min-h-0">
       <!-- Collections sidebar -->
-      <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5">
+      <div class="w-44 flex-shrink-0 bg-[#1a1d24] border border-white/10 rounded-xl p-2 space-y-0.5 self-start max-h-full overflow-y-auto">
         <div class="text-white/40 text-xs font-semibold uppercase tracking-wider px-1 pb-1.5">Collections</div>
         <button
           @click="sidebarCollection = null"
@@ -299,7 +299,8 @@ function slugIcon(slug: string): string {
       </div>
 
       <!-- Grouped entries -->
-      <div class="flex-1 min-w-0 space-y-3">
+      <div class="flex-1 min-w-0 flex flex-col min-h-0">
+        <div class="flex-1 overflow-y-auto min-h-0 space-y-3">
         <div v-if="entries.length === 0 && !orgStore.loadingInventory" class="text-center text-white/30 py-12 text-sm">
           <p>No items in the org inventory.</p>
           <p v-if="canManageInventory" class="mt-1">Click <strong>+ Add</strong> to add items.</p>
@@ -356,8 +357,9 @@ function slugIcon(slug: string): string {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </div><!-- end scroll area -->
+      </div><!-- end right column -->
+    </div><!-- end sidebar+list row -->
 
     <!-- Inventory Modal -->
     <InventoryModal
