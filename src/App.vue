@@ -138,8 +138,7 @@ onMounted(async () => {
   await watchlistStore.loadWatchlist();
   await backendStore.initialize();
   if (backendStore.isLoggedIn) {
-    orgStore.loadMyOrgs();
-    orgStore.loadUserInvitations();
+    await refreshOrgData();
     await homeLocationStore.loadHomeLocationId();
     await homeLocationStore.loadHomeLocations();
     if (homeLocationStore.shouldPrompt) {
@@ -150,12 +149,18 @@ onMounted(async () => {
   document.addEventListener("keydown", blockBrowserShortcuts, true);
   document.addEventListener("click", handleExternalLinks);
 
-  orgRefreshTimer = setInterval(() => {
-    if (backendStore.isLoggedIn) orgStore.loadMyOrgs();
+  orgRefreshTimer = setInterval(async () => {
+    if (!backendStore.isLoggedIn) return;
+    await refreshOrgData();
   }, 30_000);
 });
 
 let orgRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+async function refreshOrgData() {
+  await Promise.all([orgStore.loadMyOrgs(), orgStore.loadUserInvitations()]);
+  await Promise.all(orgStore.myOrgs.map((org) => orgStore.loadInventory(org.id)));
+}
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleKeyDown);
@@ -188,6 +193,7 @@ function onOverlayShown() {
 // Watch for login: initialize home location and show prompt if needed
 watch(isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
+    refreshOrgData();
     await homeLocationStore.loadHomeLocationId();
     await homeLocationStore.loadHomeLocations();
     if (homeLocationStore.shouldPrompt) {

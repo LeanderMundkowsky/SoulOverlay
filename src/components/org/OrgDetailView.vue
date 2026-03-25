@@ -80,8 +80,12 @@ async function refresh() {
   if (refreshing.value) return;
   refreshing.value = true;
   await Promise.all([
-    orgStore.loadOrgDetail(props.orgId),
+    orgStore.loadOrgDetail(props.orgId, true),
+    orgStore.loadMyOrgs(),
     orgStore.loadRoles(props.orgId),
+    orgStore.loadApplications(props.orgId),
+    orgStore.loadOrgInvitations(props.orgId),
+    orgStore.loadInventory(props.orgId),
   ]);
   refreshing.value = false;
 }

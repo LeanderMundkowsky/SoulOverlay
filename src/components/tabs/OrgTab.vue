@@ -63,7 +63,9 @@ onMounted(async () => {
     orgStore.loadMyOrgs();
     orgStore.loadUserInvitations();
     if (orgStore.currentOrgId !== null) {
-      orgStore.loadOrgDetail(orgStore.currentOrgId);
+      const orgId = orgStore.currentOrgId;
+      orgStore.loadOrgDetail(orgId, true); // silent — no spinner
+      orgStore.loadRoles(orgId);
     }
   });
 });
@@ -114,10 +116,17 @@ const refreshing = ref(false);
 async function refresh() {
   if (refreshing.value) return;
   refreshing.value = true;
+  const orgId = orgStore.currentOrgId;
   await Promise.all([
     orgStore.loadMyOrgs(),
     orgStore.loadUserInvitations(),
-    ...(orgStore.currentOrgId !== null ? [orgStore.loadOrgDetail(orgStore.currentOrgId)] : []),
+    ...(orgId !== null ? [
+      orgStore.loadOrgDetail(orgId, true),
+      orgStore.loadRoles(orgId),
+      orgStore.loadApplications(orgId),
+      orgStore.loadOrgInvitations(orgId),
+      orgStore.loadInventory(orgId),
+    ] : []),
   ]);
   refreshing.value = false;
 }

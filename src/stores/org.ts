@@ -145,17 +145,19 @@ export const useOrgStore = defineStore("org", () => {
   }
 
   // ── Org detail ─────────────────────────────────────────────────────────────
-  async function loadOrgDetail(orgId: number): Promise<void> {
-    loadingDetail.value = true;
-    detailError.value = null;
+  async function loadOrgDetail(orgId: number, silent = false): Promise<void> {
+    if (!silent) {
+      loadingDetail.value = true;
+      detailError.value = null;
+    }
     const res = await commands.orgGet(orgId);
     if (res.status === "ok") {
       currentOrgDetail.value = res.data;
       currentOrgId.value = orgId;
-    } else {
+    } else if (!silent) {
       detailError.value = res.error;
     }
-    loadingDetail.value = false;
+    if (!silent) loadingDetail.value = false;
   }
 
   function selectOrg(orgId: number): void {
@@ -498,6 +500,13 @@ export const useOrgStore = defineStore("org", () => {
     if (res.status === "ok") {
       const cols = orgCollections.value.get(orgId) ?? [];
       orgCollections.value.set(orgId, cols.filter((c) => c.id !== collId));
+      // Strip the deleted collection from all in-memory org entries
+      const entries = orgInventory.value.get(orgId) ?? [];
+      for (const entry of entries) {
+        if (entry.collections.some((c) => c.id === collId)) {
+          entry.collections = entry.collections.filter((c) => c.id !== collId);
+        }
+      }
       return null;
     }
     return res.error;

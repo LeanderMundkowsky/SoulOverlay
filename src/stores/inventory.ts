@@ -166,6 +166,12 @@ export const useInventoryStore = defineStore("inventory", () => {
     const result = await commands.inventoryCollectionDelete(id);
     if (result.status === "error") throw result.error;
     collections.value = collections.value.filter((c) => c.id !== id);
+    // Strip the deleted collection from all in-memory entries
+    for (const entry of entries.value) {
+      if (entry.collections.some((c) => c.id === id)) {
+        entry.collections = entry.collections.filter((c) => c.id !== id);
+      }
+    }
   }
 
   /// Pull all entries + collections from the backend into Pinia state.

@@ -16,8 +16,8 @@ const groupMode = ref<GroupMode>("location");
 const collapsedGroups = ref<Set<string>>(new Set());
 const sidebarCollection = ref<number | null>(null);
 
-const canManageInventory = computed(() => orgStore.can("manage_inventory"));
-const canManageCollections = computed(() => orgStore.can("manage_collections"));
+const canManageInventory = computed(() => orgStore.canInOrg(props.orgId, "manage_inventory"));
+const canManageCollections = computed(() => orgStore.canInOrg(props.orgId, "manage_collections"));
 
 watch(() => props.orgId, () => { orgStore.loadInventory(props.orgId); }, { immediate: true });
 

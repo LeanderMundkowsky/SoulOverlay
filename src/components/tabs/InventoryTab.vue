@@ -414,6 +414,52 @@ const sidebarOrgsWithCollections = computed(() => {
   return result;
 });
 
+// ── Personal collection management ────────────────────────────────────────
+
+const editingCollId = ref<number | null>(null);
+const editingCollName = ref("");
+const newCollName = ref("");
+const collError = ref<string | null>(null);
+
+function startEditColl(id: number, name: string) {
+  editingCollId.value = id;
+  editingCollName.value = name;
+}
+
+async function saveEditColl() {
+  if (!editingCollId.value || !editingCollName.value.trim()) return;
+  collError.value = null;
+  try {
+    await inventoryStore.updateCollection(editingCollId.value, editingCollName.value.trim());
+    editingCollId.value = null;
+  } catch (e) {
+    collError.value = String(e);
+  }
+}
+
+async function deleteColl(id: number) {
+  collError.value = null;
+  try {
+    await inventoryStore.deleteCollection(id);
+    if (sidebarCollection.value?.kind === "personal" && sidebarCollection.value.id === id) {
+      sidebarCollection.value = null;
+    }
+  } catch (e) {
+    collError.value = String(e);
+  }
+}
+
+async function createPersonalCollection() {
+  if (!newCollName.value.trim()) return;
+  collError.value = null;
+  try {
+    await inventoryStore.createCollection(newCollName.value.trim());
+    newCollName.value = "";
+  } catch (e) {
+    collError.value = String(e);
+  }
+}
+
 // ── Org entry modal (for org entries shown in personal view) ──────────────
 
 const showOrgModal = ref(false);
@@ -808,18 +854,50 @@ async function confirmTransferAll() {
           <span class="text-white/30 text-xs shrink-0">{{ inventoryStore.entries.length }}</span>
         </button>
         <!-- Personal collections -->
-        <button
+        <div
           v-for="coll in inventoryStore.collections"
           :key="coll.id"
-          @click="sidebarCollection = { kind: 'personal', id: coll.id }"
-          class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-1"
-          :class="sidebarCollection?.kind === 'personal' && sidebarCollection.id === coll.id
-            ? 'bg-blue-500/20 text-blue-300'
-            : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
+          class="group flex items-center gap-1"
         >
-          <span class="truncate">{{ coll.name }}</span>
-          <span class="text-white/30 text-xs shrink-0">{{ collectionEntryCounts.get(coll.id) ?? 0 }}</span>
-        </button>
+          <button
+            @click="sidebarCollection = { kind: 'personal', id: coll.id }"
+            class="flex-1 text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-1 min-w-0"
+            :class="sidebarCollection?.kind === 'personal' && sidebarCollection.id === coll.id
+              ? 'bg-blue-500/20 text-blue-300'
+              : 'text-white/50 hover:bg-white/5 hover:text-white/80'"
+          >
+            <template v-if="editingCollId === coll.id">
+              <input
+                v-model="editingCollName"
+                @click.stop
+                @keydown.enter.stop="saveEditColl"
+                @keydown.escape.stop="editingCollId = null"
+                class="flex-1 min-w-0 bg-transparent border-b border-blue-500/50 text-xs text-white focus:outline-none"
+              />
+            </template>
+            <template v-else>
+              <span class="truncate">{{ coll.name }}</span>
+              <span class="text-white/30 text-xs shrink-0">{{ collectionEntryCounts.get(coll.id) ?? 0 }}</span>
+            </template>
+          </button>
+          <div class="hidden group-hover:flex items-center gap-0.5">
+            <button @click.stop="startEditColl(coll.id, coll.name)" class="text-white/30 hover:text-blue-400 text-xs p-0.5">✏️</button>
+            <button @click.stop="deleteColl(coll.id)" class="text-white/30 hover:text-red-400 text-xs p-0.5">✕</button>
+          </div>
+        </div>
+        <!-- New personal collection -->
+        <div class="pt-1 border-t border-white/10">
+          <p v-if="collError" class="text-red-400 text-[10px] px-1 pb-1">{{ collError }}</p>
+          <div class="flex gap-1">
+            <input
+              v-model="newCollName"
+              placeholder="New..."
+              @keydown.enter="createPersonalCollection"
+              class="flex-1 min-w-0 bg-[#111318] border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/20 focus:outline-none"
+            />
+            <button @click="createPersonalCollection" :disabled="!newCollName.trim()" class="text-xs px-1.5 py-1 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white">+</button>
+          </div>
+        </div>
         <!-- Org collections (one section per org) -->
         <template v-for="orgGroup in sidebarOrgsWithCollections" :key="orgGroup.orgId">
           <div class="border-t border-white/5 mt-1 pt-1.5">
