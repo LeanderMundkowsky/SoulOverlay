@@ -5,11 +5,13 @@ use tauri::{AppHandle, State};
 #[cfg(target_os = "windows")]
 use chrono::Utc;
 #[cfg(target_os = "windows")]
-use log::error;
+use log::{debug, error};
 #[cfg(target_os = "windows")]
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::state::AppState;
+
+const GITHUB_REPO: &str = "Soul-Returns/SoulOverlay";
 
 /// Information about an available update, sent to the frontend via Tauri events.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -17,6 +19,36 @@ pub struct UpdateInfo {
     pub version: String,
     pub date: Option<String>,
     pub body: Option<String>,
+}
+
+/// Fetch the release body from the GitHub Releases API for the given version tag.
+/// Falls back to `None` silently if the request fails or the release isn't found.
+#[cfg(target_os = "windows")]
+async fn fetch_github_release_body(version: &str) -> Option<String> {
+    use crate::commands::backend::http_client;
+
+    let client = http_client().ok()?;
+    let url = format!(
+        "https://api.github.com/repos/{}/releases/tags/v{}",
+        GITHUB_REPO, version
+    );
+    debug!("Fetching GitHub release body from {}", url);
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", "SoulOverlay-updater")
+        .send()
+        .await
+        .ok()?;
+
+    if !resp.status().is_success() {
+        debug!("GitHub release API returned {}", resp.status());
+        return None;
+    }
+
+    let json: serde_json::Value = resp.json().await.ok()?;
+    json["body"].as_str().map(|s| s.to_string())
 }
 
 /// Check GitHub releases for a newer version.
@@ -39,10 +71,12 @@ pub async fn check_for_update(_app: AppHandle) -> Result<Option<UpdateInfo>, Str
         match update {
             Some(u) => {
                 info!("Update available: v{}", u.version);
+                let body = fetch_github_release_body(&u.version).await
+                    .or_else(|| u.body.clone());
                 Ok(Some(UpdateInfo {
                     version: u.version.clone(),
                     date: u.date.map(|d| d.to_string()),
-                    body: u.body.clone(),
+                    body,
                 }))
             }
             None => {
