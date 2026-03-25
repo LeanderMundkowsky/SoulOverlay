@@ -6,6 +6,7 @@ use specta::Type;
 use tauri::State;
 
 use crate::activity::{FetchEvent, LastUserAction};
+use crate::backend_log::BackendCallEntry;
 use crate::state::AppState;
 
 /// Initial game connection state returned to the frontend on mount.
@@ -155,5 +156,22 @@ pub async fn get_debug_info(state: State<'_, AppState>) -> Result<DebugInfo, Str
         last_user_action,
         fetch_log: fetch_log_rev,
     })
+}
+
+/// Clear the backend call log.
+#[tauri::command]
+#[specta::specta]
+pub async fn clear_backend_call_log(state: State<'_, AppState>) -> Result<(), String> {
+    state.backend_call_log.clear();
+    Ok(())
+}
+
+/// Returns the recent backend API call log, newest first.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_backend_call_log(
+    state: State<'_, AppState>,
+) -> Result<Vec<BackendCallEntry>, String> {
+    Ok(state.backend_call_log.get_all())
 }
 

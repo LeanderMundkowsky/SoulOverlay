@@ -16,19 +16,25 @@ const props = defineProps<{
   mode: ModalMode;
   /** When set, all operations target org inventory for this orgId */
   orgId?: number;
+  /** When multiple orgs are available, pass them here — user picks inside the modal */
+  orgChoices?: { id: number; name: string }[];
   /** Pre-fill entity (add mode from search row) */
   prefillEntity?: { id: string; name: string; kind: string } | null;
+  /** When true, entity is fixed (no dropdown shown — name appears in title) */
+  lockEntity?: boolean;
   /** Pre-fill location (add mode from inventory group header) */
   prefillLocation?: { id: string; name: string; slug: string } | null;
   /** Pre-fill collection (add mode from inventory group header — collection ID) */
   prefillCollection?: number | null;
+  /** Pre-fill quantity (used when moving entries between personal/org) */
+  prefillQuantity?: number | null;
   /** Source entry for remove/transfer modes */
   sourceEntry?: InventoryEntry | OrgInventoryEntry | null;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "saved"): void;
+  (e: "saved", quantity: number): void;
 }>();
 
 const inventoryStore = useInventoryStore();
@@ -39,6 +45,12 @@ const orgStore = useOrgStore();
 const saving = ref(false);
 const errorMsg = ref<string | null>(null);
 const quantity = ref(1);
+
+// Resolved org ID — either from orgChoices (user picks) or the static orgId prop
+const selectedOrgId = ref<number | null>(null);
+const effectiveOrgId = computed<number | null>(() =>
+  props.orgChoices != null ? selectedOrgId.value : (props.orgId ?? null),
+);
 
 // ── Entity search (add mode) ──────────────────────────────────────────────
 
@@ -140,7 +152,7 @@ const addingCollection = ref(false);
 const addCollectionError = ref<string | null>(null);
 
 const activeCollections = computed(() => {
-  if (props.orgId != null) return orgStore.getCollections(props.orgId);
+  if (effectiveOrgId.value != null) return orgStore.getCollections(effectiveOrgId.value);
   return inventoryStore.collections;
 });
 
@@ -159,10 +171,10 @@ async function addNewCollection() {
   addingCollection.value = true;
   addCollectionError.value = null;
   try {
-    if (props.orgId != null) {
-      const err = await orgStore.createCollection(props.orgId, name);
+    if (effectiveOrgId.value != null) {
+      const err = await orgStore.createCollection(effectiveOrgId.value, name);
       if (err) { addCollectionError.value = err; return; }
-      const newColl = orgStore.getCollections(props.orgId).find((c) => c.name === name);
+      const newColl = orgStore.getCollections(effectiveOrgId.value).find((c) => c.name === name);
       if (newColl && !selectedCollectionIds.value.includes(newColl.id)) {
         selectedCollectionIds.value.push(newColl.id);
       }
@@ -185,7 +197,9 @@ async function addNewCollection() {
 const title = computed(() => {
   switch (props.mode) {
     case "add":
-      return "Add to Inventory";
+      return props.lockEntity && props.prefillEntity
+        ? `Add ${props.prefillEntity.name}`
+        : "Add to Inventory";
     case "remove":
       return "Remove from Inventory";
     case "transfer":
@@ -219,9 +233,9 @@ async function handleSubmit() {
   errorMsg.value = null;
 
   try {
-    if (props.orgId != null) {
+    if (effectiveOrgId.value != null) {
       // ── Org inventory path ──────────────────────────────────────────────
-      const orgId = props.orgId;
+      const orgId = effectiveOrgId.value;
       let err: string | null = null;
       switch (props.mode) {
         case "add": {
@@ -315,7 +329,7 @@ async function handleSubmit() {
         }
       }
     }
-    emit("saved");
+    emit("saved", quantity.value);
     emit("close");
   } catch (e) {
     errorMsg.value = String(e);
@@ -331,8 +345,16 @@ const maxQuantity = computed(() => props.sourceEntry?.quantity ?? 999999);
 // ── Prefill on mount ───────────────────────────────────────────────────────
 
 onMounted(async () => {
-  if (props.orgId == null) {
+  if (props.orgChoices != null && props.orgChoices.length > 0) {
+    selectedOrgId.value = props.orgChoices[0].id;
+  }
+
+  if (effectiveOrgId.value == null) {
     await inventoryStore.loadCollections();
+  }
+
+  if (props.prefillQuantity != null) {
+    quantity.value = props.prefillQuantity;
   }
 
   if (props.mode === "add" && props.prefillEntity) {
@@ -385,7 +407,7 @@ onMounted(async () => {
   }
 
   await nextTick();
-  if (props.mode === "add" && !props.prefillEntity) {
+  if (props.mode === "add" && !props.prefillEntity && !props.lockEntity) {
     entityDropdownRef.value?.focus();
   } else if (props.mode === "add") {
     locationDropdownRef.value?.focus();
@@ -419,13 +441,6 @@ function onKeyDown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeyDown, true));
 onUnmounted(() => window.removeEventListener("keydown", onKeyDown, true));
 
-function onBackdropClick(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  if (target.classList.contains("modal-backdrop")) {
-    emit("close");
-  }
-}
-
 function locationSlugLabel(slug: string): string {
   switch (slug) {
     case "space_station": return "Station";
@@ -441,13 +456,11 @@ function locationSlugLabel(slug: string): string {
 <template>
   <Teleport to="body">
     <div
-      class="modal-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      @mousedown="onBackdropClick"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
     >
       <div
         class="bg-[#1a1d24] border border-white/10 rounded-xl shadow-2xl max-h-[80vh] flex flex-col overflow-hidden"
         :class="mode === 'remove' ? 'w-[420px]' : 'w-[580px]'"
-        @mousedown.stop
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
@@ -469,6 +482,24 @@ function locationSlugLabel(slug: string): string {
               {{ errorMsg }}
             </div>
 
+            <!-- Org picker (when multiple orgs available) -->
+            <div v-if="orgChoices && orgChoices.length > 1" class="space-y-1.5">
+              <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Share to Org</label>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="org in orgChoices"
+                  :key="org.id"
+                  @click="selectedOrgId = org.id"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  :class="selectedOrgId === org.id
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'"
+                >
+                  {{ org.name }}
+                </button>
+              </div>
+            </div>
+
             <!-- Source info (remove/transfer) -->
             <div
               v-if="(mode === 'remove' || mode === 'transfer') && sourceEntry"
@@ -485,7 +516,7 @@ function locationSlugLabel(slug: string): string {
             </div>
 
             <!-- Entity search (add + edit) -->
-            <div v-if="mode === 'add' || mode === 'edit'" class="space-y-1.5">
+            <div v-if="(mode === 'add' || mode === 'edit') && !lockEntity" class="space-y-1.5">
               <label class="block text-white/60 text-xs font-medium uppercase tracking-wider">Item / Commodity</label>
               <SearchableDropdown
                 ref="entityDropdownRef"

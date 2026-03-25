@@ -20,11 +20,19 @@ async function handleInstall() {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="emit('close')">
+  <div class="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm">
     <div class="bg-[#111318] border border-white/10 rounded-2xl shadow-2xl w-[420px] max-h-[80vh] flex flex-col overflow-hidden">
       <!-- Header -->
-      <div class="px-5 pt-5 pb-3 border-b border-white/5">
+      <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-white/5">
         <h2 class="text-lg font-semibold text-white">Software Update</h2>
+        <button
+          @click="emit('close')"
+          class="text-white/40 hover:text-white/80 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       <!-- Content -->

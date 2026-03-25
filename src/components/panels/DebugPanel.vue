@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { commands } from "@/bindings";
-import type { DebugInfo, CollectionDebugInfo } from "@/bindings";
+import type { DebugInfo, CollectionDebugInfo, BackendCallEntry } from "@/bindings";
 import IconClose from "@/components/icons/IconClose.vue";
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -11,7 +11,10 @@ defineEmits<{ (e: "close"): void }>();
 const info = ref<DebugInfo | null>(null);
 const error = ref<string | null>(null);
 const lastUpdated = ref<Date | null>(null);
-const activeSection = ref<"system" | "cache" | "activity">("system");
+const activeSection = ref<"system" | "cache" | "activity" | "backend">("system");
+
+const backendLog = ref<BackendCallEntry[]>([]);
+const backendLogError = ref<string | null>(null);
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -25,6 +28,25 @@ async function refresh() {
   } catch (e) {
     error.value = String(e);
   }
+  if (activeSection.value === "backend") {
+    await refreshBackendLog();
+  }
+}
+
+async function refreshBackendLog() {
+  try {
+    const result = await commands.getBackendCallLog();
+    if (result.status === "error") throw result.error;
+    backendLog.value = result.data;
+    backendLogError.value = null;
+  } catch (e) {
+    backendLogError.value = String(e);
+  }
+}
+
+async function clearBackendLog() {
+  await commands.clearBackendCallLog();
+  backendLog.value = [];
 }
 
 onMounted(() => {
@@ -101,6 +123,21 @@ function fmtMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
+
+function methodBadge(method: string): string {
+  if (method === "GET") return "bg-blue-500/20 text-blue-300";
+  if (method === "POST") return "bg-green-500/20 text-green-300";
+  if (method === "PATCH") return "bg-yellow-500/20 text-yellow-300";
+  if (method === "DELETE") return "bg-red-500/20 text-red-300";
+  return "bg-white/10 text-white/50";
+}
+
+function statusColor(status: number | null): string {
+  if (status === null) return "text-red-400";
+  if (status < 300) return "text-green-400";
+  if (status < 400) return "text-yellow-400";
+  return "text-red-400";
+}
 </script>
 
 <template>
@@ -118,8 +155,8 @@ function fmtMs(ms: number): string {
 
     <!-- Section tabs -->
     <div class="flex border-b border-white/10 flex-shrink-0">
-      <button v-for="s in (['system', 'cache', 'activity'] as const)" :key="s"
-        @click="activeSection = s"
+      <button v-for="s in (['system', 'cache', 'activity', 'backend'] as const)" :key="s"
+        @click="s === 'backend' ? (activeSection = s, refreshBackendLog()) : (activeSection = s)"
         class="flex-1 py-1 text-xs uppercase tracking-wider transition-colors font-sans"
         :class="activeSection === s ? 'text-blue-400 border-b border-blue-400' : 'text-white/25 hover:text-white/50'">
         {{ s }}
@@ -313,6 +350,33 @@ function fmtMs(ms: number): string {
             <span v-else class="text-white/20">{{ ev.row_count > 0 ? ev.row_count.toLocaleString() + " rows" : "" }}</span>
             <span class="text-white/20 shrink-0">{{ relTime(ev.timestamp) }}</span>
           </div>
+        </div>
+      </div>
+    </div>
+    <!-- ══ BACKEND ════════════════════════════════════════════════════════ -->
+    <div v-else-if="activeSection === 'backend'" class="flex-1 overflow-y-auto flex flex-col">
+      <!-- Toolbar -->
+      <div class="flex items-center justify-between px-2 py-1.5 border-b border-white/[0.06] flex-shrink-0">
+        <span class="text-white/25 text-xs font-sans">{{ backendLog.length }} call{{ backendLog.length !== 1 ? 's' : '' }}</span>
+        <button @click="clearBackendLog" class="text-white/30 hover:text-red-400 text-xs font-sans transition-colors">Clear</button>
+      </div>
+      <div v-if="backendLogError" class="p-2 text-red-400 text-xs">{{ backendLogError }}</div>
+      <div v-else-if="backendLog.length === 0" class="p-3 text-center text-white/25 text-xs">
+        No backend calls logged yet. Enable <span class="text-white/50">Backend API Logging</span> in Settings → Advanced.
+      </div>
+      <div v-else class="divide-y divide-white/[0.04]">
+        <div v-for="(call, idx) in backendLog" :key="idx"
+          class="px-2 py-1.5 hover:bg-white/[0.03]">
+          <div class="flex items-center gap-1.5 mb-0.5">
+            <span class="px-1 rounded text-xs font-mono shrink-0" :class="methodBadge(call.method)">{{ call.method }}</span>
+            <span class="font-mono text-xs truncate text-white/55 flex-1" :title="call.path">{{ call.path }}</span>
+            <span class="shrink-0 font-mono text-xs" :class="statusColor(call.status ?? null)">
+              {{ call.status ?? "ERR" }}
+            </span>
+            <span class="shrink-0 text-white/25 text-xs">{{ fmtMs(call.duration_ms) }}</span>
+          </div>
+          <div v-if="call.error" class="text-red-400/70 text-xs truncate pl-0.5">{{ call.error }}</div>
+          <div class="text-white/20 text-xs pl-0.5">{{ relTime(call.timestamp) }}</div>
         </div>
       </div>
     </div>

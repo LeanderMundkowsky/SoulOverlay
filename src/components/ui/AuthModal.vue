@@ -54,7 +54,6 @@ async function submitRegister() {
   <!-- Backdrop -->
   <div
     class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
-    @click.self="emit('close')"
   >
     <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-[380px] shadow-2xl">
       <!-- Header -->

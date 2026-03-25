@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
+use chrono::Utc;
+use crate::backend_log::{BackendCallEntry, BackendCallLog};
 use crate::commands::backend::{extract_error_message, http_client};
 use crate::constants::BACKEND_URL;
 use crate::state::AppState;
@@ -525,19 +527,26 @@ fn parse_data_array<T: for<'de> Deserialize<'de>>(
         .map_err(|e| format!("Failed to parse {context}: {e}"))
 }
 
-async fn api_get(url: &str, token: &str) -> Result<serde_json::Value, String> {
+async fn api_get(url: &str, token: &str, log: &BackendCallLog) -> Result<serde_json::Value, String> {
     let client = http_client()?;
+    let path = url.trim_start_matches(BACKEND_URL).to_string();
+    let t = std::time::Instant::now();
     let resp = client
         .get(url)
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
-        .map_err(|e| format!("Network error: {e}"))?;
+        .map_err(|e| {
+            log.record(BackendCallEntry { method: "GET".into(), path: path.clone(), status: None, duration_ms: t.elapsed().as_millis() as u32, error: Some(e.to_string()), timestamp: Utc::now().to_rfc3339() });
+            format!("Network error: {e}")
+        })?;
     let status = resp.status();
     let json: serde_json::Value =
         resp.json().await.map_err(|e| format!("Failed to parse response: {e}"))?;
+    let err = if !status.is_success() { Some(extract_error_message(&json)) } else { None };
+    log.record(BackendCallEntry { method: "GET".into(), path, status: Some(status.as_u16()), duration_ms: t.elapsed().as_millis() as u32, error: err.clone(), timestamp: Utc::now().to_rfc3339() });
     if !status.is_success() {
-        return Err(extract_error_message(&json));
+        return Err(err.unwrap());
     }
     Ok(json)
 }
@@ -546,20 +555,28 @@ async fn api_post(
     url: &str,
     token: &str,
     body: serde_json::Value,
+    log: &BackendCallLog,
 ) -> Result<serde_json::Value, String> {
     let client = http_client()?;
+    let path = url.trim_start_matches(BACKEND_URL).to_string();
+    let t = std::time::Instant::now();
     let resp = client
         .post(url)
         .header("Authorization", format!("Bearer {token}"))
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Network error: {e}"))?;
+        .map_err(|e| {
+            log.record(BackendCallEntry { method: "POST".into(), path: path.clone(), status: None, duration_ms: t.elapsed().as_millis() as u32, error: Some(e.to_string()), timestamp: Utc::now().to_rfc3339() });
+            format!("Network error: {e}")
+        })?;
     let status = resp.status();
     let json: serde_json::Value =
         resp.json().await.map_err(|e| format!("Failed to parse response: {e}"))?;
+    let err = if !status.is_success() { Some(extract_error_message(&json)) } else { None };
+    log.record(BackendCallEntry { method: "POST".into(), path, status: Some(status.as_u16()), duration_ms: t.elapsed().as_millis() as u32, error: err.clone(), timestamp: Utc::now().to_rfc3339() });
     if !status.is_success() {
-        return Err(extract_error_message(&json));
+        return Err(err.unwrap());
     }
     Ok(json)
 }
@@ -568,36 +585,54 @@ async fn api_patch(
     url: &str,
     token: &str,
     body: serde_json::Value,
+    log: &BackendCallLog,
 ) -> Result<serde_json::Value, String> {
     let client = http_client()?;
+    let path = url.trim_start_matches(BACKEND_URL).to_string();
+    let t = std::time::Instant::now();
     let resp = client
         .patch(url)
         .header("Authorization", format!("Bearer {token}"))
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Network error: {e}"))?;
+        .map_err(|e| {
+            log.record(BackendCallEntry { method: "PATCH".into(), path: path.clone(), status: None, duration_ms: t.elapsed().as_millis() as u32, error: Some(e.to_string()), timestamp: Utc::now().to_rfc3339() });
+            format!("Network error: {e}")
+        })?;
     let status = resp.status();
     let json: serde_json::Value =
         resp.json().await.map_err(|e| format!("Failed to parse response: {e}"))?;
+    let err = if !status.is_success() { Some(extract_error_message(&json)) } else { None };
+    log.record(BackendCallEntry { method: "PATCH".into(), path, status: Some(status.as_u16()), duration_ms: t.elapsed().as_millis() as u32, error: err.clone(), timestamp: Utc::now().to_rfc3339() });
     if !status.is_success() {
-        return Err(extract_error_message(&json));
+        return Err(err.unwrap());
     }
     Ok(json)
 }
 
-async fn api_delete(url: &str, token: &str) -> Result<(), String> {
+async fn api_delete(url: &str, token: &str, log: &BackendCallLog) -> Result<(), String> {
     let client = http_client()?;
+    let path = url.trim_start_matches(BACKEND_URL).to_string();
+    let t = std::time::Instant::now();
     let resp = client
         .delete(url)
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
-        .map_err(|e| format!("Network error: {e}"))?;
-    if !resp.status().is_success() {
+        .map_err(|e| {
+            log.record(BackendCallEntry { method: "DELETE".into(), path: path.clone(), status: None, duration_ms: t.elapsed().as_millis() as u32, error: Some(e.to_string()), timestamp: Utc::now().to_rfc3339() });
+            format!("Network error: {e}")
+        })?;
+    let status = resp.status();
+    let err = if !status.is_success() {
         let json: serde_json::Value =
             resp.json().await.unwrap_or(serde_json::Value::Null);
-        return Err(extract_error_message(&json));
+        Some(extract_error_message(&json))
+    } else { None };
+    log.record(BackendCallEntry { method: "DELETE".into(), path, status: Some(status.as_u16()), duration_ms: t.elapsed().as_millis() as u32, error: err.clone(), timestamp: Utc::now().to_rfc3339() });
+    if !status.is_success() {
+        return Err(err.unwrap());
     }
     Ok(())
 }
@@ -610,8 +645,9 @@ pub async fn org_list_my_orgs(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgSummary>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgSummary> = parse_data_array(&json, "org list")?;
     Ok(dtos.into_iter().map(|s| s.into()).collect())
 }
@@ -624,8 +660,9 @@ pub async fn org_create(
     state: State<'_, AppState>,
 ) -> Result<OrgSummary, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs");
-    let json = api_post(&url, &token, serde_json::json!({ "name": name, "description": description })).await?;
+    let json = api_post(&url, &token, serde_json::json!({ "name": name, "description": description }), log).await?;
     let dto: BkOrgSummary = parse_data(&json, "org create")?;
     Ok(dto.into())
 }
@@ -637,8 +674,9 @@ pub async fn org_get(
     state: State<'_, AppState>,
 ) -> Result<OrgDetail, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{id}");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dto: BkOrgDetail = parse_data(&json, "org detail")?;
     Ok(dto.into())
 }
@@ -652,11 +690,12 @@ pub async fn org_update(
     state: State<'_, AppState>,
 ) -> Result<OrgSummary, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{id}");
     let mut body = serde_json::Map::new();
     if let Some(n) = name { body.insert("name".into(), serde_json::Value::String(n)); }
     if let Some(d) = description { body.insert("description".into(), serde_json::Value::String(d)); }
-    let json = api_patch(&url, &token, serde_json::Value::Object(body)).await?;
+    let json = api_patch(&url, &token, serde_json::Value::Object(body), log).await?;
     let dto: BkOrgSummary = parse_data(&json, "org update")?;
     Ok(dto.into())
 }
@@ -668,8 +707,9 @@ pub async fn org_delete(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }
 
 // ── Roles ──────────────────────────────────────────────────────────────────
@@ -681,8 +721,9 @@ pub async fn org_list_roles(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgRole>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/roles");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgRole> = parse_data_array(&json, "roles")?;
     Ok(dtos.into_iter().map(|r| r.into()).collect())
 }
@@ -697,12 +738,13 @@ pub async fn org_create_role(
     state: State<'_, AppState>,
 ) -> Result<OrgRole, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/roles");
     let json = api_post(&url, &token, serde_json::json!({
         "name": name,
         "permissions": permissions.to_camel_json(),
         "sortOrder": sort_order,
-    })).await?;
+    }), log).await?;
     let dto: BkOrgRole = parse_data(&json, "create role")?;
     Ok(dto.into())
 }
@@ -718,6 +760,7 @@ pub async fn org_update_role(
     state: State<'_, AppState>,
 ) -> Result<OrgRole, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/roles/{role_id}");
     let mut body = serde_json::Map::new();
     if let Some(n) = name { body.insert("name".into(), serde_json::Value::String(n)); }
@@ -725,7 +768,7 @@ pub async fn org_update_role(
         body.insert("permissions".into(), p.to_camel_json());
     }
     if let Some(s) = sort_order { body.insert("sortOrder".into(), serde_json::Value::Number(s.into())); }
-    let json = api_patch(&url, &token, serde_json::Value::Object(body)).await?;
+    let json = api_patch(&url, &token, serde_json::Value::Object(body), log).await?;
     let dto: BkOrgRole = parse_data(&json, "update role")?;
     Ok(dto.into())
 }
@@ -738,8 +781,9 @@ pub async fn org_delete_role(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/roles/{role_id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }
 
 // ── Org slug lookup ────────────────────────────────────────────────────────
@@ -776,8 +820,9 @@ pub async fn org_lookup_by_slug(
     state: State<'_, AppState>,
 ) -> Result<OrgLookup, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/lookup/{slug}");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dto: BkOrgLookup = parse_data(&json, "org lookup")?;
     Ok(dto.into())
 }
@@ -838,8 +883,9 @@ pub async fn org_update_member(
     state: State<'_, AppState>,
 ) -> Result<OrgMemberInfo, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/members/{user_id}");
-    let json = api_patch(&url, &token, serde_json::json!({ "roleId": role_id })).await?;
+    let json = api_patch(&url, &token, serde_json::json!({ "roleId": role_id }), log).await?;
     let dto: BkOrgMemberInfo = parse_data(&json, "update member")?;
     Ok(dto.into())
 }
@@ -852,8 +898,9 @@ pub async fn org_remove_member(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/members/{user_id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }
 
 #[tauri::command]
@@ -865,11 +912,12 @@ pub async fn org_transfer_leadership(
     state: State<'_, AppState>,
 ) -> Result<OrgLeadershipTransfer, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/transfer-leadership");
     let json = api_post(&url, &token, serde_json::json!({
         "targetUserId": target_user_id,
         "newRoleId": new_role_id,
-    })).await?;
+    }), log).await?;
     let dto: BkLeadershipTransfer = parse_data(&json, "transfer leadership")?;
     Ok(dto.into())
 }
@@ -883,8 +931,9 @@ pub async fn org_list_invitations(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgInvitation>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/invitations");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgInvitation> = parse_data_array(&json, "org invitations")?;
     Ok(dtos.into_iter().map(|i| i.into()).collect())
 }
@@ -898,11 +947,12 @@ pub async fn org_create_invitation(
     state: State<'_, AppState>,
 ) -> Result<OrgInvitation, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/invitations");
     let json = api_post(&url, &token, serde_json::json!({
         "username": username,
         "roleId": role_id,
-    })).await?;
+    }), log).await?;
     let mut dto: BkOrgInvitation = parse_data(&json, "create invitation")?;
     if dto.org_id == 0 { dto.org_id = org_id; }
     Ok(dto.into())
@@ -916,8 +966,9 @@ pub async fn org_cancel_invitation(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/invitations/{inv_id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }
 
 // ── User Invitations (incoming) ────────────────────────────────────────────
@@ -928,8 +979,9 @@ pub async fn user_list_invitations(
     state: State<'_, AppState>,
 ) -> Result<Vec<UserInvitation>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/invitations?status=pending");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkUserInvitation> = parse_data_array(&json, "user invitations")?;
     Ok(dtos.into_iter().map(|i| i.into()).collect())
 }
@@ -941,8 +993,9 @@ pub async fn user_accept_invitation(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/invitations/{id}/accept");
-    api_post(&url, &token, serde_json::json!({})).await?;
+    api_post(&url, &token, serde_json::json!({}), log).await?;
     Ok(())
 }
 
@@ -953,8 +1006,9 @@ pub async fn user_decline_invitation(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/invitations/{id}/decline");
-    api_post(&url, &token, serde_json::json!({})).await?;
+    api_post(&url, &token, serde_json::json!({}), log).await?;
     Ok(())
 }
 
@@ -967,8 +1021,9 @@ pub async fn org_list_applications(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgApplication>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/applications?status=pending");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgApplication> = parse_data_array(&json, "applications")?;
     Ok(dtos.into_iter().map(|a| a.into()).collect())
 }
@@ -981,8 +1036,9 @@ pub async fn org_create_application(
     state: State<'_, AppState>,
 ) -> Result<OrgApplication, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/applications");
-    let json = api_post(&url, &token, serde_json::json!({ "message": message })).await?;
+    let json = api_post(&url, &token, serde_json::json!({ "message": message }), log).await?;
     // Create response has org nested, not org_id directly — extract from context
     let mut dto: BkOrgApplication = parse_data(&json, "create application")?;
     // Ensure org_id is set from the URL parameter if not in response
@@ -999,8 +1055,9 @@ pub async fn org_accept_application(
     state: State<'_, AppState>,
 ) -> Result<OrgApplication, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/applications/{app_id}/accept");
-    let json = api_post(&url, &token, serde_json::json!({ "roleId": role_id })).await?;
+    let json = api_post(&url, &token, serde_json::json!({ "roleId": role_id }), log).await?;
     let mut dto: BkOrgApplication = parse_data(&json, "accept application")?;
     if dto.org_id == 0 { dto.org_id = org_id; }
     Ok(dto.into())
@@ -1014,8 +1071,9 @@ pub async fn org_reject_application(
     state: State<'_, AppState>,
 ) -> Result<OrgApplication, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/applications/{app_id}/reject");
-    let json = api_post(&url, &token, serde_json::json!({})).await?;
+    let json = api_post(&url, &token, serde_json::json!({}), log).await?;
     let mut dto: BkOrgApplication = parse_data(&json, "reject application")?;
     if dto.org_id == 0 { dto.org_id = org_id; }
     Ok(dto.into())
@@ -1030,8 +1088,9 @@ pub async fn org_list_inventory(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgInventoryEntry>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgInventoryEntry> = parse_data_array(&json, "org inventory")?;
     Ok(dtos.into_iter().map(|e| e.into()).collect())
 }
@@ -1051,6 +1110,7 @@ pub async fn org_add_inventory_entry(
     state: State<'_, AppState>,
 ) -> Result<OrgInventoryEntry, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory");
     let json = api_post(&url, &token, serde_json::json!({
         "entityId": entity_id,
@@ -1061,7 +1121,7 @@ pub async fn org_add_inventory_entry(
         "locationSlug": location_slug,
         "quantity": quantity,
         "collectionIds": collection_ids,
-    })).await?;
+    }), log).await?;
     let dto: BkOrgInventoryEntry = parse_data(&json, "add org inventory")?;
     Ok(dto.into())
 }
@@ -1080,6 +1140,7 @@ pub async fn org_update_inventory_entry(
     state: State<'_, AppState>,
 ) -> Result<OrgInventoryEntry, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/{entry_id}");
     let mut body = serde_json::Map::new();
     if let Some(v) = entity_name { body.insert("entityName".into(), v.into()); }
@@ -1090,7 +1151,7 @@ pub async fn org_update_inventory_entry(
     if let Some(v) = collection_ids {
         body.insert("collectionIds".into(), serde_json::to_value(v).unwrap_or_default());
     }
-    let json = api_patch(&url, &token, serde_json::Value::Object(body)).await?;
+    let json = api_patch(&url, &token, serde_json::Value::Object(body), log).await?;
     let dto: BkOrgInventoryEntry = parse_data(&json, "update org inventory")?;
     Ok(dto.into())
 }
@@ -1103,8 +1164,9 @@ pub async fn org_delete_inventory_entry(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/{entry_id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }
 
 #[tauri::command]
@@ -1116,8 +1178,9 @@ pub async fn org_remove_inventory_quantity(
     state: State<'_, AppState>,
 ) -> Result<Option<OrgInventoryEntry>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/{entry_id}/remove-quantity");
-    let json = api_post(&url, &token, serde_json::json!({ "quantity": quantity })).await?;
+    let json = api_post(&url, &token, serde_json::json!({ "quantity": quantity }), log).await?;
     if json["data"].is_null() {
         return Ok(None);
     }
@@ -1137,13 +1200,14 @@ pub async fn org_transfer_inventory(
     state: State<'_, AppState>,
 ) -> Result<OrgTransferResult, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/{entry_id}/transfer");
     let json = api_post(&url, &token, serde_json::json!({
         "quantity": quantity,
         "locationId": target_location_id,
         "locationName": target_location_name,
         "locationSlug": target_location_slug,
-    })).await?;
+    }), log).await?;
     let source: Option<OrgInventoryEntry> = if json["data"]["source"].is_null() {
         None
     } else {
@@ -1165,8 +1229,9 @@ pub async fn org_list_collections(
     state: State<'_, AppState>,
 ) -> Result<Vec<OrgInventoryCollection>, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/collections");
-    let json = api_get(&url, &token).await?;
+    let json = api_get(&url, &token, log).await?;
     let dtos: Vec<BkOrgInventoryCollection> = parse_data_array(&json, "org collections")?;
     Ok(dtos.into_iter().map(|c| c.into()).collect())
 }
@@ -1179,8 +1244,9 @@ pub async fn org_create_collection(
     state: State<'_, AppState>,
 ) -> Result<OrgInventoryCollection, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/collections");
-    let json = api_post(&url, &token, serde_json::json!({ "name": name })).await?;
+    let json = api_post(&url, &token, serde_json::json!({ "name": name }), log).await?;
     let dto: BkOrgInventoryCollection = parse_data(&json, "create org collection")?;
     Ok(dto.into())
 }
@@ -1194,8 +1260,9 @@ pub async fn org_update_collection(
     state: State<'_, AppState>,
 ) -> Result<OrgInventoryCollection, String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/collections/{coll_id}");
-    let json = api_patch(&url, &token, serde_json::json!({ "name": name })).await?;
+    let json = api_patch(&url, &token, serde_json::json!({ "name": name }), log).await?;
     let dto: BkOrgInventoryCollection = parse_data(&json, "update org collection")?;
     Ok(dto.into())
 }
@@ -1208,6 +1275,7 @@ pub async fn org_delete_collection(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = get_token(&state)?;
+    let log = &state.backend_call_log;
     let url = format!("{BACKEND_URL}/api/orgs/{org_id}/inventory/collections/{coll_id}");
-    api_delete(&url, &token).await
+    api_delete(&url, &token, log).await
 }

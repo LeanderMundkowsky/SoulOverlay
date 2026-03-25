@@ -100,6 +100,17 @@ pub async fn save_settings(
         );
     }
 
+    // Side effects: toggle backend API call logging at runtime
+    if old_settings.backend_api_logging != settings_to_save.backend_api_logging {
+        state
+            .backend_api_logging
+            .store(settings_to_save.backend_api_logging, Ordering::Relaxed);
+        info!(
+            "Backend API logging {}",
+            if settings_to_save.backend_api_logging { "enabled" } else { "disabled" }
+        );
+    }
+
     info!("Settings saved");
     Ok(())
 }
