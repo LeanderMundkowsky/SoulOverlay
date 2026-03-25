@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
-use crate::commands::backend::{extract_error_message, http_client};
+use crate::commands::backend::{extract_error_message, get_stored_token, http_client, try_refresh_tokens};
 use crate::constants::BACKEND_URL;
 use crate::state::AppState;
 
@@ -79,15 +79,6 @@ impl From<BackendVehicle> for HangarVehicle {
     }
 }
 
-fn get_token(state: &State<AppState>) -> Result<String, String> {
-    let token = state.current_settings.lock().unwrap().backend_api_token.clone();
-    if token.is_empty() {
-        Err("Not logged in".to_string())
-    } else {
-        Ok(token)
-    }
-}
-
 fn parse_vehicle(val: &serde_json::Value) -> Result<HangarVehicle, String> {
     serde_json::from_value::<BackendVehicle>(val.clone())
         .map(HangarVehicle::from)
@@ -100,19 +91,27 @@ fn parse_vehicle(val: &serde_json::Value) -> Result<HangarVehicle, String> {
 pub async fn hangar_get_fleet(
     state: State<'_, AppState>,
 ) -> Result<Vec<HangarVehicle>, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/fleet", BACKEND_URL);
 
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        break (s, j);
+    };
 
     if !status.is_success() {
         return Err(extract_error_message(&json));
@@ -128,19 +127,27 @@ pub async fn hangar_get_fleet(
 pub async fn hangar_import_fleet(
     state: State<'_, AppState>,
 ) -> Result<FleetImportResult, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/fleet/import", BACKEND_URL);
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        break (s, j);
+    };
 
     if !status.is_success() {
         return Err(extract_error_message(&json));
@@ -166,7 +173,7 @@ pub async fn hangar_update_vehicle(
     description: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<HangarVehicle, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/fleet/{}", BACKEND_URL, id);
 
@@ -178,17 +185,26 @@ pub async fn hangar_update_vehicle(
         Some(d) => serde_json::Value::String(d),
         None => serde_json::Value::Null,
     });
+    let body = serde_json::Value::Object(body);
 
-    let resp = client
-        .patch(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::Value::Object(body))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .patch(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        break (s, j);
+    };
 
     if !status.is_success() {
         return Err(extract_error_message(&json));
@@ -204,16 +220,25 @@ pub async fn hangar_delete_vehicle(
     id: u32,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/fleet/{}", BACKEND_URL, id);
 
-    let resp = client
-        .delete(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+    let mut refreshed = false;
+    let resp = loop {
+        let r = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if r.status() == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        break r;
+    };
 
     if resp.status().is_success() || resp.status().as_u16() == 204 {
         info!("Deleted fleet vehicle {}", id);
@@ -237,7 +262,7 @@ pub async fn hangar_add_vehicle(
     is_hidden: bool,
     state: State<'_, AppState>,
 ) -> Result<HangarVehicle, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/fleet", BACKEND_URL);
 
@@ -269,20 +294,29 @@ pub async fn hangar_add_vehicle(
     });
     body.insert("isPledged".to_string(), serde_json::Value::Bool(is_pledged));
     body.insert("isHidden".to_string(), serde_json::Value::Bool(is_hidden));
+    let body = serde_json::Value::Object(body);
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::Value::Object(body))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        break (s, j);
+    };
 
     if !status.is_success() {
         return Err(extract_error_message(&json));

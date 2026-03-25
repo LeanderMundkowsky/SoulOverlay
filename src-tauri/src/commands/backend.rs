@@ -101,18 +101,47 @@ pub async fn fetch_account_with_token(token: &str) -> Option<BackendAccount> {
 }
 
 /// Called on app startup to restore the session if a token is persisted.
+/// If the access token is invalid/expired, silently attempts to refresh it.
 pub async fn fetch_account_on_startup(handle: &tauri::AppHandle) {
     use tauri::Manager;
     let state = handle.state::<AppState>();
-    let token = state.current_settings.lock().unwrap().backend_api_token.clone();
-    if token.is_empty() {
+
+    let (token, refresh_token) = {
+        let s = state.current_settings.lock().unwrap();
+        (s.backend_api_token.clone(), s.backend_refresh_token.clone())
+    };
+
+    if token.is_empty() && refresh_token.is_empty() {
+        return; // Never logged in
+    }
+
+    // Try the stored access token first
+    if !token.is_empty() {
+        if let Some(account) = fetch_account_with_token(&token).await {
+            info!("Backend session restored on startup: {}", account.username);
+            *state.backend_account.lock().unwrap() = Some(account);
+            return;
+        }
+        info!("Backend access token invalid — attempting refresh");
+    } else {
+        info!("No access token — attempting session restore via refresh token");
+    }
+
+    // Access token absent or expired — try the refresh token
+    if refresh_token.is_empty() {
+        info!("No refresh token available — login required");
         return;
     }
-    if let Some(account) = fetch_account_with_token(&token).await {
-        info!("Backend session restored on startup: {}", account.username);
-        *state.backend_account.lock().unwrap() = Some(account);
-    } else {
-        info!("Backend token present but account fetch failed — token may be expired");
+    match try_refresh_tokens(&state).await {
+        Ok(new_token) => {
+            if let Some(account) = fetch_account_with_token(&new_token).await {
+                info!("Backend session restored via refresh token: {}", account.username);
+                *state.backend_account.lock().unwrap() = Some(account);
+            } else {
+                info!("Refresh succeeded but account fetch failed");
+            }
+        }
+        Err(e) => info!("Session refresh failed on startup: {}", e),
     }
 }
 
@@ -174,12 +203,68 @@ pub(crate) fn extract_error_message(json: &serde_json::Value) -> String {
     "Unknown error".to_string()
 }
 
-fn save_token(state: &AppState, token: String) {
+fn save_tokens(state: &AppState, token: String, refresh_token: String) {
     let mut settings = state.current_settings.lock().unwrap();
     settings.backend_api_token = token;
+    settings.backend_refresh_token = refresh_token;
     if let Err(e) = state.paths.save_settings(&settings) {
-        error!("Failed to persist backend token: {}", e);
+        error!("Failed to persist tokens: {}", e);
     }
+}
+
+/// Returns the stored access token or `Err("Not logged in")` if empty.
+pub fn get_stored_token(state: &AppState) -> Result<String, String> {
+    let token = state.current_settings.lock().unwrap().backend_api_token.clone();
+    if token.is_empty() {
+        Err("Not logged in".to_string())
+    } else {
+        Ok(token)
+    }
+}
+
+/// Exchanges the stored refresh token for a new access+refresh token pair.
+/// Saves the new tokens to settings and returns the new access token.
+/// Clears `backend_account` and returns `Err` if the refresh token is missing or rejected.
+pub async fn try_refresh_tokens(state: &AppState) -> Result<String, String> {
+    let refresh_token = state.current_settings.lock().unwrap().backend_refresh_token.clone();
+    if refresh_token.is_empty() {
+        *state.backend_account.lock().unwrap() = None;
+        return Err("Session expired. Please log in again.".to_string());
+    }
+
+    let client = http_client()?;
+    let url = format!("{}/api/auth/refresh", BACKEND_URL);
+    debug!("[backend] → POST /api/auth/refresh");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "refreshToken": refresh_token }))
+        .send()
+        .await
+        .map_err(|e| format!("Refresh request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        info!("Token refresh rejected ({})", resp.status());
+        *state.backend_account.lock().unwrap() = None;
+        return Err("Session expired. Please log in again.".to_string());
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse refresh response: {}", e))?;
+
+    let new_token = json["data"]["apiToken"]
+        .as_str()
+        .ok_or("Invalid refresh response: missing apiToken")?
+        .to_string();
+    let new_refresh = json["data"]["refreshToken"]
+        .as_str()
+        .ok_or("Invalid refresh response: missing refreshToken")?
+        .to_string();
+
+    save_tokens(state, new_token.clone(), new_refresh);
+    info!("Access token refreshed silently");
+    Ok(new_token)
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -227,12 +312,16 @@ pub async fn backend_login(
         .as_str()
         .ok_or("Invalid response: missing apiToken")?
         .to_string();
+    let refresh_token = json["data"]["refreshToken"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
 
     let account = fetch_account_with_token(&token)
         .await
         .ok_or("Login succeeded but failed to fetch account")?;
 
-    save_token(&state, token);
+    save_tokens(&state, token, refresh_token);
     *state.backend_account.lock().unwrap() = Some(account.clone());
 
     info!("User logged in: {}", account.username);
@@ -283,12 +372,16 @@ pub async fn backend_register(
         .as_str()
         .ok_or("Invalid response: missing apiToken")?
         .to_string();
+    let refresh_token = json["data"]["refreshToken"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
 
     let account = fetch_account_with_token(&token)
         .await
         .ok_or("Registration succeeded but failed to fetch account")?;
 
-    save_token(&state, token);
+    save_tokens(&state, token, refresh_token);
     *state.backend_account.lock().unwrap() = Some(account.clone());
 
     info!("User registered: {}", account.username);
@@ -313,31 +406,39 @@ pub async fn backend_update_secret_key(
     uex_secret_key: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<BackendAccount, String> {
-    let token = state.current_settings.lock().unwrap().backend_api_token.clone();
-    if token.is_empty() {
-        return Err("Not logged in".to_string());
-    }
+    let mut token = get_stored_token(&state)?;
 
     let client = http_client()?;
     let url = format!("{}/api/account", BACKEND_URL);
+    let body = serde_json::json!({ "uexSecretKey": uex_secret_key });
+
     debug!("[backend] → PATCH /api/account");
     let t = std::time::Instant::now();
-    let resp = client
-        .patch(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .header("Content-Type", "application/merge-patch+json")
-        .json(&serde_json::json!({ "uexSecretKey": uex_secret_key }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
 
-    let status = resp.status();
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .patch(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/merge-patch+json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        break (s, j);
+    };
+
     debug!("[backend] ← PATCH /api/account {} ({}ms)", status, t.elapsed().as_millis());
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
-
     state.backend_call_log.record(BackendCallEntry {
         method: "PATCH".into(),
         path: "/api/account".into(),
@@ -360,11 +461,11 @@ pub async fn backend_update_secret_key(
     Ok(account)
 }
 
-/// Log out: clears the stored token and in-memory account.
+/// Log out: clears both stored tokens and in-memory account.
 #[tauri::command]
 #[specta::specta]
 pub async fn backend_logout(state: State<'_, AppState>) -> Result<(), String> {
-    save_token(&state, String::new());
+    save_tokens(&state, String::new(), String::new());
     *state.backend_account.lock().unwrap() = None;
     info!("User logged out");
     Ok(())

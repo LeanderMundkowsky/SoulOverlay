@@ -4,7 +4,7 @@ use specta::Type;
 use tauri::State;
 
 use crate::cache_store::{CacheResult, Collection};
-use crate::commands::backend::{extract_error_message, http_client};
+use crate::commands::backend::{extract_error_message, get_stored_token, http_client, try_refresh_tokens};
 use crate::constants::BACKEND_URL;
 use crate::state::AppState;
 use crate::uex::types::UexResult;
@@ -90,15 +90,6 @@ impl From<BackendEntry> for InventoryEntry {
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────
-
-fn get_token(state: &State<AppState>) -> Result<String, String> {
-    let token = state.current_settings.lock().unwrap().backend_api_token.clone();
-    if token.is_empty() {
-        Err("Not logged in".to_string())
-    } else {
-        Ok(token)
-    }
-}
 
 fn cache_entry(db: &rusqlite::Connection, entry: &InventoryEntry) -> Result<(), rusqlite::Error> {
     let collections_json = serde_json::to_string(&entry.collections).unwrap_or_default();
@@ -480,16 +471,25 @@ pub async fn get_inventory(state: State<'_, AppState>) -> Result<Vec<InventoryEn
 pub async fn get_inventory_collections(
     state: State<'_, AppState>,
 ) -> Result<Vec<InventoryCollection>, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/collections", BACKEND_URL);
 
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+    let mut refreshed = false;
+    let resp = loop {
+        let r = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if r.status() == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        break r;
+    };
 
     if !resp.status().is_success() {
         return Err(format!("Failed to fetch collections ({})", resp.status()));
@@ -515,29 +515,38 @@ pub async fn add_inventory_entry(
     collection_ids: Vec<u32>,
     state: State<'_, AppState>,
 ) -> Result<InventoryEntry, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory", BACKEND_URL);
+    let body = serde_json::json!({
+        "entityId": entity_id,
+        "entityName": entity_name,
+        "entityKind": entity_kind,
+        "locationId": location_id,
+        "locationName": location_name,
+        "locationSlug": location_slug,
+        "quantity": quantity,
+        "collectionIds": collection_ids,
+    });
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({
-            "entityId": entity_id,
-            "entityName": entity_name,
-            "entityKind": entity_kind,
-            "locationId": location_id,
-            "locationName": location_name,
-            "locationSlug": location_slug,
-            "quantity": quantity,
-            "collectionIds": collection_ids,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -563,29 +572,38 @@ pub async fn update_inventory_entry(
     collection_ids: Vec<u32>,
     state: State<'_, AppState>,
 ) -> Result<InventoryEntry, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/{}", BACKEND_URL, id);
+    let body = serde_json::json!({
+        "entityId": entity_id,
+        "entityName": entity_name,
+        "entityKind": entity_kind,
+        "locationId": location_id,
+        "locationName": location_name,
+        "locationSlug": location_slug,
+        "quantity": quantity,
+        "collectionIds": collection_ids,
+    });
 
-    let resp = client
-        .patch(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({
-            "entityId": entity_id,
-            "entityName": entity_name,
-            "entityKind": entity_kind,
-            "locationId": location_id,
-            "locationName": location_name,
-            "locationSlug": location_slug,
-            "quantity": quantity,
-            "collectionIds": collection_ids,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .patch(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -606,20 +624,29 @@ pub async fn update_inventory_quantity(
     quantity: i32,
     state: State<'_, AppState>,
 ) -> Result<InventoryEntry, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/{}", BACKEND_URL, id);
+    let body = serde_json::json!({ "quantity": quantity });
 
-    let resp = client
-        .patch(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "quantity": quantity }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .patch(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -634,16 +661,25 @@ pub async fn update_inventory_quantity(
 #[tauri::command]
 #[specta::specta]
 pub async fn remove_inventory_entry(id: u32, state: State<'_, AppState>) -> Result<(), String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/{}", BACKEND_URL, id);
 
-    let resp = client
-        .delete(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+    let mut refreshed = false;
+    let resp = loop {
+        let r = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if r.status() == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        break r;
+    };
 
     let status = resp.status();
     if status.as_u16() == 204 || status.is_success() {
@@ -663,20 +699,29 @@ pub async fn remove_inventory_quantity(
     quantity: i32,
     state: State<'_, AppState>,
 ) -> Result<Option<InventoryEntry>, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/{}/remove-quantity", BACKEND_URL, id);
+    let body = serde_json::json!({ "quantity": quantity });
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "quantity": quantity }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -705,26 +750,35 @@ pub async fn transfer_inventory(
     target_collection_ids: Vec<u32>,
     state: State<'_, AppState>,
 ) -> Result<TransferResult, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/{}/transfer", BACKEND_URL, id);
+    let body = serde_json::json!({
+        "quantity": quantity,
+        "targetLocationId": target_location_id,
+        "targetLocationName": target_location_name,
+        "targetLocationSlug": target_location_slug,
+        "targetCollectionIds": target_collection_ids,
+    });
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({
-            "quantity": quantity,
-            "targetLocationId": target_location_id,
-            "targetLocationName": target_location_name,
-            "targetLocationSlug": target_location_slug,
-            "targetCollectionIds": target_collection_ids,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -756,20 +810,29 @@ pub async fn inventory_collection_create(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<InventoryCollection, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/collections", BACKEND_URL);
+    let body = serde_json::json!({ "name": name });
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "name": name }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -784,20 +847,29 @@ pub async fn inventory_collection_update(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<InventoryCollection, String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/collections/{}", BACKEND_URL, id);
+    let body = serde_json::json!({ "name": name });
 
-    let resp = client
-        .patch(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "name": name }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    let mut refreshed = false;
+    let (status, json) = loop {
+        let resp = client
+            .patch(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let s = resp.status();
+        if s == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        let j: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
+        break (s, j);
+    };
     if !status.is_success() {
         return Err(extract_error_message(&json));
     }
@@ -811,16 +883,25 @@ pub async fn inventory_collection_delete(
     id: u32,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let token = get_token(&state)?;
+    let mut token = get_stored_token(&state)?;
     let client = http_client()?;
     let url = format!("{}/api/inventory/collections/{}", BACKEND_URL, id);
 
-    let resp = client
-        .delete(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+    let mut refreshed = false;
+    let resp = loop {
+        let r = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if r.status() == reqwest::StatusCode::UNAUTHORIZED && !refreshed {
+            token = try_refresh_tokens(&state).await?;
+            refreshed = true;
+            continue;
+        }
+        break r;
+    };
 
     let status = resp.status();
     if status.as_u16() == 204 || status.is_success() {

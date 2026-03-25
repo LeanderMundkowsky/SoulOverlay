@@ -450,7 +450,7 @@ async backendUpdateSecretKey(uexSecretKey: string | null) : Promise<Result<Backe
 }
 },
 /**
- * Log out: clears the stored token and in-memory account.
+ * Log out: clears both stored tokens and in-memory account.
  */
 async backendLogout() : Promise<Result<null, string>> {
     try {
@@ -1340,9 +1340,13 @@ export type Settings = {
  */
 hotkey: string; 
 /**
- * SoulOverlay backend API token (persisted for session continuity)
+ * SoulOverlay backend API access token (persisted for session continuity)
  */
 backend_api_token: string; 
+/**
+ * SoulOverlay backend refresh token (long-lived, used to silently renew the access token)
+ */
+backend_refresh_token: string; 
 /**
  * Optional custom log file path (None = use default)
  */

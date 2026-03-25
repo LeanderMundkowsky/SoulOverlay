@@ -32,9 +32,10 @@ pub async fn save_settings(
     let old_settings = {
         let mut current = state.current_settings.lock().unwrap();
         let old = current.clone();
-        // Preserve the backend token — it's managed by backend commands, not the settings form
+        // Preserve backend tokens — managed by backend commands, not the settings form
         let mut merged = new_settings.clone();
         merged.backend_api_token = old.backend_api_token.clone();
+        merged.backend_refresh_token = old.backend_refresh_token.clone();
         *current = merged;
         old
     };

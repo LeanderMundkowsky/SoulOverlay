@@ -38,8 +38,11 @@ export const useSettingsStore = defineStore("settings", () => {
     try {
       const result = await commands.saveSettings(newSettings);
       if (result.status === "error") throw result.error;
-      // Deep-clone via JSON round-trip to strip any nested reactive proxies
-      settings.value = JSON.parse(JSON.stringify(newSettings));
+      // Re-fetch from Rust — it may have preserved fields (e.g. tokens) that the caller didn't know about
+      const refreshed = await commands.getSettings();
+      if (refreshed.status === "ok") {
+        settings.value = refreshed.data;
+      }
     } catch (e) {
       error.value = String(e);
       console.error("Failed to save settings:", e);

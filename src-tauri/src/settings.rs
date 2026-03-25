@@ -56,8 +56,10 @@ impl Default for LayoutWidths {
 pub struct Settings {
     /// Global hotkey string (e.g., "Alt+Shift+S")
     pub hotkey: String,
-    /// SoulOverlay backend API token (persisted for session continuity)
+    /// SoulOverlay backend API access token (persisted for session continuity)
     pub backend_api_token: String,
+    /// SoulOverlay backend refresh token (long-lived, used to silently renew the access token)
+    pub backend_refresh_token: String,
     /// Optional custom log file path (None = use default)
     pub log_path: Option<String>,
     /// Overlay opacity (0.0 - 1.0)
@@ -92,6 +94,7 @@ impl Default for Settings {
         Self {
             hotkey: "F6".to_string(),
             backend_api_token: String::new(),
+            backend_refresh_token: String::new(),
             log_path: None,
             overlay_opacity: 0.6,
             esc_closes_overlay: true,

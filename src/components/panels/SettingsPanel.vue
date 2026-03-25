@@ -60,8 +60,9 @@ async function handleSave() {
   }
 }
 
-function resetDefaults() {
-  form.value = structuredClone(settingsStore.defaults);
+async function resetDefaults() {
+  form.value = structuredClone(toRaw(settingsStore.defaults));
+  await handleSave();
 }
 </script>
 
