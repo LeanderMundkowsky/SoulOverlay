@@ -1377,7 +1377,7 @@ cache_ttls: Partial<{ [key in string]: number }>;
  */
 layout_widths: LayoutWidths; 
 /**
- * Base font size in pixels (default: 14)
+ * Base font size in pixels (default: 20)
  */
 font_size: number; 
 /**

@@ -75,7 +75,7 @@ pub struct Settings {
     pub cache_ttls: HashMap<String, u32>,
     /// User-adjusted panel layout widths
     pub layout_widths: LayoutWidths,
-    /// Base font size in pixels (default: 14)
+    /// Base font size in pixels (default: 20)
     pub font_size: u32,
     /// In-app panel keybinds (not the global Rust hook hotkey)
     pub keybinds: Keybinds,
@@ -102,7 +102,7 @@ impl Default for Settings {
             max_search_results: 50,
             cache_ttls: HashMap::new(),
             layout_widths: LayoutWidths::default(),
-            font_size: 14,
+            font_size: 20,
             keybinds: Keybinds::default(),
             debug_logging: false,
             backend_api_logging: false,

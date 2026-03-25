@@ -13,6 +13,26 @@ const saving = ref(false);
 const saveError = ref<string | null>(null);
 const deleteError = ref<string | null>(null);
 
+const amLeader = computed(() => orgStore.currentOrgMyRole?.is_leader === true);
+const myRoleSortOrder = computed(() => orgStore.myRoleSortOrder);
+const myPermissions = computed(() => orgStore.currentOrgMyRole?.permissions ?? null);
+
+/** Minimum sort_order a non-leader may set (must stay strictly below their own rank). */
+const minSortOrder = computed(() => (amLeader.value ? 1 : myRoleSortOrder.value + 1));
+
+/** Whether the current user may edit/delete a given role. */
+function canEditRole(role: OrgRole): boolean {
+  if (role.is_leader) return false;
+  if (amLeader.value) return true;
+  return role.sort_order > myRoleSortOrder.value;
+}
+
+/** Whether the current user possesses a given permission (and may therefore grant it). */
+function iHavePermission(key: string): boolean {
+  if (amLeader.value) return true;
+  return myPermissions.value?.[key as keyof OrgPermissions] ?? false;
+}
+
 const PERMISSIONS = [
   { key: "manage_org", label: "Manage Org", desc: "Edit name/description, delete org" },
   { key: "manage_members", label: "Manage Members", desc: "Kick members, change roles" },
@@ -31,7 +51,8 @@ watch(() => props.orgId, () => { orgStore.loadRoles(props.orgId); }, { immediate
 function openCreate() {
   const defaultPerms: Record<string, boolean> = {};
   for (const p of PERMISSIONS) defaultPerms[p.key] = false;
-  roleDialog.value = { mode: "create", name: "", permissions: defaultPerms, sortOrder: (orgStore.orgRoles.length + 1) * 10 };
+  const defaultSort = Math.max(minSortOrder.value, (orgStore.orgRoles.length + 1) * 10);
+  roleDialog.value = { mode: "create", name: "", permissions: defaultPerms, sortOrder: defaultSort };
   saveError.value = null;
 }
 
@@ -44,6 +65,10 @@ function openEdit(role: OrgRole) {
 
 async function saveRole() {
   if (!roleDialog.value || !roleDialog.value.name.trim()) return;
+  if (!amLeader.value && roleDialog.value.sortOrder <= myRoleSortOrder.value) {
+    saveError.value = "Sort order must be lower rank than your own role (higher number).";
+    return;
+  }
   saving.value = true;
   saveError.value = null;
   const d = roleDialog.value;
@@ -98,12 +123,12 @@ async function deleteRole(roleId: number) {
           <div class="flex items-center gap-2 text-xs text-white/40">
             <span>{{ role.member_count }} member{{ role.member_count !== 1 ? "s" : "" }}</span>
             <button
-              v-if="canManageRoles && !role.is_leader"
+              v-if="canManageRoles && canEditRole(role)"
               @click="openEdit(role)"
               class="text-white/40 hover:text-teal-400 transition-colors"
             >Edit</button>
             <button
-              v-if="canManageRoles && !role.is_leader"
+              v-if="canManageRoles && canEditRole(role)"
               @click="deleteRole(role.id)"
               class="text-white/40 hover:text-red-400 transition-colors"
             >Delete</button>
@@ -156,12 +181,19 @@ async function deleteRole(roleId: number) {
           <div>
             <label class="block text-xs text-white/50 mb-2">Permissions</label>
             <div class="space-y-2">
-              <label v-for="p in PERMISSIONS" :key="p.key" class="flex items-start gap-3 cursor-pointer group">
+              <label
+                v-for="p in PERMISSIONS"
+                :key="p.key"
+                class="flex items-start gap-3 group"
+                :class="iHavePermission(p.key) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
+              >
                 <input
                   type="checkbox"
                   :checked="roleDialog.permissions[p.key]"
                   @change="roleDialog!.permissions[p.key] = ($event.target as HTMLInputElement).checked"
-                  class="mt-0.5 rounded border-white/20 bg-[#111318] text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                  :disabled="!iHavePermission(p.key)"
+                  class="mt-0.5 rounded border-white/20 bg-[#111318] text-teal-500 focus:ring-teal-500/30"
+                  :class="iHavePermission(p.key) ? 'cursor-pointer' : 'cursor-not-allowed'"
                 />
                 <div>
                   <div class="text-xs text-white group-hover:text-white/80">{{ p.label }}</div>
@@ -176,8 +208,10 @@ async function deleteRole(roleId: number) {
             <input
               v-model.number="roleDialog.sortOrder"
               type="number"
+              :min="minSortOrder"
               class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
             />
+            <p v-if="!amLeader" class="text-xs text-white/30 mt-1">Minimum: {{ minSortOrder }} (must rank below your role)</p>
           </div>
 
           <AlertBanner v-if="saveError" variant="error" :message="saveError" />

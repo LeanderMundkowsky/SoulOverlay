@@ -53,9 +53,17 @@ async function changeRole(userId: number, roleId: number) {
   if (err) changeRoleError.value = err;
 }
 
+const kickConfirmUserId = ref<number | null>(null);
+const kickError = ref<string | null>(null);
+
 async function kickMember(userId: number) {
+  kickError.value = null;
   const err = await orgStore.removeMember(props.orgId, userId);
-  if (err) changeRoleError.value = err;
+  if (err) {
+    kickError.value = err;
+  } else {
+    kickConfirmUserId.value = null;
+  }
 }
 
 function openTransferConfirm(userId: number) {
@@ -196,6 +204,7 @@ const transferTargetName = computed(() =>
     <div v-if="detail" class="bg-[#1a1d24] border border-white/10 rounded-xl p-4 space-y-2">
       <h4 class="text-xs text-white/50 uppercase tracking-wider">Members ({{ detail.member_count }})</h4>
       <AlertBanner v-if="changeRoleError" variant="error" :message="changeRoleError" />
+      <AlertBanner v-if="kickError" variant="error" :message="kickError" />
       <div class="space-y-1.5">
         <div
           v-for="member in detail.members"
@@ -215,7 +224,7 @@ const transferTargetName = computed(() =>
               class="text-xs text-yellow-400/50 hover:text-yellow-300 transition-colors"
               title="Transfer leadership"
             >👑 Transfer</button>
-            <!-- Role change -->
+              <!-- Role change + kick -->
             <template v-if="canManageMembers && !member.role.is_leader && canManageMember(member.role.id) && orgStore.assignableRoles.length">
               <select
                 :value="member.role.id"
@@ -224,9 +233,35 @@ const transferTargetName = computed(() =>
               >
                 <option v-for="r in orgStore.assignableRoles" :key="r.id" :value="r.id" class="bg-[#1a1d24]">{{ r.name }}</option>
               </select>
-              <button @click="kickMember(member.user_id)" class="text-xs text-white/30 hover:text-red-400 transition-colors">Kick</button>
+              <button
+                @click="kickConfirmUserId = member.user_id"
+                class="text-xs text-white/30 hover:text-red-400 transition-colors"
+              >Kick</button>
             </template>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kick confirmation modal -->
+    <div v-if="kickConfirmUserId !== null" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="bg-[#1a1d24] border border-white/10 rounded-xl w-full max-w-sm mx-4 p-6 space-y-4">
+        <h3 class="text-white font-semibold text-sm uppercase tracking-wider">Kick Member</h3>
+        <p class="text-sm text-white/60">
+          Are you sure you want to kick
+          <span class="text-white font-medium">{{ detail?.members.find(m => m.user_id === kickConfirmUserId)?.username }}</span>
+          from the org?
+        </p>
+        <AlertBanner v-if="kickError" variant="error" :message="kickError" />
+        <div class="flex gap-2 justify-end">
+          <button
+            @click="kickConfirmUserId = null; kickError = null"
+            class="px-4 py-2 text-xs text-white/50 hover:text-white/80 transition-colors"
+          >Cancel</button>
+          <button
+            @click="kickMember(kickConfirmUserId)"
+            class="px-4 py-2 text-xs bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors"
+          >Kick</button>
         </div>
       </div>
     </div>

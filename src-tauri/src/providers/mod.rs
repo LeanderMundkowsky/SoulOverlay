@@ -205,6 +205,12 @@ pub fn store_prices_by_terminal(
 }
 
 /// Store entity infos as per-entity sub-keys (e.g. `entity_info:commodity:6`).
+///
+/// Also writes a sentinel entry at the exact base key (`entity_info`) so that
+/// `is_expired` — which checks the exact key first — uses the bulk-refresh TTL
+/// rather than the expiry of any individual on-demand sub-entry. Without this,
+/// a single stale on-demand entry would make the whole collection appear expired
+/// and trigger a never-ending refresh loop.
 pub fn store_entity_infos(
     cache: &CacheStore,
     infos: &[EntityInfo],
@@ -217,6 +223,10 @@ pub fn store_entity_infos(
         if let Err(e) = cache.put(&key, ttl, info) {
             errors.push(format!("{}: {}", key, e));
         }
+    }
+    // Sentinel at the exact base key — controls bulk-refresh scheduling.
+    if let Err(e) = cache.put(&base_key, ttl, &(infos.len() as u32)) {
+        errors.push(format!("sentinel: {}", e));
     }
     if errors.is_empty() {
         Ok(infos.len() as u32)

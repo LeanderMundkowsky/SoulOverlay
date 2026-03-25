@@ -16,6 +16,7 @@ type SubTab = "members" | "roles" | "inventory" | "applications";
 const activeTab = ref<SubTab>("members");
 
 const canManageOrg = computed(() => orgStore.can("manage_org"));
+const amLeader = computed(() => orgStore.currentOrgMyRole?.is_leader === true);
 const canSeeApplications = computed(() => orgStore.can("view_applications") || orgStore.can("manage_applications"));
 
 const visibleTabs = computed<SubTab[]>(() => {
@@ -117,7 +118,7 @@ async function refresh() {
               <div class="flex items-center gap-4 mt-2 text-xs text-white/30">
                 <span>{{ detail.member_count }} members</span>
                 <button v-if="canManageOrg" @click="startEdit" class="text-teal-400/60 hover:text-teal-400 transition-colors">Edit org</button>
-                <button v-if="canManageOrg" @click="deleteConfirm = true" class="text-red-400/60 hover:text-red-400 transition-colors">Delete org</button>
+                <button v-if="amLeader" @click="deleteConfirm = true" class="text-red-400/60 hover:text-red-400 transition-colors">Delete org</button>
               </div>
             </div>
             <button

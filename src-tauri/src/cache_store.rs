@@ -385,21 +385,31 @@ impl CacheStore {
                 let key = c.storage_key();
 
                 // For per-entity collections, count all sub-entries
+                // For per-entity collections, prefer a sentinel at the exact key (written
+                // by store_entity_infos after a bulk refresh) for staleness tracking.
+                // Fall back to scanning sub-entries if no sentinel exists.
                 let (cached_at, is_expired, entry_count, ttl_secs) = if c.is_per_entity() {
                     let prefix = format!("{}:", key);
-                    let sub_entries: Vec<&MemoryEntry> = memory
-                        .iter()
-                        .filter(|(k, _)| k.starts_with(&prefix))
-                        .map(|(_, v)| v)
-                        .collect();
+                    let sub_count = memory.iter().filter(|(k, _)| k.starts_with(&prefix)).count() as u32;
 
-                    if sub_entries.is_empty() {
-                        (None, true, 0, c.ttl_secs())
+                    if let Some(sentinel) = memory.get(&key) {
+                        // Sentinel present — use it for scheduling; count sub-entries for display.
+                        (Some(sentinel.cached_at), sentinel.is_expired(), sub_count, sentinel.ttl_secs)
                     } else {
-                        let latest = sub_entries.iter().map(|e| e.cached_at).max();
-                        let any_expired = sub_entries.iter().any(|e| e.is_expired());
-                        let ttl = sub_entries.first().map(|e| e.ttl_secs).unwrap_or_else(|| c.ttl_secs());
-                        (latest, any_expired, sub_entries.len() as u32, ttl)
+                        let sub_entries: Vec<&MemoryEntry> = memory
+                            .iter()
+                            .filter(|(k, _)| k.starts_with(&prefix))
+                            .map(|(_, v)| v)
+                            .collect();
+
+                        if sub_entries.is_empty() {
+                            (None, true, 0, c.ttl_secs())
+                        } else {
+                            let latest = sub_entries.iter().map(|e| e.cached_at).max();
+                            let any_expired = sub_entries.iter().any(|e| e.is_expired());
+                            let ttl = sub_entries.first().map(|e| e.ttl_secs).unwrap_or_else(|| c.ttl_secs());
+                            (latest, any_expired, sub_count, ttl)
+                        }
                     }
                 } else {
                     match memory.get(&key) {
